@@ -135,6 +135,7 @@ model Investment {
   id                  Int      @id @default(autoincrement())
   userId              Int
   accountId           Int?
+  assetTaxonomyId     Int?
   name                String
   assetType           String
   assetCategory       String
@@ -157,13 +158,37 @@ model Investment {
 
   user                    User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   primaryAccount          FinancialAccount?          @relation("PrimaryInvestmentAccount", fields: [accountId], references: [id], onDelete: SetNull)
+  assetTaxonomy           InvestmentAssetTaxonomy?   @relation(fields: [assetTaxonomyId], references: [id], onDelete: SetNull)
   investmentEvents        InvestmentEvent[]
   investmentGoalAllocations InvestmentGoalAllocation[]
   valuationSnapshots      ValuationSnapshot[]
 
   @@index([userId])
   @@index([accountId])
+  @@index([assetTaxonomyId])
   @@map("investments")
+}
+
+model InvestmentAssetTaxonomy {
+  id          Int      @id @default(autoincrement())
+  label       String
+  nodeType    String
+  level       Int
+  parentId    Int?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent      InvestmentAssetTaxonomy?  @relation("InvestmentAssetTaxonomyTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    InvestmentAssetTaxonomy[] @relation("InvestmentAssetTaxonomyTree")
+  investments Investment[]
+
+  @@unique([parentId, label])
+  @@index([parentId])
+  @@index([nodeType])
+  @@index([level])
+  @@map("investment_asset_taxonomy")
 }
 
 model InvestmentEvent {

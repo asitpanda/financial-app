@@ -71,6 +71,7 @@ export type MockInvestment = {
   id: number;
   userId: number;
   accountId: number | null;
+  assetTaxonomyId: number | null;
   name: string;
   assetType: string;
   assetCategory: string;
@@ -88,6 +89,18 @@ export type MockInvestment = {
   insuranceCover: number | null;
   documentsMeta: Record<string, unknown> | null;
   notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type MockInvestmentAssetTaxonomy = {
+  id: number;
+  label: string;
+  nodeType: string;
+  level: number;
+  parentId: number | null;
+  sortOrder: number;
+  isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
 };

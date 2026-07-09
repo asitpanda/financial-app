@@ -23,6 +23,12 @@ export class CreateInvestmentDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  assetTaxonomyId?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
   @IsString()
   holdingMode?: string;
 

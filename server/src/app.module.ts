@@ -6,6 +6,7 @@ import { CategoriesModule } from './categories/categories.module';
 import { AuthModule } from './auth/auth.module';
 import { DatabaseModule } from './database/database.module';
 import { InvestmentsModule } from './investments/investments.module';
+import { InvestmentAssetTaxonomyModule } from './investment-asset-taxonomy/investment-asset-taxonomy.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { InvestmentsModule } from './investments/investments.module';
     GoalsModule,
     CategoriesModule,
     InvestmentsModule,
+    InvestmentAssetTaxonomyModule,
   ],
 })
 export class AppModule {}

@@ -4,6 +4,8 @@ import {
   MenuItem,
   Select,
   Typography,
+  type SxProps,
+  type Theme,
   type SelectProps,
 } from '@mui/material';
 
@@ -19,6 +21,22 @@ type LabeledSelectFieldProps = Omit<SelectProps<string>, 'children'> & {
   options: SelectOption[];
 };
 
+const DEFAULT_MENU_PAPER_SX: SxProps<Theme> = {
+  maxHeight: 320,
+  overflowY: 'auto',
+};
+
+const DEFAULT_MENU_PAPER_STYLE = {
+  maxHeight: 320,
+  overflowY: 'auto' as const,
+};
+
+const DEFAULT_MENU_LIST_SX: SxProps<Theme> = {
+  py: 0.5,
+  maxHeight: 320,
+  overflowY: 'auto',
+};
+
 export default function LabeledSelectField({
   labelText,
   errorMessage,
@@ -26,8 +44,24 @@ export default function LabeledSelectField({
   options,
   size = 'small',
   sx,
+  MenuProps,
   ...selectProps
 }: LabeledSelectFieldProps) {
+  const mergedMenuProps = {
+    ...MenuProps,
+    slotProps: {
+      ...MenuProps?.slotProps,
+      paper: {
+        style: DEFAULT_MENU_PAPER_STYLE,
+        sx: DEFAULT_MENU_PAPER_SX,
+      },
+      list: {
+        dense: true,
+        sx: DEFAULT_MENU_LIST_SX,
+      },
+    },
+  };
+
   return (
     <FormControl
       fullWidth
@@ -52,6 +86,7 @@ export default function LabeledSelectField({
       <Select
         {...selectProps}
         size={size}
+        MenuProps={mergedMenuProps}
         sx={{
           borderRadius: '5px',
           height: 43,

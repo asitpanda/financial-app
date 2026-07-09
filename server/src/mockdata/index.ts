@@ -3,6 +3,7 @@ export { mockUser, mockToken, mockCredentials, registeredUsers } from './users';
 export { mockBanksData } from './banks';
 export { mockCategoriesData } from './categories';
 export { mockFinancialAccountsData } from './financialAccounts';
+export { mockInvestmentAssetTaxonomyData } from './investmentAssetTaxonomy';
 export { mockInvestmentsData } from './investments';
 export { mockInvestmentEventsData } from './investmentEvents';
 export { mockInvestmentGoalAllocationsData } from './investmentGoalAllocations';

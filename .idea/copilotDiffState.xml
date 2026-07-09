@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CopilotDiffPersistence">
+    <option name="pendingDiffs">
+      <map>
+        <entry key="$PROJECT_DIR$/client/src/colors.js">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/client/src/colors.js" />
+              <option name="originalContent" value="// src/colors.js&#10;// Generic color palette for the app using Tailwind CSS color names&#10;&#10;export const colors = {&#10;  primary: 'oklch(48.8% 0.243 264.376)', // tailwind indigo-500&#10;  primaryContrast: '#fff',&#10;  background: 'rgb(243 244 246)', // tailwind gray-100&#10;  sidebarBg: '#fff',&#10;  sidebarText: 'rgb(31 41 55)', // tailwind gray-800&#10;  sidebarActiveBg: 'oklch(48.8% 0.243 264.376)', // tailwind indigo-500&#10;  sidebarActiveText: '#fff',&#10;  sidebarHoverBg: 'oklch(88.2% 0.059 254.128)'&#10;  // Add more as needed&#10;};&#10;" />
+              <option name="updatedContent" value="// src/colors.js&#10;// Generic color palette for the app using Tailwind CSS color names&#10;&#10;export const colors = {&#10;  primary: 'oklch(48.8% 0.243 264.376)', // tailwind indigo-500&#10;  primaryContrast: '#fff',&#10;  background: 'rgb(243 244 246)', // tailwind gray-100&#10;  sidebarBg: '#fff',&#10;  sidebarText: 'rgb(31 41 55)', // tailwind gray-800&#10;  sidebarActiveBg: 'oklch(48.8% 0.243 264.376)', // tailwind indigo-500&#10;  sidebarActiveText: '#fff',&#10;  sidebarHoverBg: 'rgb(165 180 252)' // tailwind indigo-200&#10;  // Add more as needed&#10;};" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

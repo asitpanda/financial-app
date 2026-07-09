@@ -1,74 +1,282 @@
-# Financial App
+# My Financial App - Modern Architecture
 
-Personal financial tracking application built with React and NestJS.
+A full-stack personal finance management application built with a modern tech stack.
 
-## Getting Started with Create React App
+## 🏗️ Architecture
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+### Frontend
+- **React 19** - UI library
+- **TypeScript** - Type safety
+- **Redux Toolkit** - Global state management
+- **React Query (TanStack Query)** - Server state & caching
+- **Material UI** - Ready-made components
+- **Tailwind CSS** - Layout, spacing, responsiveness
 
-## Available Scripts
+### Backend
+- **NestJS** - Progressive Node.js framework
+- **Express** - Default NestJS HTTP server
+- **JWT Authentication** - Secure user authentication
+- **Swagger** - API documentation
+- **Prisma ORM** - Type-safe database access
 
-In the project directory, you can run:
+### Database
+- **Supabase PostgreSQL** - Primary production database
+- **Mock Repository** - Development fallback (no database required)
+- **Firebase** - Optional (config-based switching)
 
-### `npm start`
+### Repository Pattern
+```
+ITransactionRepository
+    ├── SupabaseRepository (Prisma + PostgreSQL)
+    ├── FirebaseRepository (Firebase Firestore)
+    └── MockRepository (In-memory data)
+```
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## 📁 Project Structure
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+```
+my-financial/
+├── client/                 # React Frontend (TypeScript)
+│   ├── src/
+│   │   ├── api/           # API client & endpoints
+│   │   ├── components/    # React components
+│   │   ├── hooks/         # React Query & custom hooks
+│   │   ├── pages/         # Page components
+│   │   ├── store/         # Redux store & slices
+│   │   ├── types/         # TypeScript interfaces
+│   │   ├── App.tsx
+│   │   └── index.tsx
+│   ├── package.json
+│   └── tsconfig.json
+│
+└── server/                # NestJS Backend (TypeScript)
+    ├── src/
+    │   ├── auth/          # JWT authentication
+    │   ├── transactions/  # Transactions CRUD
+    │   │   ├── dto/
+    │   │   └── repositories/
+    │   ├── goals/         # Financial goals
+    │   ├── categories/    # Categories
+    │   ├── database/      # Prisma service
+    │   ├── app.module.ts
+    │   └── main.ts
+    ├── prisma/
+    │   └── schema.prisma
+    ├── package.json
+    └── tsconfig.json
+```
 
-### `npm test`
+## 🚀 Getting Started
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### Quick Start
+```bash
+# Backend
+cd server
+npm install
+cp .env.example .env
+# Edit .env (see Configuration section)
+npm run start:dev
 
-### `npm run build`
+# Frontend (in new terminal)
+cd client
+npm install
+cp .env.example .env
+npm start
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+Visit:
+- **Frontend**: http://localhost:3000
+- **API Docs**: http://localhost:5000/api/docs
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## 📦 Installation Commands
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### Backend Dependencies
+```bash
+cd server
+npm install
+```
 
-### `npm run eject`
+Installs:
+- NestJS framework (@nestjs/core, @nestjs/common, @nestjs/platform-express)
+- Swagger (@nestjs/swagger)
+- JWT & Passport (@nestjs/jwt, @nestjs/passport, passport-jwt)
+- Prisma (@prisma/client, prisma)
+- Authentication (bcrypt)
+- Validation (class-validator, class-transformer)
+- TypeScript & development tools
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+### Frontend Dependencies
+```bash
+cd client
+npm install
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+Installs:
+- React & React DOM (v19)
+- TypeScript
+- Redux Toolkit & React Redux
+- TanStack Query (React Query)
+- Material UI (@mui/material, @emotion/react, @emotion/styled)
+- Tailwind CSS (tailwindcss, postcss, autoprefixer)
+- Axios (HTTP client)
+- Development tools
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## ⚙️ Configuration
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+### Backend (.env)
+```env
+# Database
+DATABASE_URL="postgresql://user:password@localhost:5432/myfinancial"
+DB_PROVIDER="mock"  # Options: mock, supabase, firebase
 
-## Learn More
+# JWT
+JWT_SECRET="your-secret-key-here"
+JWT_EXPIRES_IN="7d"
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+# Server
+PORT=5000
+NODE_ENV="development"
+FRONTEND_URL="http://localhost:3000"
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+**For Development**: Use `DB_PROVIDER="mock"` - no database needed!
 
-### Code Splitting
+**For Supabase**: 
+1. Create project at https://supabase.com
+2. Get connection URL
+3. Set `DB_PROVIDER="supabase"`
+4. Run `npm run prisma:generate && npm run prisma:push`
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+### Frontend (.env)
+```env
+REACT_APP_API_URL=http://localhost:5000
+```
 
-### Analyzing the Bundle Size
+## 🎯 Available Scripts
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+### Backend
+```bash
+npm run start:dev      # Development with watch mode
+npm run start:prod     # Production mode
+npm run build          # Build TypeScript
+npm run prisma:generate # Generate Prisma Client
+npm run prisma:push    # Push schema to DB
+npm run prisma:studio  # Open Prisma Studio GUI
+```
 
-### Making a Progressive Web App
+### Frontend
+```bash
+npm start              # Development server
+npm run build          # Production build
+npm test               # Run tests
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+## 📚 API Endpoints
 
-### Advanced Configuration
+Full API documentation available at: **http://localhost:5000/api/docs**
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+### Authentication
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/login` - Login user
+- `GET /api/auth/me` - Get current user
 
-### Deployment
+### Transactions
+- `GET /api/transactions` - Get all transactions
+- `POST /api/transactions` - Create transaction
+- `PATCH /api/transactions/:id` - Update transaction
+- `DELETE /api/transactions/:id` - Delete transaction
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+### Goals
+- `GET /api/goals` - Get all goals
+- `POST /api/goals` - Create goal
+- `PATCH /api/goals/:id` - Update goal
+- `DELETE /api/goals/:id` - Delete goal
 
-### `npm run build` fails to minify
+### Categories
+- `GET /api/categories` - Get all categories
+- `POST /api/categories` - Create category
+- `PATCH /api/categories/:id` - Update category
+- `DELETE /api/categories/:id` - Delete category
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## 🌟 Key Features
+
+### Backend
+- ✅ NestJS modular architecture
+- ✅ Repository pattern for database abstraction
+- ✅ Multiple database provider support (Supabase/Firebase/Mock)
+- ✅ JWT authentication with bcrypt
+- ✅ Swagger API documentation
+- ✅ Type-safe with TypeScript
+- ✅ Prisma ORM with PostgreSQL
+- ✅ Validation with class-validator
+
+### Frontend  
+- ✅ React 19 with TypeScript
+- ✅ Redux Toolkit for global state
+- ✅ React Query for server state & caching
+- ✅ Material UI components
+- ✅ Tailwind CSS for styling
+- ✅ Axios with interceptors
+- ✅ Type-safe API client
+- ✅ Custom React hooks
+
+## 🛠️ Tech Stack Rationale
+
+**Why NestJS?**
+- Enterprise-grade architecture
+- Built-in TypeScript support
+- Modular and scalable
+- Excellent documentation
+
+**Why Prisma?**
+- Type-safe database queries
+- Auto-generated types
+- Easy migrations
+- Great developer experience
+
+**Why Redux Toolkit + React Query?**
+- Redux Toolkit: Global UI state (auth, modals)
+- React Query: Server state (caching, refetching)
+- Clear separation of concerns
+
+**Why Material UI + Tailwind?**
+- Material UI: Complex components (tables, modals)
+- Tailwind: Quick layouts, spacing, responsive design
+- Best of both worlds
+
+## 🔧 Development Tips
+
+1. **Use Mock Provider**: Start with `DB_PROVIDER="mock"` for quick development
+2. **API Documentation**: Check Swagger docs for all endpoints
+3. **Redux DevTools**: Install browser extension for state debugging
+4. **React Query DevTools**: Included - toggle to see cache state
+5. **Prisma Studio**: Run `npm run prisma:studio` for GUI database viewer
+
+## 🐛 Troubleshooting
+
+**Backend won't start:**
+- Check port 5000 is free
+- Verify `.env` file exists
+- Run `npm install` again
+
+**Frontend won't start:**
+- Check port 3000 is free
+- Clear `node_modules` and reinstall
+- Verify TypeScript version compatibility
+
+**TypeScript errors:**
+- Run `npm run prisma:generate` in server
+- Delete `node_modules` and reinstall
+
+**Database issues:**
+- Switch to `DB_PROVIDER="mock"` for testing
+- Verify DATABASE_URL is correct
+- Check Supabase project is active
+
+## 📄 License
+
+ISC
+
+---
+
+**See [INSTALLATION.md](INSTALLATION.md) for detailed setup guide**

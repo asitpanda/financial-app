@@ -1,0 +1,233 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  categories         Category[]
+  financialAccounts  FinancialAccount[]
+  transactions       Transaction[]
+  goals              Goal[]
+  investments        Investment[]
+  valuationSnapshots ValuationSnapshot[]
+
+  @@map("users")
+}
+
+model Transaction {
+  id                      BigInt   @id @default(autoincrement())
+  userId                  Int
+  categoryId              Int
+  goalId                  Int?
+  sourceAccountId         Int?
+  destinationAccountId    Int?
+  linkedInvestmentEventId Int?     @unique
+  type                    String
+  transactionKind         String
+  amount                  Float
+  categoryLabelSnapshot   String
+  date                    DateTime @default(now())
+  notes                   String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryRef         Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  goal                Goal?             @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  sourceAccount       FinancialAccount? @relation("SourceAccountTransactions", fields: [sourceAccountId], references: [id], onDelete: SetNull)
+  destinationAccount  FinancialAccount? @relation("DestinationAccountTransactions", fields: [destinationAccountId], references: [id], onDelete: SetNull)
+  linkedInvestmentEvent InvestmentEvent? @relation("TransactionLinkedInvestmentEvent", fields: [linkedInvestmentEventId], references: [id], onDelete: SetNull)
+  cashLinkEvent       InvestmentEvent?  @relation("InvestmentEventLinkedTransaction")
+
+  @@index([userId])
+  @@index([date])
+  @@index([type])
+  @@index([goalId])
+  @@index([categoryId])
+  @@index([sourceAccountId])
+  @@index([destinationAccountId])
+  @@map("transactions")
+}
+
+model Goal {
+  id                    Int      @id @default(autoincrement())
+  userId                Int
+  categoryId            Int
+  name                  String
+  description           String?
+  icon                  String?
+  targetAmount          Float
+  currentAmount         Float   @default(0)
+  startDate             DateTime @default(now())
+  deadline              DateTime?
+  categoryLabelSnapshot String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user                     User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryRef              Category                   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  transactions             Transaction[]
+  investmentGoalAllocations InvestmentGoalAllocation[]
+
+  @@index([userId])
+  @@index([categoryId])
+  @@map("goals")
+}
+
+model Category {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  name      String
+  type      String
+  icon      String?
+  color     String?
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  goals        Goal[]
+
+  @@unique([name, userId])
+  @@index([userId])
+  @@map("categories")
+}
+
+model FinancialAccount {
+  id                  Int      @id @default(autoincrement())
+  userId              Int
+  name                String
+  displayName         String
+  accountType         String
+  institutionName     String?
+  accountNumberMasked String?
+  currency            String
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user                           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceTransactions             Transaction[]     @relation("SourceAccountTransactions")
+  destinationTransactions        Transaction[]     @relation("DestinationAccountTransactions")
+  primaryInvestments             Investment[]      @relation("PrimaryInvestmentAccount")
+  fundedInvestmentEvents         InvestmentEvent[] @relation("InvestmentEventSourceAccount")
+
+  @@index([userId])
+  @@map("financial_accounts")
+}
+
+model Investment {
+  id                  Int      @id @default(autoincrement())
+  userId              Int
+  accountId           Int?
+  name                String
+  assetType           String
+  assetCategory       String
+  holdingMode         String?
+  institutionName     String?
+  referenceNumber     String?
+  status              String
+  startDate           DateTime?
+  maturityDate        DateTime?
+  currency            String
+  totalInvested       Float    @default(0)
+  currentValue        Float    @default(0)
+  currentValueSource  String?
+  lastValuationAt     DateTime?
+  insuranceCover      Float?
+  notes               String?
+  documentsMeta       Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user                    User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  primaryAccount          FinancialAccount?          @relation("PrimaryInvestmentAccount", fields: [accountId], references: [id], onDelete: SetNull)
+  investmentEvents        InvestmentEvent[]
+  investmentGoalAllocations InvestmentGoalAllocation[]
+  valuationSnapshots      ValuationSnapshot[]
+
+  @@index([userId])
+  @@index([accountId])
+  @@map("investments")
+}
+
+model InvestmentEvent {
+  id                    Int      @id @default(autoincrement())
+  investmentId          Int
+  sourceAccountId       Int?
+  linkedTransactionId   BigInt?  @unique
+  eventType             String
+  eventDate             DateTime
+  amount                Float?
+  units                 Float?
+  pricePerUnit          Float?
+  netAmount             Float?
+  notes                 String?
+  meta                  Json?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  investment            Investment         @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  sourceAccount         FinancialAccount?  @relation("InvestmentEventSourceAccount", fields: [sourceAccountId], references: [id], onDelete: SetNull)
+  linkedTransaction     Transaction?       @relation("InvestmentEventLinkedTransaction", fields: [linkedTransactionId], references: [id], onDelete: SetNull)
+  linkedFromTransaction Transaction?       @relation("TransactionLinkedInvestmentEvent")
+
+  @@index([investmentId])
+  @@index([sourceAccountId])
+  @@map("investment_events")
+}
+
+model InvestmentGoalAllocation {
+  id                Int      @id @default(autoincrement())
+  investmentId      Int
+  goalId            Int
+  allocationType    String
+  allocationPercent Float?
+  allocationAmount  Float?
+  effectiveFrom     DateTime?
+  effectiveTo       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  investment Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  goal       Goal       @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([investmentId])
+  @@index([goalId])
+  @@map("investment_goal_allocations")
+}
+
+model ValuationSnapshot {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  investmentId Int
+  snapshotDate DateTime
+  marketValue  Float
+  units        Float?
+  price        Float?
+  source       String?
+  createdAt    DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  investment Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([investmentId])
+  @@index([snapshotDate])
+  @@map("valuation_snapshots")
+}

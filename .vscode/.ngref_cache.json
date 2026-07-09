@@ -1,0 +1,19 @@
+{
+  "version": "0.1.1",
+  "timestamp": 1783615868286,
+  "stats": {
+    "totalFiles": 14,
+    "services": 0,
+    "factories": 0,
+    "providers": 0,
+    "controllers": 0,
+    "directives": 0,
+    "components": 0,
+    "filters": 0,
+    "modules": 0,
+    "functions": 9,
+    "classes": 0,
+    "lastIndexed": 1783615868276
+  },
+  "workspacePath": "/Users/asitpanda/asitprojects/mine/my-financial"
+}

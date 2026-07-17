@@ -6,9 +6,9 @@ import {
   Box,
   MenuItem,
   Select,
+  IconButton,
   Typography,
 } from "@mui/material";
-import Button from "../components/common/AppButton";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
@@ -511,17 +511,18 @@ export default function Goals() {
 
           return (
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, height: "100%" }}>
-            <Button
+            <IconButton
               size="small"
-              variant="outlined"
+              variant="contained"
+              disableElevation
               title={`View ${goalName}`}
               aria-label={`View ${goalName}`}
               onClick={() => openViewDrawer(params.row.goal)}
               sx={{ minWidth: 36, width: 36, height: 36, p: 0 }}
             >
               <Icon path={mdiEyeOutline} size={0.8} />
-            </Button>
-            <Button
+            </IconButton>
+            <IconButton
               size="small"
               variant="contained"
               disableElevation
@@ -531,8 +532,8 @@ export default function Goals() {
               sx={{ minWidth: 36, width: 36, height: 36, p: 0 }}
             >
               <Icon path={mdiPencilOutline} size={0.8} />
-            </Button>
-            <Button
+            </IconButton>
+            <IconButton
               size="small"
               color="error"
               variant="contained"
@@ -549,7 +550,7 @@ export default function Goals() {
               sx={{ minWidth: 36, width: 36, height: 36, p: 0 }}
             >
               <Icon path={mdiDeleteOutline} size={0.8} />
-            </Button>
+            </IconButton>
           </Box>
         );
         },

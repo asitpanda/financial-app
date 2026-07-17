@@ -1,6 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import Icon from '@mdi/react';
-import { mdiAlertCircleOutline, mdiCheckCircleOutline, mdiGold } from '@mdi/js';
 import { alpha, Box, Dialog, DialogActions, DialogContent, DialogTitle, Paper, Stack, Typography } from '@mui/material';
 import { RichTreeView } from '@mui/x-tree-view/RichTreeView';
 import AppDrawer from './drawers/AppDrawer';
@@ -37,11 +35,23 @@ export default function InvestmentFormDrawer({
   const [typePickerOpen, setTypePickerOpen] = useState(false);
   const [typePickerExpandedItems, setTypePickerExpandedItems] = useState([]);
   const [pendingTypeNodeId, setPendingTypeNodeId] = useState(null);
+  const [contributionType, setContributionType] = useState('one-time');
+  const [recurringPlan, setRecurringPlan] = useState({
+    frequency: 'monthly',
+    amount: '',
+    nextContributionDate: null,
+  });
 
   useEffect(() => {
     if (!open) return;
     setForm(initialValues ? buildFormFromInvestment(initialValues, taxonomyNodes) : createEmptyInvestmentForm());
     setErrors({});
+    setContributionType(initialValues?.contributionType === 'recurring' ? 'recurring' : 'one-time');
+    setRecurringPlan({
+      frequency: initialValues?.contributionFrequency || 'monthly',
+      amount: initialValues?.contributionAmount ? String(initialValues.contributionAmount) : '',
+      nextContributionDate: initialValues?.nextContributionDate || null,
+    });
   }, [initialValues, open, taxonomyNodes]);
 
   useEffect(() => {
@@ -110,6 +120,10 @@ export default function InvestmentFormDrawer({
     onSubmit?.(form);
   };
 
+  const handleRecurringPlanChange = (field, value) => {
+    setRecurringPlan((current) => ({ ...current, [field]: value }));
+  };
+
   const handleSelectInvestmentType = (_, itemId) => {
     const nextItemId = Array.isArray(itemId) ? itemId[0] : itemId;
     if (!nextItemId) return;
@@ -155,6 +169,19 @@ export default function InvestmentFormDrawer({
         ? 'Demat / ISIN Reference'
         : 'Account / Certificate Reference';
 
+  const contributionChoices = [
+    {
+      value: 'one-time',
+      title: 'One-time Investment',
+      description: 'Use a single entry for FD, bond, lump-sum mutual fund, stock purchase, or gold allocation.',
+    },
+    {
+      value: 'recurring',
+      title: 'Recurring Contribution',
+      description: 'Shape the same drawer like an SIP-style plan now, then wire the schema later without redesigning the form.',
+    },
+  ];
+
   const footer = (
     <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
       <AppButton variant="outlined" onClick={onClose} sx={{ minWidth: 120 }}>
@@ -176,23 +203,23 @@ export default function InvestmentFormDrawer({
       footer={footer}
     >
       <Stack spacing={2.25}>
-        <SectionCard title="Investment Type" subtitle="Choose the product family first so the drawer can adapt the operational fields.">
+        <SectionCard title="Investment Setup" subtitle="Keep the drawer on one screen, but shape the top of the form like the wireframe so type and contribution decisions happen first.">
           <Stack spacing={2}>
             {investmentTypeTreeItems.length ? (
               <Paper
                 variant="outlined"
                 sx={{
-                  p: 1.5,
+                  p: 1.75,
                   borderRadius: 1,
                   borderColor: errors.type ? 'error.main' : 'divider',
                   background: (theme) =>
                     currentTypeDisplayLabel
-                      ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.07)} 0%, ${theme.palette.background.paper} 100%)`
+                      ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${theme.palette.background.paper} 100%)`
                       : theme.palette.background.paper,
                 }}
               >
                 <Stack spacing={1.25}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
                     <Box sx={{ minWidth: 0 }}>
                       <Typography variant="caption" color="text.secondary">
                         Investment Type
@@ -200,14 +227,14 @@ export default function InvestmentFormDrawer({
                       <Typography sx={{ fontWeight: 700, mt: 0.35 }}>
                         {currentTypeDisplayLabel || 'Choose an asset node'}
                       </Typography>
+                      <Typography variant="body2" color={errors.type ? 'error.main' : 'text.secondary'} sx={{ mt: 0.75 }}>
+                        {errors.type || 'Pick a node from the asset taxonomy tree instead of a flat dropdown.'}
+                      </Typography>
                     </Box>
                     <AppButton variant="outlined" onClick={() => setTypePickerOpen(true)}>
                       Select From Tree
                     </AppButton>
                   </Box>
-                  <Typography variant="body2" color={errors.type ? 'error.main' : 'text.secondary'}>
-                    {errors.type || 'Pick a node from the asset taxonomy tree instead of a flat dropdown.'}
-                  </Typography>
                 </Stack>
               </Paper>
             ) : (
@@ -215,6 +242,51 @@ export default function InvestmentFormDrawer({
                 No asset taxonomy is available yet. Add taxonomy records from the asset tab first.
               </Typography>
             )}
+
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, gap: 1.5 }}>
+              {contributionChoices.map((choice) => {
+                const selected = contributionType === choice.value;
+
+                return (
+                  <Paper
+                    key={choice.value}
+                    variant="outlined"
+                    onClick={() => setContributionType(choice.value)}
+                    sx={{
+                      p: 2,
+                      borderRadius: 1,
+                      cursor: 'pointer',
+                      borderColor: selected ? 'primary.main' : 'divider',
+                      backgroundColor: (theme) => selected ? alpha(theme.palette.primary.main, 0.06) : theme.palette.background.paper,
+                      transition: 'border-color 120ms ease, background-color 120ms ease, transform 120ms ease',
+                      '&:hover': {
+                        borderColor: 'primary.main',
+                        transform: 'translateY(-1px)',
+                      },
+                    }}
+                  >
+                    <Stack spacing={0.75}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                        <Typography sx={{ fontWeight: 700 }}>{choice.title}</Typography>
+                        <Box
+                          sx={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: '50%',
+                            border: '2px solid',
+                            borderColor: selected ? 'primary.main' : 'divider',
+                            backgroundColor: selected ? 'primary.main' : 'transparent',
+                          }}
+                        />
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                        {choice.description}
+                      </Typography>
+                    </Stack>
+                  </Paper>
+                );
+              })}
+            </Box>
           </Stack>
         </SectionCard>
 
@@ -222,8 +294,6 @@ export default function InvestmentFormDrawer({
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, gap: 1.5 }}>
             <LabeledTextField labelText="Investment Name" value={form.name} onChange={(event) => handleFormChange('name', event.target.value)} errorMessage={errors.name} />
             <LabeledTextField labelText="Institution" value={form.institution} onChange={(event) => handleFormChange('institution', event.target.value)} errorMessage={errors.institution} />
-            <LabelCurrencyField labelText="Total Invested" value={form.totalInvested} onValueChange={(value) => handleFormChange('totalInvested', value)} errorMessage={errors.totalInvested} />
-            <LabelCurrencyField labelText="Current Value (Optional)" value={form.currentValue} onValueChange={(value) => handleFormChange('currentValue', value)} />
             <LabeledDateField labelText="Start Date" value={form.startDate} onChange={(value) => handleFormChange('startDate', value)} errorMessage={errors.startDate} />
             <LabeledSelectField
               labelText="Status"
@@ -235,49 +305,53 @@ export default function InvestmentFormDrawer({
           </Box>
         </SectionCard>
 
-        <SectionCard title="Lifecycle Details" subtitle="Capture dates and protection details that belong to the agreed investment record.">
+        <SectionCard
+          title={contributionType === 'recurring' ? 'Contribution Plan' : 'Value & Lifecycle'}
+          subtitle={
+            contributionType === 'recurring'
+              ? 'Keep the recurring plan visible in the UX now. Save wiring can come later without changing the layout again.'
+              : 'Capture the amount and lifecycle details needed for ongoing tracking.'
+          }
+        >
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, gap: 1.5 }}>
+            <LabelCurrencyField
+              labelText={contributionType === 'recurring' ? 'Initial Amount' : 'Total Invested'}
+              value={form.totalInvested}
+              onValueChange={(value) => handleFormChange('totalInvested', value)}
+              errorMessage={errors.totalInvested}
+            />
+            <LabelCurrencyField labelText="Current Value (Optional)" value={form.currentValue} onValueChange={(value) => handleFormChange('currentValue', value)} />
             <LabeledDateField labelText="Maturity Date (Optional)" value={form.maturityDate} onChange={(value) => handleFormChange('maturityDate', value)} />
             {isInsurance ? (
               <LabelCurrencyField labelText="Insurance Cover" value={form.insuranceCover} onValueChange={(value) => handleFormChange('insuranceCover', value)} />
             ) : null}
+            {contributionType === 'recurring' ? (
+              <>
+                <LabelCurrencyField
+                  labelText="Recurring Amount"
+                  value={recurringPlan.amount}
+                  onValueChange={(value) => handleRecurringPlanChange('amount', value)}
+                />
+                <LabeledSelectField
+                  labelText="Frequency"
+                  value={recurringPlan.frequency}
+                  onChange={(event) => handleRecurringPlanChange('frequency', event.target.value)}
+                  options={[
+                    { value: 'weekly', label: 'Weekly' },
+                    { value: 'monthly', label: 'Monthly' },
+                    { value: 'quarterly', label: 'Quarterly' },
+                    { value: 'halfyearly', label: 'Half-yearly' },
+                    { value: 'yearly', label: 'Yearly' },
+                  ]}
+                />
+                <LabeledDateField
+                  labelText="Next Contribution Date"
+                  value={recurringPlan.nextContributionDate}
+                  onChange={(value) => handleRecurringPlanChange('nextContributionDate', value)}
+                />
+              </>
+            ) : null}
           </Box>
-        </SectionCard>
-
-        <SectionCard title="Investment Details" subtitle="Store operational details that matter later, not just the amount.">
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, gap: 1.5 }}>
-            {isInsurance ? (
-              <LabelCurrencyField labelText="Insurance Cover" value={form.insuranceCover} onValueChange={(value) => handleFormChange('insuranceCover', value)} />
-            ) : (
-              <Paper variant="outlined" sx={{ p: 2, borderRadius: 1, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <Icon path={form.type === 'Gold' ? mdiGold : mdiAlertCircleOutline} size={1} />
-                <Box>
-                  <Typography sx={{ fontWeight: 700 }}>Context-aware details</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35, lineHeight: 1.6 }}>
-                    Use notes and documents to store folio references, bond certificates, locker details, or operational instructions specific to this asset.
-                  </Typography>
-                </Box>
-              </Paper>
-            )}
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Icon path={mdiCheckCircleOutline} size={1} />
-              <Box>
-                <Typography sx={{ fontWeight: 700 }}>Reminder-ready structure</Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35, lineHeight: 1.6 }}>
-                  The dashboard and calendar views use stored value and maturity information captured in this drawer.
-                </Typography>
-              </Box>
-            </Paper>
-          </Box>
-        </SectionCard>
-
-        <SectionCard title="Documents">
-          <LabeledTextareaField
-            labelText="Document References"
-            value={form.documents}
-            onChange={(event) => handleFormChange('documents', event.target.value)}
-            helperText="Paste document names, folder paths, locker notes, or reference URLs for this investment."
-          />
         </SectionCard>
 
         <SectionCard title="Notes">

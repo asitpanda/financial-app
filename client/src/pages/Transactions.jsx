@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Icon from "@mdi/react";
 import { mdiDeleteOutline, mdiEyeOutline, mdiPencilOutline } from "@mdi/js";
-import { Alert, Box, MenuItem, Select, Typography } from "@mui/material";
+import { Alert, Box, IconButton, MenuItem, Select, Typography } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
@@ -456,17 +456,18 @@ export default function Transactions({ prefetchedTransactions = [], prefillFilte
 
           return (
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, height: "100%" }}>
-            <Button
+            <IconButton
               size="small"
-              variant="outlined"
+              variant="contained"
+              disableElevation
               title={`View ${transactionName}`}
               aria-label={`View ${transactionName}`}
               onClick={() => openViewDrawer(params.row.tx)}
               sx={{ minWidth: 36, width: 36, height: 36, p: 0 }}
             >
               <Icon path={mdiEyeOutline} size={0.8} />
-            </Button>
-            <Button
+            </IconButton>
+            <IconButton
               size="small"
               variant="contained"
               disableElevation
@@ -476,10 +477,10 @@ export default function Transactions({ prefetchedTransactions = [], prefillFilte
               sx={{ minWidth: 36, width: 36, height: 36, p: 0 }}
             >
               <Icon path={mdiPencilOutline} size={0.8} />
-            </Button>
-            <Button
-              color="error"
+            </IconButton>
+            <IconButton
               size="small"
+              color="error"
               variant="contained"
               disableElevation
               title={`Delete ${transactionName}`}
@@ -493,7 +494,7 @@ export default function Transactions({ prefetchedTransactions = [], prefillFilte
               sx={{ minWidth: 36, width: 36, height: 36, p: 0 }}
             >
               <Icon path={mdiDeleteOutline} size={0.8} />
-            </Button>
+            </IconButton>
           </Box>
         );
         },

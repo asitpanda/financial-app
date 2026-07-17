@@ -1,4 +1,4 @@
-export interface IInvestmentGoalAllocationRepository {
+export interface IInvestmentContributionPlanRepository {
   create(data: any): Promise<any>;
   findAllByInvestment(investmentId: string): Promise<any[]>;
   findOne(id: string): Promise<any>;

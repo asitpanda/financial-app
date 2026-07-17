@@ -87,6 +87,7 @@ export type MockInvestment = {
   currentValueSource: string | null;
   lastValuationAt: Date | null;
   insuranceCover: number | null;
+  contributionMode: string | null;
   documentsMeta: Record<string, unknown> | null;
   notes: string | null;
   createdAt: Date;
@@ -122,15 +123,20 @@ export type MockInvestmentEvent = {
   updatedAt: Date;
 };
 
-export type MockInvestmentGoalAllocation = {
+export type MockInvestmentContributionPlan = {
   id: number;
   investmentId: number;
-  goalId: number;
-  allocationType: string;
-  allocationPercent: number | null;
-  allocationAmount: number | null;
-  effectiveFrom: Date | null;
-  effectiveTo: Date | null;
+  sourceAccountId: number | null;
+  status: string;
+  amount: number;
+  cadenceUnit: string;
+  cadenceInterval: number;
+  anchorDate: Date;
+  nextDueDate: Date | null;
+  endDate: Date | null;
+  reminderDaysBefore: number | null;
+  autoCreateEvent: boolean;
+  notes: string | null;
   createdAt: Date;
   updatedAt: Date;
 };

@@ -15,6 +15,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TransactionsService } from './transactions.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
+import { RecordContributionDto } from './dto/record-contribution.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { mockUser } from '../mockdata/users';
 
@@ -30,6 +31,13 @@ export class TransactionsController {
   create(@Body() createTransactionDto: CreateTransactionDto, @Request() req) {
     const userId = Number(req.user?.id ?? mockUser.id);
     return this.transactionsService.create(createTransactionDto, userId);
+  }
+
+  @Post('contributions/record')
+  @ApiOperation({ summary: 'Record an investment contribution - creates both Transaction and InvestmentEvent' })
+  recordContribution(@Body() recordContributionDto: RecordContributionDto, @Request() req) {
+    const userId = Number(req.user?.id ?? mockUser.id);
+    return this.transactionsService.recordContribution(recordContributionDto, userId);
   }
 
   @Get()

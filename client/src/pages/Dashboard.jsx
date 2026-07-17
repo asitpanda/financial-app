@@ -11,6 +11,8 @@ import { getTransactions, createTransaction } from "../api/transactions";
 import { getGoals, createGoal, updateGoal } from "../api/goals";
 import { getCategories, createCategory } from "../api/categories";
 import { getInvestments } from "../api/investments";
+import { getInvestmentAssetTaxonomy } from "../api/investmentAssetTaxonomy";
+import { getInvestmentCategoryOptions } from "../utils/investmentHelpers";
 import {
   PAGE_MONTH_OPTIONS,
   FISCAL_YEAR_START_MONTH,
@@ -68,21 +70,6 @@ const formatShortDate = (value) => new Intl.DateTimeFormat("en-IN", {
   month: "short",
   year: "numeric",
 }).format(new Date(value));
-const isWithinDays = (value, days) => {
-  if (!value) return false;
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return false;
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const target = new Date(parsed);
-  target.setHours(0, 0, 0, 0);
-
-  const diffDays = (target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
-  return diffDays >= 0 && diffDays <= days;
-};
 const DEFAULT_TX_ICON_BY_TYPE = {
   income: "briefcase",
   expense: "cart",
@@ -132,6 +119,7 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
   const [goals, setGoals] = useState([]);
   const [categories, setCategories] = useState([]);
   const [investments, setInvestments] = useState([]);
+  const [taxonomyNodes, setTaxonomyNodes] = useState([]);
   const periodMode = usePageDateFilterStore((state) => state.mode);
   const selectedYear = usePageDateFilterStore((state) => state.selectedYear);
   const selectedMonth = usePageDateFilterStore((state) => state.selectedMonth);
@@ -296,74 +284,133 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
     };
   }, [filteredTransactions, totals.balance, totals.expense, totals.income]);
 
+  const categoryLabelMap = useMemo(() => {
+    const map = {};
+    getInvestmentCategoryOptions(taxonomyNodes)
+      .filter((opt) => opt.value !== 'all')
+      .forEach((opt) => { map[opt.value] = opt.label; });
+    return map;
+  }, [taxonomyNodes]);
+
+  const investmentPeriodBounds = useMemo(() => {
+    if (periodMode === 'monthly') {
+      const { year, month } = resolveFiscalMonthYear(selectedYear, selectedMonth);
+      return {
+        start: new Date(year, month, 1),
+        end: new Date(year, month + 1, 0, 23, 59, 59, 999),
+      };
+    }
+    return {
+      start: new Date(selectedYear, FISCAL_YEAR_START_MONTH, 1),
+      end: new Date(selectedYear + 1, FISCAL_YEAR_START_MONTH, 0, 23, 59, 59, 999),
+    };
+  }, [periodMode, selectedYear, selectedMonth]);
+
   const investmentSummary = useMemo(() => {
-    const activeInvestments = investments.filter((investment) => investment.status === "active");
-    const upcomingContributions = activeInvestments
-      .filter(
-        (investment) =>
-          investment.contributionType === "recurring" && isWithinDays(investment.nextDueDate, 30)
-      )
-      .sort((left, right) => new Date(left.nextDueDate) - new Date(right.nextDueDate));
-    const upcomingMaturities = activeInvestments
-      .filter((investment) => isWithinDays(investment.maturityDate, 90))
-      .sort((left, right) => new Date(left.maturityDate) - new Date(right.maturityDate));
-    const typeTotals = activeInvestments.reduce((acc, investment) => {
-      const type = investment.type || "Other";
-      acc[type] = (acc[type] || 0) + (Number(investment.totalInvested) || 0);
+    const { start: periodStart, end: periodEnd } = investmentPeriodBounds;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // All active investments (for snapshot card and allocation breakdown)
+    const allActiveInvestments = investments.filter((inv) => inv.status === 'active');
+    
+    // Period-scoped portfolio metrics: only investments started within the selected period
+    const periodInvestments = allActiveInvestments.filter((inv) => {
+      const startDate = inv.startDate ? new Date(inv.startDate) : null;
+      return startDate && startDate >= periodStart && startDate <= periodEnd;
+    });
+    
+    const periodTotalInvested = periodInvestments.reduce((sum, inv) => sum + (Number(inv.totalInvested) || 0), 0);
+    const periodCurrentValue = periodInvestments.reduce((sum, inv) => sum + (Number(inv.currentValue || inv.totalInvested) || 0), 0);
+    const periodUnrealisedGain = periodCurrentValue - periodTotalInvested;
+    const periodUnrealisedGainPct = periodTotalInvested > 0 ? (periodUnrealisedGain / periodTotalInvested) * 100 : 0;
+    
+    // All-time metrics (for allocation breakdown reference)
+    const totalInvested = allActiveInvestments.reduce((sum, inv) => sum + (Number(inv.totalInvested) || 0), 0);
+    const currentValue = allActiveInvestments.reduce((sum, inv) => sum + (Number(inv.currentValue || inv.totalInvested) || 0), 0);
+    const unrealisedGain = currentValue - totalInvested;
+    const unrealisedGainPct = totalInvested > 0 ? (unrealisedGain / totalInvested) * 100 : 0;
+
+    const categoryTotals = allActiveInvestments.reduce((acc, inv) => {
+      const key = inv.assetCategory || inv.category || 'other';
+      acc[key] = (acc[key] || 0) + (Number(inv.totalInvested) || 0);
       return acc;
     }, {});
-    const totalInvested = activeInvestments.reduce(
-      (sum, investment) => sum + (Number(investment.totalInvested) || 0),
-      0
-    );
-    const typeBreakdown = Object.entries(typeTotals)
-      .map(([type, value], index) => ({
-        type,
-        value,
-        percentage: totalInvested > 0 ? value / totalInvested : 0,
-        color: INVESTMENT_TYPE_CHART_COLORS[index % INVESTMENT_TYPE_CHART_COLORS.length],
-      }))
-      .sort((left, right) => right.value - left.value);
+    const allocationBreakdown = Object.entries(categoryTotals)
+      .map(([key, value]) => ({ key, label: categoryLabelMap[key] || key, value, pct: totalInvested > 0 ? (value / totalInvested) * 100 : 0 }))
+      .sort((l, r) => r.value - l.value);
+
+    // Action items are period-scoped (contributions/maturities due in period)
+    const periodActionInvestments = allActiveInvestments.filter((inv) => {
+      const startDate = inv.startDate ? new Date(inv.startDate) : null;
+      return !startDate || startDate <= periodEnd;
+    });
+
+    const upcomingContributions = periodActionInvestments
+      .filter((inv) => {
+        const d = inv.activeContributionPlan?.nextDueDate;
+        if (!d) return false;
+        const due = new Date(d);
+        return due >= periodStart && due <= periodEnd;
+      })
+      .sort((l, r) => new Date(l.activeContributionPlan.nextDueDate) - new Date(r.activeContributionPlan.nextDueDate));
+
+    const overdueContributions = periodActionInvestments
+      .filter((inv) => {
+        if (!inv.activeContributionPlan?.nextDueDate) return false;
+        const d = new Date(inv.activeContributionPlan.nextDueDate);
+        d.setHours(0, 0, 0, 0);
+        return d < today;
+      })
+      .sort((l, r) => new Date(l.activeContributionPlan.nextDueDate) - new Date(r.activeContributionPlan.nextDueDate));
+
+    const upcomingMaturities = periodActionInvestments
+      .filter((inv) => {
+        if (!inv.maturityDate) return false;
+        const d = new Date(inv.maturityDate);
+        return d >= periodStart && d <= periodEnd;
+      })
+      .sort((l, r) => new Date(l.maturityDate) - new Date(r.maturityDate));
+
+    const allContribDue = [...overdueContributions, ...upcomingContributions.filter(
+      (inv) => !overdueContributions.find((o) => o.id === inv.id)
+    )].slice(0, 3);
 
     return {
-      activeCount: activeInvestments.length,
+      activeCount: allActiveInvestments.length,
       totalInvested,
-      currentValue: activeInvestments.reduce(
-        (sum, investment) => sum + (Number(investment.currentValue || investment.totalInvested) || 0),
-        0
-      ),
-      insuranceCover: activeInvestments.reduce(
-        (sum, investment) => sum + (Number(investment.insuranceCover) || 0),
-        0
-      ),
-      linkedGoals: activeInvestments.filter((investment) => investment.goalId).length,
-      upcomingContributionAmount: upcomingContributions.reduce(
-        (sum, investment) => sum + (Number(investment.contributionAmount) || 0),
-        0
-      ),
-      typeBreakdown,
-      upcomingMaturityAmount: upcomingMaturities.reduce(
-        (sum, investment) => sum + (Number(investment.currentValue || investment.totalInvested) || 0),
-        0
-      ),
-      upcomingContributions: upcomingContributions.slice(0, 2),
-      upcomingMaturities: upcomingMaturities.slice(0, 2),
+      currentValue,
+      unrealisedGain,
+      unrealisedGainPct,
+      periodTotalInvested,
+      periodCurrentValue,
+      periodUnrealisedGain,
+      periodUnrealisedGainPct,
+      insuranceCover: allActiveInvestments.reduce((sum, inv) => sum + (Number(inv.insuranceCover) || 0), 0),
+      allocationBreakdown,
+      upcomingContributionAmount: upcomingContributions.reduce((sum, inv) => sum + (Number(inv.activeContributionPlan.amount) || 0), 0),
+      upcomingMaturities: upcomingMaturities.slice(0, 3),
+      upcomingMaturityAmount: upcomingMaturities.reduce((sum, inv) => sum + (Number(inv.currentValue || inv.totalInvested) || 0), 0),
+      allContribDue,
+      overdueCount: overdueContributions.length,
     };
-  }, [investments]);
+  }, [investments, investmentPeriodBounds, categoryLabelMap]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [tx, gs, cs, inv] = await Promise.all([
+      const [tx, gs, cs, inv, taxonomy] = await Promise.all([
         getTransactions(),
         getGoals(),
         getCategories(),
         getInvestments(),
+        getInvestmentAssetTaxonomy(),
       ]);
       setTransactions(tx);
       setGoals(gs);
       setCategories(cs);
       setInvestments(inv);
+      setTaxonomyNodes(Array.isArray(taxonomy) ? taxonomy : []);
     } catch (e) {
       setError("Failed to load data");
     } finally {
@@ -438,9 +485,9 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
     <main className="flex-1 space-y-3 pb-2">
       {error && <div className="rounded-2xl bg-red-100 p-3 text-red-700">{error}</div>}
 
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <section className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-7">
         <KpiCard
-          title={`Balance (${selectedPeriodLabel})`}
+          title={`Balance`}
           value={formatCurrency(totals.balance)}
         />
         <KpiCard
@@ -452,16 +499,32 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
           value={<span style={{ color: "#dc2626" }}>{formatCurrency(totals.expense)}</span>}
         />
         <KpiCard
-          title="Investment Value"
-          value={<span style={{ color: "#0f766e" }}>{formatCurrency(investmentSummary.currentValue)}</span>}
+          title={`Portfolio Value`}
+          value={
+            <div className="space-y-1">
+              <div style={{ fontSize: "18px", fontWeight: "600", color: investmentSummary.periodCurrentValue >= investmentSummary.periodTotalInvested ? "#16a34a" : "#dc2626" }}>
+                {formatCurrency(investmentSummary.periodCurrentValue)}
+              </div>
+            </div>
+          }
+        />
+        <KpiCard
+          title="Investment"
+          value={<span style={{ color: "#dc2626" }}>{formatCurrency(investmentSummary.periodTotalInvested)}</span>}
+        />
+        <KpiCard
+          title={`Investment Return`}
+          value={
+            <div className="space-y-1">
+              <div style={{ fontSize: "18px", fontWeight: "600", color: investmentSummary.periodUnrealisedGainPct >= 0 ? "#16a34a" : "#dc2626" }}>
+                {formatCurrency(investmentSummary.periodUnrealisedGain)} ({investmentSummary.periodUnrealisedGainPct >= 0 ? "+" : ""}{investmentSummary.periodUnrealisedGainPct.toFixed(1)}%)
+              </div>
+            </div>
+          }
         />
         <KpiCard
           title="Goals"
           value={<span style={{ color: "#2563eb" }}>{goals.length} Active</span>}
-        />
-        <KpiCard
-          title="Categories"
-          value={<span style={{ color: "#7c3aed" }}>{categories.length} Tracked</span>}
         />
       </section>
 
@@ -537,7 +600,7 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
           action={
             <div className="flex flex-wrap items-center justify-end gap-2">
               <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500">
-                Till today
+                {selectedPeriodLabel}
               </span>
               <button
                 type="button"
@@ -550,204 +613,141 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
           }
           className="h-full xl:col-span-2"
         >
-          <div className="space-y-5">
-            <div className="flex items-center justify-between gap-3 rounded-[18px] border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Snapshot totals</div>
-                <div className="mt-1 text-slate-500">All active investments till today</div>
-              </div>
-              <div className="text-right text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">As of now</div>
-            </div>
+          <div className="space-y-4">
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-[18px] border border-white/80 bg-white/90 px-4 py-4 text-sm shadow-sm">
-                <div className="text-slate-400">Total invested</div>
-                <div className="mt-1 text-xl font-semibold text-slate-900">
-                  {formatCurrency(investmentSummary.totalInvested)}
+            {/* Portfolio Health — always as of today */}
+            <div className="grid grid-cols-1 gap-3">
+              <div className="rounded-[18px] border border-slate-100 bg-slate-50 px-4 py-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Portfolio Value · as of today</div>
+                <div className="mt-1.5 text-xl font-semibold text-slate-900">{formatCurrency(investmentSummary.currentValue)}</div>
+                <div className="mt-0.5 text-xs text-slate-400">
+                  Invested {formatCurrency(investmentSummary.totalInvested)}
+                  <span className={`ml-2 font-semibold ${
+                    investmentSummary.unrealisedGain >= 0 ? 'text-emerald-600' : 'text-rose-500'
+                  }`}>
+                    {investmentSummary.unrealisedGain >= 0 ? '+' : ''}{formatCurrency(investmentSummary.unrealisedGain)}
+                    {' '}({investmentSummary.unrealisedGainPct >= 0 ? '+' : ''}{investmentSummary.unrealisedGainPct.toFixed(1)}%)
+                  </span>
                 </div>
-              </div>
-
-              <div className="rounded-[18px] border border-white/80 bg-white/90 px-4 py-4 text-sm shadow-sm">
-                <div className="text-slate-400">Current value</div>
-                <div className="mt-1 text-xl font-semibold text-slate-900">{formatCurrency(investmentSummary.currentValue)}</div>
               </div>
             </div>
 
-            <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Investment Mix</div>
-                  <div className="mt-1 text-sm text-slate-500">Active asset mix till today</div>
-                </div>
-                <div className="text-xs font-semibold text-slate-400">By type</div>
+            {/* Allocation Mix — always as of today */}
+            <div className="rounded-[18px] border border-slate-200 bg-slate-50/80 px-4 py-3">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Allocation Mix</div>
+                <div className="text-[11px] font-semibold text-slate-400">By category</div>
               </div>
+              {investmentSummary.allocationBreakdown.length > 0 ? (
+                <div className="space-y-2.5">
+                  {investmentSummary.allocationBreakdown.map((item, index) => (
+                    <div key={item.key} className="grid grid-cols-[80px_minmax(0,1fr)_56px_72px] items-center gap-2">
+                      <div className="truncate text-xs font-medium text-slate-700">{item.label}</div>
+                      <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${Math.max(item.pct, 4)}%`,
+                            backgroundColor: INVESTMENT_TYPE_CHART_COLORS[index % INVESTMENT_TYPE_CHART_COLORS.length],
+                          }}
+                        />
+                      </div>
+                      <div className="text-right text-[11px] font-semibold text-slate-500">{item.pct.toFixed(0)}%</div>
+                      <div className="text-right text-xs font-semibold text-slate-800">{formatCurrency(item.value)}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-3 text-center text-sm text-slate-400">No active allocations</div>
+              )}
+            </div>
 
-              <div className="mt-4">
-                {investmentSummary.typeBreakdown.length > 0 ? (() => {
-                  const size = 176;
-                  const strokeWidth = 18;
-                  const radius = (size - strokeWidth) / 2;
-                  const circumference = 2 * Math.PI * radius;
-                  let consumed = 0;
-
-                  return (
-                    <div className="grid gap-5 lg:grid-cols-[188px_minmax(0,1fr)] lg:items-center">
-                      <div className="mx-auto flex w-full max-w-[188px] justify-center">
-                        <div className="relative h-44 w-44">
-                          <svg viewBox={`0 0 ${size} ${size}`} className="h-44 w-44 -rotate-90">
-                            <circle
-                              cx={size / 2}
-                              cy={size / 2}
-                              r={radius}
-                              fill="none"
-                              stroke="#e2e8f0"
-                              strokeWidth={strokeWidth}
-                            />
-                            {investmentSummary.typeBreakdown.map((item) => {
-                              const segment = item.percentage * circumference;
-                              const dashArray = `${segment} ${Math.max(circumference - segment, 0)}`;
-                              const dashOffset = -consumed;
-                              consumed += segment;
-
-                              return (
-                                <circle
-                                  key={item.type}
-                                  cx={size / 2}
-                                  cy={size / 2}
-                                  r={radius}
-                                  fill="none"
-                                  stroke={item.color}
-                                  strokeWidth={strokeWidth}
-                                  strokeLinecap="butt"
-                                  strokeDasharray={dashArray}
-                                  strokeDashoffset={dashOffset}
-                                />
-                              );
-                            })}
-                          </svg>
-
-                          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Till today</div>
-                            <div className="mt-1 px-4 text-lg font-semibold leading-tight text-slate-900">
-                              {formatCurrency(investmentSummary.totalInvested)}
+            {/* Action Items — scoped to selected period */}
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">In {selectedPeriodLabel}</div>
+            <div className="grid gap-3 lg:grid-cols-2">
+              {/* Due contributions */}
+              <div className="rounded-[18px] border border-slate-200 bg-slate-50/80 px-4 py-3">
+                <div className="mb-2.5 flex items-center justify-between gap-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Due This Month</div>
+                  {investmentSummary.overdueCount > 0 && (
+                    <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-600">
+                      {investmentSummary.overdueCount} overdue
+                    </span>
+                  )}
+                </div>
+                {investmentSummary.allContribDue.length > 0 ? (
+                  <div className="space-y-2">
+                    {investmentSummary.allContribDue.map((inv) => {
+                      const dueDate = new Date(inv.activeContributionPlan.nextDueDate);
+                      dueDate.setHours(0, 0, 0, 0);
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const isOverdue = dueDate < today;
+                      return (
+                        <div key={inv.id} className="flex items-center justify-between gap-2 rounded-[14px] bg-white px-3 py-2">
+                          <div className="min-w-0">
+                            <div className="truncate text-xs font-semibold text-slate-900">{inv.name}</div>
+                            <div className={`text-[10px] font-medium ${ isOverdue ? 'text-rose-500' : 'text-slate-400'}`}>
+                              {isOverdue ? 'Overdue · ' : ''}{formatShortDate(inv.activeContributionPlan.nextDueDate)}
                             </div>
+                          </div>
+                          <div className={`text-xs font-semibold ${ isOverdue ? 'text-rose-600' : 'text-slate-800'}`}>
+                            {formatCurrency(inv.activeContributionPlan.amount)}
                           </div>
                         </div>
-                      </div>
-
-                      <div className="space-y-3">
-                        {investmentSummary.typeBreakdown.map((item) => (
-                          <div key={item.type} className="flex items-center justify-between gap-3 rounded-[18px] bg-white px-3 py-3">
-                            <div className="flex min-w-0 items-center gap-3">
-                              <span
-                                className="h-3 w-3 rounded-full"
-                                style={{ backgroundColor: item.color }}
-                              />
-                              <div className="min-w-0">
-                                <div className="truncate text-sm font-medium text-slate-800">{item.type}</div>
-                                <div className="text-xs text-slate-400">{(item.percentage * 100).toFixed(0)}%</div>
-                              </div>
-                            </div>
-                            <div className="text-right text-sm font-semibold text-slate-900">
-                              {formatCurrency(item.value)}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })() : (
-                  <div className="rounded-[18px] bg-white px-3 py-6 text-center text-sm text-slate-500">
-                    No active investment types yet
+                      );
+                    })}
                   </div>
+                ) : (
+                  <div className="py-3 text-center text-xs text-slate-400">No contributions due this month</div>
+                )}
+              </div>
+
+              {/* Maturing soon */}
+              <div className="rounded-[18px] border border-slate-200 bg-slate-50/80 px-4 py-3">
+                <div className="mb-2.5 flex items-center justify-between gap-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Maturing Soon</div>
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-600">90 days</span>
+                </div>
+                {investmentSummary.upcomingMaturities.length > 0 ? (
+                  <div className="space-y-2">
+                    {investmentSummary.upcomingMaturities.map((inv) => (
+                      <div key={inv.id} className="flex items-center justify-between gap-2 rounded-[14px] bg-white px-3 py-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-semibold text-slate-900">{inv.name}</div>
+                          <div className="text-[10px] text-slate-400">{inv.institutionName || inv.institution}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs font-semibold text-amber-700">{formatShortDate(inv.maturityDate)}</div>
+                          <div className="text-[10px] text-slate-400">{formatCurrency(inv.currentValue || inv.totalInvested)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-3 text-center text-xs text-slate-400">No maturities in next 90 days</div>
                 )}
               </div>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Upcoming Contributions</div>
-                    <div className="mt-2 text-xl font-semibold text-slate-900">
-                      {formatCurrency(investmentSummary.upcomingContributionAmount)}
-                    </div>
-                  </div>
-                  <div className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                    Next 30 days
-                  </div>
-                </div>
-
-                <div className="mt-4 space-y-3">
-                  {investmentSummary.upcomingContributions.length > 0 ? investmentSummary.upcomingContributions.map((investment) => (
-                    <div key={investment.id} className="flex items-center justify-between gap-3 rounded-[18px] bg-white px-3 py-3">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-slate-900">{investment.name}</div>
-                        <div className="text-xs text-slate-500">{investment.institution}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm font-semibold text-slate-800">{formatCurrency(investment.contributionAmount)}</div>
-                        <div className="text-xs text-slate-400">{formatShortDate(investment.nextDueDate)}</div>
-                      </div>
-                    </div>
-                  )) : (
-                    <div className="rounded-[18px] bg-white px-3 py-6 text-center text-sm text-slate-500">
-                      No recurring contributions due soon
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Upcoming Maturity</div>
-                    <div className="mt-2 text-xl font-semibold text-slate-900">
-                      {formatCurrency(investmentSummary.upcomingMaturityAmount)}
-                    </div>
-                  </div>
-                  <div className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                    Next 90 days
-                  </div>
-                </div>
-
-                <div className="mt-4 space-y-3">
-                  {investmentSummary.upcomingMaturities.length > 0 ? investmentSummary.upcomingMaturities.map((investment) => (
-                    <div key={investment.id} className="flex items-center justify-between gap-3 rounded-[18px] bg-white px-3 py-3">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-slate-900">{investment.name}</div>
-                        <div className="text-xs text-slate-500">{investment.type}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm font-semibold text-slate-800">{formatShortDate(investment.maturityDate)}</div>
-                        <div className="text-xs text-slate-400">{formatCurrency(investment.currentValue || investment.totalInvested)}</div>
-                      </div>
-                    </div>
-                  )) : (
-                    <div className="rounded-[18px] bg-white px-3 py-6 text-center text-sm text-slate-500">
-                      No maturity events due soon
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-slate-200 px-4 py-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-slate-200 px-4 py-3 text-sm">
               <div>
-                <span className="font-semibold text-slate-900">{investmentSummary.linkedGoals}</span>
-                <span className="ml-1 text-slate-500">investments linked to goals till today</span>
+                <span className="font-semibold text-slate-900">{investmentSummary.activeCount}</span>
+                <span className="ml-1 text-slate-500">active investments tracked</span>
+                {investmentSummary.insuranceCover > 0 && (
+                  <span className="ml-2 text-slate-400">· {formatCurrency(investmentSummary.insuranceCover)} insured</span>
+                )}
               </div>
               <button
                 type="button"
                 onClick={() => navigateTo("investments")}
                 className="font-semibold text-emerald-600 transition hover:text-emerald-700"
               >
-                Review assets and reminders
+                Review assets →
               </button>
             </div>
           </div>
         </DashboardCard>
-
         <DashboardCard
           title="Recent Transactions"
           action={
@@ -899,7 +899,7 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
           }
           className="h-full xl:col-span-2"
         >
-          <div className="space-y-6">
+          <div className="space-y-2">
             {visibleGoals.map((goal, index) => {
               const goalId = getGoalId(goal);
               const target = Number(goal.targetAmount || 0);
@@ -914,36 +914,38 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
                   type="button"
                   onClick={() => handleUpdateGoal(goal)}
                   aria-label={`Edit ${goal.name || "goal"}`}
-                  className="block w-full text-left"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-4 py-3 text-left transition hover:bg-slate-50/80"
                 >
-                  <div className="grid grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-x-5 gap-y-2">
-                    <div className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl ${theme.iconBg} ${theme.iconText}`}>
-                      {iconPath ? <Icon path={iconPath} size={1.05} color="currentColor" /> : <span>•</span>}
-                    </div>
-
-                    <div className="min-w-0">
-                      <div className="truncate text-[18px] font-semibold text-slate-900">
-                        {goal.name || "Untitled Goal"}
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-lg font-semibold ${theme.iconBg} ${theme.iconText}`}>
+                        {iconPath ? <Icon path={iconPath} size={0.95} color="currentColor" /> : <span>•</span>}
                       </div>
-                      <div className="mt-1 truncate text-[13px] font-medium text-slate-500">
-                        Target: {formatDeadline(goal.deadline)}
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-slate-900">
+                          {goal.name || "Untitled Goal"}
+                        </div>
+                        <div className="mt-0.5 text-xs text-slate-500">
+                          Target: {formatDeadline(goal.deadline)}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="text-right text-[16px] font-semibold text-slate-800">
-                      {formatCurrency(current)} <span className="text-slate-400">/ {formatCurrency(target)}</span>
-                    </div>
-
-                    <div />
-
-                    <div className="col-span-2 flex items-center gap-4">
-                      <div className="h-3 flex-1 overflow-hidden rounded-full bg-slate-200">
+                    <div className="flex flex-1 flex-col gap-1 pl-4">
+                      <div className="text-right text-xs font-semibold text-slate-700">{progress}%</div>
+                      <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-300">
                         <div
                           className={`h-full rounded-full bg-gradient-to-r ${theme.bar}`}
                           style={{ width: `${progress}%` }}
                         />
                       </div>
-                      <div className="w-12 text-right text-[16px] font-semibold text-slate-700">{progress}%</div>
+                    </div>
+
+                    <div className="flex flex-shrink-0 text-right">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-800">{formatCurrency(current)}</div>
+                        <div className="mt-0.5 text-xs text-slate-500">{formatCurrency(target)}</div>
+                      </div>
                     </div>
                   </div>
                 </button>
@@ -951,7 +953,7 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
             })}
 
             {goals.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-slate-500">
+              <div className="rounded-[24px] bg-slate-50 px-4 py-10 text-center text-sm font-medium text-slate-500">
                 <p>Start by creating your first savings goal.</p>
                 <button
                   type="button"
@@ -967,7 +969,7 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
             ) : null}
 
             {goals.length > 0 ? (
-              <div className="flex items-center justify-between pt-2 text-[18px] font-semibold">
+              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/40 px-4 py-3 text-sm font-semibold mt-2">
                 <span className="text-emerald-600">{activeGoalsCount} Active Goals</span>
                 <span className="text-slate-500">Of {goals.length}</span>
               </div>

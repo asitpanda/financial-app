@@ -24,4 +24,5 @@ export const mockCategoriesData: MockCategory[] = [
   { id: 20, name: 'Housing', type: 'goal', icon: 'home', color: '#2A9D8F', isSystem: true },
   { id: 21, name: 'Lifestyle', type: 'goal', icon: 'star', color: '#FB8500', isSystem: true },
   { id: 22, name: 'Health', type: 'goal', icon: 'medical', color: '#E63946', isSystem: true },
+  { id: 23, name: 'Investment Contribution', type: 'expense', icon: 'chart-line', color: '#8B5CF6', isSystem: true },
 ].map((category) => withAuditFields(category, 1));

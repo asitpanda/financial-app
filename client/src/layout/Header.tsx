@@ -88,7 +88,7 @@ export default function Header({ activeScreen, config }: HeaderProps) {
           </Typography>
         </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2, flexWrap: 'wrap', width: { xs: '100%', lg: 'auto' } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2, flexWrap: 'wrap'}}>
           {showHeaderDateFilter ? (
             <>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>

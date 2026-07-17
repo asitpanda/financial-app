@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsDateString, IsInt, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsInt, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class CreateInvestmentDto {
   @ApiProperty()
@@ -83,6 +83,11 @@ export class CreateInvestmentDto {
   @IsOptional()
   @IsNumber()
   insuranceCover?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  contributionMode?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

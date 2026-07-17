@@ -5,8 +5,16 @@ import { TransactionsController } from './transactions.controller';
 import { SupabaseTransactionRepository } from './repositories/supabase-transaction.repository';
 import { MockTransactionRepository } from './repositories/mock-transaction.repository';
 import { FirebaseTransactionRepository } from './repositories/firebase-transaction.repository';
+import { InvestmentEventsModule } from '../investment-events/investment-events.module';
+import { InvestmentContributionPlansModule } from '../investment-contribution-plans/investment-contribution-plans.module';
+import { InvestmentsModule } from '../investments/investments.module';
 
 @Module({
+  imports: [
+    InvestmentEventsModule,
+    InvestmentContributionPlansModule,
+    InvestmentsModule,
+  ],
   controllers: [TransactionsController],
   providers: [
     TransactionsService,

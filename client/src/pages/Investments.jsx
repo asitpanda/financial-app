@@ -25,6 +25,7 @@ import {
   Typography,
 } from '@mui/material';
 import dayjs from 'dayjs';
+import { getFinancialAccounts } from '../api/financialAccounts';
 import { createInvestmentAssetTaxonomy, deleteInvestmentAssetTaxonomy, getInvestmentAssetTaxonomy, updateInvestmentAssetTaxonomy } from '../api/investmentAssetTaxonomy';
 import { createInvestment, deleteInvestment, getInvestments, updateInvestment } from '../api/investments';
 import InvestmentAssetTaxonomyFormDrawer from '../components/InvestmentAssetTaxonomyFormDrawer';
@@ -54,6 +55,7 @@ import {
   normalizeInvestmentForUi,
   STATUS_OPTIONS,
 } from '../utils/investmentHelpers';
+import { getRuntimeErrorMessage } from '../utils/errorMessage';
 
 const DONUT_PALETTE = [
   '#0f766e', '#14b8a6', '#0ea5e9', '#6366f1', '#f59e0b',
@@ -456,6 +458,7 @@ export default function Investments() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [taxonomyNodes, setTaxonomyNodes] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [assetTaxonomyDrawerOpen, setAssetTaxonomyDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState('create');
@@ -463,6 +466,7 @@ export default function Investments() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [selectedYearForDrill, setSelectedYearForDrill] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [taxonomyFormError, setTaxonomyFormError] = useState('');
   const [recordContributionModalOpen, setRecordContributionModalOpen] = useState(false);
   const [selectedContributionForRecording, setSelectedContributionForRecording] = useState(null);
   const pushNotification = useNotificationStore((state) => state.pushNotification);
@@ -473,16 +477,22 @@ export default function Investments() {
     const loadData = async () => {
       try {
         setLoading(true);
-        const [taxonomyList, investmentList] = await Promise.all([getInvestmentAssetTaxonomy(), getInvestments()]);
+        const [taxonomyList, investmentList, accountList] = await Promise.all([
+          getInvestmentAssetTaxonomy(),
+          getInvestments(),
+          getFinancialAccounts(),
+        ]);
         if (active) {
           const nextTaxonomyNodes = Array.isArray(taxonomyList) ? taxonomyList : [];
           setTaxonomyNodes(nextTaxonomyNodes);
+          setAccounts(Array.isArray(accountList) ? accountList : []);
           setInvestments(Array.isArray(investmentList) ? investmentList.map((item) => normalizeInvestmentForUi(item, nextTaxonomyNodes)) : []);
         }
       } catch (error) {
         void error;
         if (active) {
           setTaxonomyNodes([]);
+          setAccounts([]);
           setInvestments([]);
         }
         pushNotification({ type: 'error', message: 'Failed to load investments' });
@@ -501,18 +511,28 @@ export default function Investments() {
   }, [pushNotification]);
 
   const openCreateDrawer = () => {
+    if (accounts.length === 0) {
+      pushNotification({
+        type: 'warning',
+        message: 'Please add a financial account before adding an investment.',
+      });
+      return;
+    }
+
     setDrawerMode('create');
     setSelectedInvestmentId(null);
     setDrawerOpen(true);
   };
 
   const openAssetTaxonomyDrawer = () => {
+    setTaxonomyFormError('');
     setAssetTaxonomyDrawerOpen(true);
   };
 
   useHeaderAction('investments', {
     label: 'Investment',
     onClick: openCreateDrawer,
+    disabled: loading || accounts.length === 0,
   });
 
   const filteredInvestments = useMemo(() => {
@@ -531,6 +551,9 @@ export default function Investments() {
       return matchesSearch && matchesStatus && matchesCategory;
     });
   }, [categoryFilter, investments, search, statusFilter]);
+  const hasInvestmentFilters =
+    Boolean(search.trim()) || statusFilter !== 'all' || categoryFilter !== 'all';
+  const isFirstInvestmentSetup = investments.length === 0 && !hasInvestmentFilters;
 
   const dashboardKpis = useMemo(() => {
     const totalInvested = investments.reduce((sum, item) => sum + Number(item.totalInvested || 0), 0);
@@ -792,6 +815,7 @@ export default function Investments() {
   };
 
   const closeAssetTaxonomyDrawer = () => {
+    setTaxonomyFormError('');
     setAssetTaxonomyDrawerOpen(false);
   };
 
@@ -801,34 +825,30 @@ export default function Investments() {
     setCategoryFilter('all');
   };
 
-  const handleSaveInvestment = (formValues) => {
-    const persistInvestment = async () => {
-      const nextInvestment = buildInvestmentFromForm(formValues, drawerMode === 'edit' ? selectedInvestmentId : null, taxonomyNodes);
+  const handleSaveInvestment = async (formValues) => {
+    const nextInvestment = buildInvestmentFromForm(formValues, drawerMode === 'edit' ? selectedInvestmentId : null, taxonomyNodes);
 
-      try {
-        if (drawerMode === 'edit') {
-          const updated = await updateInvestment(selectedInvestmentId, nextInvestment);
-          setInvestments((current) => current.map((item) => (item.id === selectedInvestmentId ? normalizeInvestmentForUi(updated, taxonomyNodes) : item)));
-        } else {
-          const created = await createInvestment(nextInvestment);
-          setInvestments((current) => [normalizeInvestmentForUi(created, taxonomyNodes), ...current]);
-        }
-
-        pushNotification({
-          type: 'success',
-          message: drawerMode === 'edit' ? 'Investment updated' : 'Investment added',
-        });
-        closeInvestmentDrawer();
-      } catch (error) {
-        void error;
-        pushNotification({
-          type: 'error',
-          message: drawerMode === 'edit' ? 'Failed to update investment' : 'Failed to add investment',
-        });
+    try {
+      if (drawerMode === 'edit') {
+        const updated = await updateInvestment(selectedInvestmentId, nextInvestment);
+        setInvestments((current) => current.map((item) => (item.id === selectedInvestmentId ? normalizeInvestmentForUi(updated, taxonomyNodes) : item)));
+      } else {
+        const created = await createInvestment(nextInvestment);
+        setInvestments((current) => [normalizeInvestmentForUi(created, taxonomyNodes), ...current]);
       }
-    };
 
-    void persistInvestment();
+      pushNotification({
+        type: 'success',
+        message: drawerMode === 'edit' ? 'Investment updated' : 'Investment added',
+      });
+      closeInvestmentDrawer();
+      return null;
+    } catch (error) {
+      return getRuntimeErrorMessage(
+        error,
+        drawerMode === 'edit' ? 'Failed to update investment' : 'Failed to add investment'
+      );
+    }
   };
 
   const handleDeleteInvestment = () => {
@@ -851,21 +871,28 @@ export default function Investments() {
 
   const handleSaveAssetTaxonomy = (formValues) => {
     const persistAssetTaxonomy = async () => {
+      setTaxonomyFormError('');
       try {
         if (formValues.id) {
           const updatedNode = await updateInvestmentAssetTaxonomy(formValues.id, formValues);
           setTaxonomyNodes((current) => current.map((node) => (node.id === updatedNode.id ? updatedNode : node)));
           pushNotification({ type: 'success', message: 'Asset taxonomy updated' });
+          setTaxonomyFormError('');
           return updatedNode;
         } else {
           const createdNode = await createInvestmentAssetTaxonomy(formValues);
           setTaxonomyNodes((current) => [...current, createdNode]);
           pushNotification({ type: 'success', message: 'Asset taxonomy saved' });
+          setTaxonomyFormError('');
           return createdNode;
         }
       } catch (error) {
-        void error;
-        pushNotification({ type: 'error', message: formValues.id ? 'Failed to update asset taxonomy' : 'Failed to save asset taxonomy' });
+        setTaxonomyFormError(
+          getRuntimeErrorMessage(
+            error,
+            formValues.id ? 'Failed to update asset taxonomy' : 'Failed to save asset taxonomy'
+          )
+        );
         return null;
       }
     };
@@ -1033,7 +1060,30 @@ export default function Investments() {
       },
     ];
 
-  const renderDashboardView = () => (
+  const renderDashboardView = () => {
+    const activeTimeSeriesData = selectedYearForDrill ? monthlyTimeSeriesData : yearlyTimeSeriesData;
+
+    if (investments.length === 0) {
+      return (
+        <Stack spacing={2}>
+          <SectionCard
+            title="Investment Dashboard"
+            subtitle="Track long-term assets, contributions, and maturity timelines from one place."
+            empty
+            emptyState={{
+              title: 'No investments added yet',
+              description: 'Add your first investment to unlock portfolio insights, allocation mix, and scheduled contribution tracking.',
+              actionLabel: 'Add Investment',
+              onAction: openCreateDrawer,
+            }}
+          >
+            <Box />
+          </SectionCard>
+        </Stack>
+      );
+    }
+
+    return (
     <Stack spacing={2}>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))', xl: 'repeat(4, minmax(0, 1fr))' }, gap: 1.5 }}>
@@ -1073,9 +1123,17 @@ export default function Investments() {
         <KpiCard title="Insurance Cover" value={formatInvestmentCurrency(dashboardKpis.insuranceCover)} icon={<Icon path={mdiShieldCheckOutline} size={1} />} />
       </Box>
 
-      <SectionCard title="Investment Timeline" subtitle="Distribution of total invested by category over time. Click year to see monthly breakdown.">
+      <SectionCard
+        title="Investment Timeline"
+        subtitle="Distribution of total invested by category over time. Click year to see monthly breakdown."
+        empty={activeTimeSeriesData.length === 0}
+        emptyState={{
+          title: 'No investment timeline data',
+          description: 'Investments with valid start dates will appear here over time.',
+        }}
+      >
         <TimeSeriesVisualization
-          data={selectedYearForDrill ? monthlyTimeSeriesData : yearlyTimeSeriesData}
+          data={activeTimeSeriesData}
           onDrill={setSelectedYearForDrill}
           onBack={() => setSelectedYearForDrill(null)}
           isDrillMode={Boolean(selectedYearForDrill)}
@@ -1085,8 +1143,15 @@ export default function Investments() {
       </SectionCard>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1.3fr 1fr 1fr' }, gap: 2 }}>
-        <SectionCard title="Current Value Snapshot" subtitle="Highest-value assets based on the latest stored values.">
-          {topCurrentValueItems.length ? (
+        <SectionCard
+          title="Current Value Snapshot"
+          subtitle="Highest-value assets based on the latest stored values."
+          empty={topCurrentValueItems.length === 0}
+          emptyState={{
+            title: 'No current value snapshot',
+            description: 'Assets with captured current values will surface here.',
+          }}
+        >
             <List disablePadding>
               {topCurrentValueItems.map((item, index) => (
                 <React.Fragment key={item.id}>
@@ -1103,21 +1168,31 @@ export default function Investments() {
                 </React.Fragment>
               ))}
             </List>
-          ) : (
-            <EmptyState text="No current value snapshot" subText="Assets with captured current values will surface here." />
-          )}
         </SectionCard>
 
-        <SectionCard title="Allocation Mix" subtitle="Where the current invested base is concentrated.">
-          {categoryBreakdown.length ? (
+        <SectionCard
+          title="Allocation Mix"
+          subtitle="Where the current invested base is concentrated."
+          empty={categoryBreakdown.length === 0}
+          emptyState={{
+            title: 'No allocation data',
+            description: 'Add investments to see category-level concentration.',
+            actionLabel: 'Add Investment',
+            onAction: openCreateDrawer,
+          }}
+        >
             <AllocationDonutChart data={categoryBreakdown} total={dashboardKpis.totalInvested} formatValue={formatInvestmentCurrency} />
-          ) : (
-            <EmptyState text="No allocation data" subText="Add investments to see category breakdown." />
-          )}
         </SectionCard>
 
-        <SectionCard title="Upcoming Contributions" subtitle="Scheduled recurring payments due on active investments.">
-          {upcomingContributions.length ? (
+        <SectionCard
+          title="Upcoming Contributions"
+          subtitle="Scheduled recurring payments due on active investments."
+          empty={upcomingContributions.length === 0}
+          emptyState={{
+            title: 'No upcoming contributions',
+            description: 'Active investments with recurring schedules will appear here.',
+          }}
+        >
             <List disablePadding>
               {upcomingContributions.map((item, index) => {
                 const dueDate = item.activeContributionPlan.nextDueDate;
@@ -1129,9 +1204,10 @@ export default function Investments() {
                     {index > 0 ? <Divider /> : null}
                     <ListItem disableGutters sx={{ py: 1.25 }}>
                       <ListItemText
+                        disableTypography
                         primary={<Typography sx={{ fontWeight: 700 }}>{item.name}</Typography>}
                         secondary={
-                          <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25, flexWrap: 'wrap' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25, flexWrap: 'wrap' }}>
                             <Typography component="span" variant="caption" color="text.secondary">
                               {item.institution} • {item.activeContributionPlan.cadenceInterval > 1 ? `every ${item.activeContributionPlan.cadenceInterval} ` : ''}{item.activeContributionPlan.cadenceUnit}
                             </Typography>
@@ -1162,18 +1238,19 @@ export default function Investments() {
                 );
               })}
             </List>
-          ) : (
-            <EmptyState
-              text="No upcoming contributions"
-              subText="Active investments with recurring schedules will appear here."
-            />
-          )}
         </SectionCard>
       </Box>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2 }}>
-        <SectionCard title="Upcoming Maturity" subtitle="Assets nearing maturity or payout windows.">
-          {upcomingMaturityItems.length ? (
+        <SectionCard
+          title="Upcoming Maturity"
+          subtitle="Assets nearing maturity or payout windows."
+          empty={upcomingMaturityItems.length === 0}
+          emptyState={{
+            title: 'No maturities due',
+            description: 'Maturing deposits, policies, and certificates will appear here.',
+          }}
+        >
             <List disablePadding>
               {upcomingMaturityItems.map((item, index) => (
                 <React.Fragment key={`${item.id}-maturity-card`}>
@@ -1190,13 +1267,18 @@ export default function Investments() {
                 </React.Fragment>
               ))}
             </List>
-          ) : (
-            <EmptyState text="No maturities due" subText="Maturing deposits, policies, and certificates will appear here." />
-          )}
         </SectionCard>
 
-        <SectionCard title="Recent Investments" subtitle="The latest additions to the organizer.">
-          {recentInvestments.length ? (
+        <SectionCard
+          title="Recent Investments"
+          subtitle="The latest additions to the organizer."
+          empty={recentInvestments.length === 0}
+          emptyState={{
+            title: 'No investments added yet',
+            actionLabel: 'Add Investment',
+            onAction: openCreateDrawer,
+          }}
+        >
             <Stack spacing={1.25}>
               {recentInvestments.map((item) => (
                 <Paper key={item.id} variant="outlined" sx={{ p: 1.5, borderRadius: 1 }}>
@@ -1221,13 +1303,11 @@ export default function Investments() {
                 </Paper>
               ))}
             </Stack>
-          ) : (
-            <EmptyState text="No investments added yet" actionLabel="Add Investment" onAction={openCreateDrawer} />
-          )}
         </SectionCard>
       </Box>
     </Stack>
-  );
+    );
+  };
 
   const renderAssetsView = () => (
     <Stack spacing={2}>
@@ -1266,24 +1346,31 @@ export default function Investments() {
             </AppButton> */}
           </Box>
         }
+        empty={filteredInvestments.length === 0}
+        emptyState={
+          isFirstInvestmentSetup
+            ? {
+                title: 'No investments added yet',
+                description: 'Add your first investment to start tracking value, maturity, and recurring contributions.',
+                actionLabel: 'Add Investment',
+                onAction: openCreateDrawer,
+              }
+            : {
+                title: 'No investments match current filters',
+                description: 'Try broadening filters or add a new investment to expand your portfolio list.',
+                actionLabel: 'Add Investment',
+                onAction: openCreateDrawer,
+              }
+        }
       >
-        {filteredInvestments.length ? (
-          <DataTable 
-            rows={filteredInvestments} 
-            columns={columns} 
-            autoHeight={false} 
-            initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }} 
-            sx={{ '& .MuiDataGrid-row': { minHeight: 64 } }} 
-            getRowHeight={() => 'auto'} 
-          />
-        ) : (
-          <EmptyState
-            text="No investments match the current filters"
-            subText="Try broadening the filters or add a new investment to start building the organizer."
-            actionLabel="Add Investment"
-            onAction={openCreateDrawer}
-          />
-        )}
+        <DataTable 
+          rows={filteredInvestments} 
+          columns={columns} 
+          autoHeight={false} 
+          initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }} 
+          sx={{ '& .MuiDataGrid-row': { minHeight: 64 } }} 
+          getRowHeight={() => 'auto'} 
+        />
       </SectionCard>
     </Stack>
   );
@@ -1293,8 +1380,15 @@ export default function Investments() {
 
     return (
       <Stack spacing={2}>
-        <SectionCard title="Investment Calendar" subtitle="A forward-looking agenda of contributions, maturity events, and policy dates.">
-          {monthKeys.length ? (
+        <SectionCard
+          title="Investment Calendar"
+          subtitle="A forward-looking agenda of contributions, maturity events, and policy dates."
+          empty={monthKeys.length === 0}
+          emptyState={{
+            title: 'No upcoming calendar actions',
+            description: 'Assets with future maturity dates and scheduled contributions will appear in this agenda view.',
+          }}
+        >
             <Stack spacing={2}>
               {monthKeys.map((monthKey) => (
                 <Paper key={monthKey} variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
@@ -1343,12 +1437,6 @@ export default function Investments() {
                 </Paper>
               ))}
             </Stack>
-          ) : (
-            <EmptyState
-              text="No upcoming calendar actions"
-              subText="Assets with future maturity dates and scheduled contributions will appear in this agenda view."
-            />
-          )}
         </SectionCard>
       </Stack>
     );
@@ -1366,33 +1454,59 @@ export default function Investments() {
           </Typography>
         </Box>
 
-        <Paper variant="outlined" sx={{ p: 0.5, display: 'inline-flex', gap: 0.5, borderRadius: 1, flexWrap: 'wrap' }}>
-          {VIEW_OPTIONS.map((option) => {
-            const selected = activeView === option.value;
-            return (
-              <AppButton
-                key={option.value}
-                variant={selected ? 'contained' : 'text'}
-                onClick={() => setActiveView(option.value)}
-                sx={{ minWidth: 110 }}
-              >
-                {option.label}
-              </AppButton>
-            );
-          })}
-        </Paper>
+        {!loading && !isFirstInvestmentSetup ? (
+          <Paper variant="outlined" sx={{ p: 0.5, display: 'inline-flex', gap: 0.5, borderRadius: 1, flexWrap: 'wrap' }}>
+            {VIEW_OPTIONS.map((option) => {
+              const selected = activeView === option.value;
+              return (
+                <AppButton
+                  key={option.value}
+                  variant={selected ? 'contained' : 'text'}
+                  onClick={() => setActiveView(option.value)}
+                  sx={{ minWidth: 110 }}
+                >
+                  {option.label}
+                </AppButton>
+              );
+            })}
+          </Paper>
+        ) : null}
       </Box>
 
       {loading ? <Typography color="text.secondary">Loading investments...</Typography> : null}
-      {!loading && activeView === 'dashboard' ? renderDashboardView() : null}
-      {!loading && activeView === 'assets' ? renderAssetsView() : null}
-      {!loading && activeView === 'calendar' ? renderCalendarView() : null}
+      {!loading && isFirstInvestmentSetup ? (
+        <Box
+          sx={{
+            minHeight: { xs: 'calc(100dvh - 240px)', md: 'calc(100dvh - 220px)' },
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 1,
+            backgroundColor: 'background.paper',
+            px: 2,
+            py: 3,
+          }}
+        >
+          <EmptyState
+            title="No investments added yet"
+            description="Add your first investment to unlock portfolio insights, allocation mix, and scheduled contribution tracking."
+            actionLabel="Add Investment"
+            onAction={openCreateDrawer}
+          />
+        </Box>
+      ) : null}
+      {!loading && !isFirstInvestmentSetup && activeView === 'dashboard' ? renderDashboardView() : null}
+      {!loading && !isFirstInvestmentSetup && activeView === 'assets' ? renderAssetsView() : null}
+      {!loading && !isFirstInvestmentSetup && activeView === 'calendar' ? renderCalendarView() : null}
 
       <InvestmentFormDrawer
         open={drawerOpen && drawerMode !== 'view'}
         onClose={closeInvestmentDrawer}
         onSubmit={handleSaveInvestment}
         initialValues={drawerMode === 'edit' ? selectedInvestment : null}
+        accounts={accounts}
         taxonomyNodes={taxonomyNodes}
         title={drawerMode === 'edit' ? 'Edit Investment' : 'Add Investment'}
         submitLabel={drawerMode === 'edit' ? 'Update' : 'Add'}
@@ -1412,6 +1526,7 @@ export default function Investments() {
         onSubmit={handleSaveAssetTaxonomy}
         onDelete={handleDeleteAssetTaxonomy}
         taxonomyNodes={taxonomyNodes}
+        submitError={taxonomyFormError}
       />
 
       <ConfirmDialog

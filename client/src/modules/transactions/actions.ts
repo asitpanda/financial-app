@@ -7,6 +7,7 @@ interface SaveTransactionActionArgs {
     type?: 'income' | 'expense';
     amount?: number;
     category?: string;
+    categoryId?: string | number | null;
     source?: string;
     date?: Date | string;
     notes?: string;
@@ -17,20 +18,28 @@ interface SaveTransactionActionArgs {
   onSuccess: () => Promise<void> | void;
 }
 
-const toTransactionDto = (payload: SaveTransactionActionArgs['payload']): CreateTransactionDto => ({
-  type: payload.type as 'income' | 'expense',
-  amount: Number(payload.amount),
-  category: String(payload.category || '').trim(),
-  source: String(payload.source || '').trim(),
-  date:
-    payload.date instanceof Date
-      ? payload.date.toISOString()
-      : payload.date
-      ? String(payload.date)
-      : undefined,
-  notes: payload.notes || '',
-  goalId: payload.goalId || null,
-});
+const toTransactionDto = (payload: SaveTransactionActionArgs['payload']): CreateTransactionDto => {
+  const categoryId = Number(payload.categoryId);
+  const sourceAccountId = Number(payload.source);
+  const goalId = Number(payload.goalId);
+
+  return {
+    type: payload.type as 'income' | 'expense',
+    amount: Number(payload.amount),
+    categoryId,
+    categoryLabelSnapshot: String(payload.category || '').trim(),
+    transactionKind: payload.type === 'income' ? 'credit' : 'debit',
+    sourceAccountId: Number.isNaN(sourceAccountId) ? undefined : sourceAccountId,
+    date:
+      payload.date instanceof Date
+        ? payload.date.toISOString()
+        : payload.date
+        ? String(payload.date)
+        : new Date().toISOString(),
+    notes: payload.notes || '',
+    goalId: Number.isNaN(goalId) ? null : goalId,
+  };
+};
 
 interface DeleteTransactionActionArgs {
   targetId?: string | null;
@@ -52,8 +61,9 @@ export function buildSaveTransactionAction({
       const hasType = payload?.type === 'income' || payload?.type === 'expense';
       const hasAmount = Number(payload?.amount || 0) > 0;
       const hasCategory = Boolean(payload?.category && payload.category.trim());
+      const hasCategoryId = Number(payload?.categoryId) > 0;
       const hasSource = Boolean(payload?.source && payload.source.trim());
-      return hasType && hasAmount && hasCategory && hasSource;
+      return hasType && hasAmount && hasCategory && hasCategoryId && hasSource;
     },
     execute: async () => {
       const normalizedPayload = toTransactionDto(payload);

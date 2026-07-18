@@ -10,6 +10,7 @@ import { InvestmentAssetTaxonomyModule } from './investment-asset-taxonomy/inves
 import { InvestmentContributionPlansModule } from './investment-contribution-plans/investment-contribution-plans.module';
 import { InvestmentEventsModule } from './investment-events/investment-events.module';
 import { ValuationSnapshotsModule } from './valuation-snapshots/valuation-snapshots.module';
+import { FinancialAccountsModule } from './financial-accounts/financial-accounts.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { ValuationSnapshotsModule } from './valuation-snapshots/valuation-snapsh
     InvestmentContributionPlansModule,
     InvestmentEventsModule,
     ValuationSnapshotsModule,
+    FinancialAccountsModule,
   ],
 })
 export class AppModule {}

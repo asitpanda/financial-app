@@ -6,11 +6,6 @@ export const getTransactions = async (): Promise<Transaction[]> => {
   return response.data;
 };
 
-export const getTransactionSources = async (): Promise<string[]> => {
-  const response = await apiClient.get('/transactions/sources');
-  return response.data;
-};
-
 export const getTransactionById = async (id: string): Promise<Transaction> => {
   const response = await apiClient.get(`/transactions/${id}`);
   return response.data;
@@ -32,7 +27,6 @@ export const deleteTransaction = async (id: string): Promise<void> => {
 
 export const transactionApi = {
   getAll: getTransactions,
-  getSources: getTransactionSources,
 
   getById: getTransactionById,
 

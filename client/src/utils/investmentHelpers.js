@@ -8,6 +8,7 @@ export const STATUS_OPTIONS = [
 ];
 
 export const createEmptyInvestmentForm = () => ({
+  accountId: '',
   name: '',
   type: '',
   category: 'other',
@@ -221,6 +222,7 @@ export const normalizeInvestmentForUi = (investment, taxonomyNodes = []) => {
 
   return {
     ...investment,
+    accountId: investment.accountId ?? null,
     type,
     assetTaxonomyId: investment.assetTaxonomyId || taxonomyNode?.id || null,
     category: (categoryNode ? slugifyLabel(categoryNode.label) : null) || investment.assetCategory || investment.category || typeMeta.category,
@@ -233,6 +235,7 @@ export const buildFormFromInvestment = (investment, taxonomyNodes = []) => {
   const typeMeta = getInvestmentTypeMeta(investment.assetTaxonomyId || investment.type, taxonomyNodes);
 
   return {
+    accountId: investment.accountId != null ? String(investment.accountId) : '',
     name: investment.name || '',
     type: typeMeta.type || investment.type || '',
     category: investment.category || typeMeta.category,
@@ -252,9 +255,11 @@ export const buildFormFromInvestment = (investment, taxonomyNodes = []) => {
 
 export const buildInvestmentFromForm = (form, existingId, taxonomyNodes = []) => {
   const typeMeta = getInvestmentTypeMeta(form.assetTaxonomyId || form.type, taxonomyNodes);
+  const parsedAccountId = form.accountId !== '' && form.accountId != null ? Number(form.accountId) : null;
 
   return {
     ...(existingId ? { id: existingId } : {}),
+    accountId: Number.isFinite(parsedAccountId) ? parsedAccountId : null,
     assetTaxonomyId: form.assetTaxonomyId || typeMeta.id || null,
     name: form.name.trim(),
     assetType: typeMeta.type || form.type,
@@ -274,16 +279,4 @@ export const buildInvestmentFromForm = (form, existingId, taxonomyNodes = []) =>
     documentsMeta: buildDocumentsMeta(form.documents),
     notes: form.notes.trim() || null,
   };
-};
-
-export const validateInvestmentForm = (form) => {
-  const nextErrors = {};
-
-  if (!form.name.trim()) nextErrors.name = 'Investment name is required';
-  if (!form.assetTaxonomyId && !form.type.trim()) nextErrors.type = 'Investment type is required';
-  if (!form.institution.trim()) nextErrors.institution = 'Institution is required';
-  if (!form.totalInvested) nextErrors.totalInvested = 'Total invested amount is required';
-  if (!form.startDate || !dayjs(form.startDate).isValid()) nextErrors.startDate = 'Start date is required';
-
-  return nextErrors;
 };

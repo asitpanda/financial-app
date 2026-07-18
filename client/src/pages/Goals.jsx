@@ -34,7 +34,7 @@ import { useDrawerStore } from "../store/drawerStore";
 import { useDialogStore } from "../store/dialogStore";
 import { useNotificationStore } from "../store/notificationStore";
 import { closeDialog, closeDrawer, navigateTo, openDialog, openDrawer } from "../services/navigation";
-import { executeActionContract } from "../utils/actionContract";
+import { executeActionContract, executeDrawerActionContract } from "../utils/actionContract";
 import { buildDeleteGoalAction, buildSaveGoalAction } from "../modules/goals/actions";
 
 const getGoalId = (goal) => goal._id || goal.id;
@@ -359,6 +359,27 @@ export default function Goals() {
       totalGoals: source.length,
     };
   }, [filteredGoals]);
+  const hasGoalFilters =
+    Boolean(search.trim()) ||
+    progressFilter !== "all" ||
+    tableProgressFilter !== "all" ||
+    dateRangeShortcut !== "all" ||
+    Boolean(dateRange[0]) ||
+    Boolean(dateRange[1]);
+  const isFirstGoalSetup = goals.length === 0 && !hasGoalFilters;
+  const goalTableEmptyState = isFirstGoalSetup
+    ? {
+        title: "No goals created yet",
+        description: "Add your first goal to track target amounts, progress, and upcoming deadlines.",
+        actionLabel: "Add Goal",
+        onAction: openAddDrawer,
+      }
+    : {
+        title: "No goals found",
+        description: "Adjust your filters or add a new goal to start tracking progress.",
+        actionLabel: "Add Goal",
+        onAction: openAddDrawer,
+      };
 
   const goalProgressChart = useMemo(() => {
     const goalsBySegment = {
@@ -417,10 +438,7 @@ export default function Goals() {
       },
     });
 
-    const ok = await executeActionContract(action, { notify: pushNotification });
-    if (!ok && action.feedback?.error) {
-      setError(action.feedback.error);
-    }
+    return executeDrawerActionContract(action, { notify: pushNotification });
   };
 
   const handleDelete = useCallback(async () => {
@@ -562,9 +580,33 @@ export default function Goals() {
   return (
     <main className="flex-1 w-full">
       <div className="w-full">
-        {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+        {error && !drawerOpen && !dialogOpen ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
-        {!loading && (
+        {!loading && isFirstGoalSetup ? (
+          <Box
+            sx={{
+              minHeight: { xs: "calc(100dvh - 240px)", md: "calc(100dvh - 220px)" },
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "1px solid",
+              borderColor: "divider",
+              borderRadius: 1,
+              backgroundColor: "background.paper",
+              px: 2,
+              py: 3,
+            }}
+          >
+            <EmptyState
+              title="No goals created yet"
+              description="Add your first goal to track target amounts, progress, and upcoming deadlines."
+              actionLabel="Add Goal"
+              onAction={openAddDrawer}
+            />
+          </Box>
+        ) : null}
+
+        {!loading && !isFirstGoalSetup && (
           <Box
             sx={{
               display: "grid",
@@ -604,7 +646,7 @@ export default function Goals() {
           </Box>
         )}
 
-        {!loading && (
+        {!loading && !isFirstGoalSetup && (
           <Box
             sx={{
               display: "grid",
@@ -613,7 +655,16 @@ export default function Goals() {
               mb: 2,
             }}
           >
-            <SectionCard title="Goal Progress Overview">
+            <SectionCard
+              title="Goal Progress Overview"
+              empty={goalInsights.totalGoals === 0}
+              emptyState={{
+                title: "No goal progress yet",
+                description: "Create a goal to populate progress insights and completion trends.",
+                actionLabel: "Add Goal",
+                onAction: openAddDrawer,
+              }}
+            >
               <Box
                 sx={{
                   display: "grid",
@@ -719,10 +770,14 @@ export default function Goals() {
               </Box>
             </SectionCard>
 
-            <SectionCard title="Upcoming Deadlines">
-              {goalInsights.upcomingDeadlines.length === 0 ? (
-                <EmptyState title="No deadlines" description="Goals with deadlines will appear here." />
-              ) : (
+            <SectionCard
+              title="Upcoming Deadlines"
+              empty={goalInsights.upcomingDeadlines.length === 0}
+              emptyState={{
+                title: "No upcoming deadlines",
+                description: "Goals with target deadlines will appear here.",
+              }}
+            >
                 <Box sx={{ display: "grid", gap: 1.25 }}>
                   {goalInsights.upcomingDeadlines.map((goal) => (
                     <Box
@@ -759,16 +814,16 @@ export default function Goals() {
                     </Box>
                   ))}
                 </Box>
-              )}
             </SectionCard>
           </Box>
         )}
 
-        <Box ref={goalTableRef}>
-        <SectionCard title="Goal Details Table">
-          {!loading && (
-            <FilterBar onReset={handleResetFilters}>
-              <SearchBar value={search} onChange={setSearch} placeholder="Search goals" />
+        {!isFirstGoalSetup ? (
+          <Box ref={goalTableRef}>
+          <SectionCard title="Goal Details Table" empty={!loading && rows.length === 0} emptyState={goalTableEmptyState}>
+            {!loading && (
+              <FilterBar onReset={handleResetFilters}>
+                <SearchBar value={search} onChange={setSearch} placeholder="Search goals" />
 
               <Select
                 value={progressFilter}
@@ -818,35 +873,29 @@ export default function Goals() {
                   slotProps={{ textField: { size: "small", fullWidth: true } }}
                 />
               </LocalizationProvider>
-            </FilterBar>
-          )}
+              </FilterBar>
+            )}
 
-          {loading ? (
-            <div className="text-center py-8">Loading...</div>
-          ) : rows.length === 0 ? (
-            <EmptyState
-              title="No goals found"
-              description="Adjust your filters or add a new goal to start tracking progress."
-              actionLabel="Add Goal"
-              onAction={openAddDrawer}
-            />
-          ) : (
-            <DataTable
-              rows={rows}
-              columns={columns}
-              pagination
-              paginationModel={paginationModel}
-              onPaginationModelChange={setPaginationModel}
-              rowBufferPx={400}
-              columnBufferPx={300}
-              containerSx={{ height: tableHeight }}
-              initialState={{
-                sorting: { sortModel: [{ field: "deadline", sort: "asc" }] },
-              }}
-            />
-          )}
-        </SectionCard>
-        </Box>
+            {loading ? (
+              <div className="text-center py-8">Loading...</div>
+            ) : (
+              <DataTable
+                rows={rows}
+                columns={columns}
+                pagination
+                paginationModel={paginationModel}
+                onPaginationModelChange={setPaginationModel}
+                rowBufferPx={400}
+                columnBufferPx={300}
+                containerSx={{ height: tableHeight }}
+                initialState={{
+                  sorting: { sortModel: [{ field: "deadline", sort: "asc" }] },
+                }}
+              />
+            )}
+          </SectionCard>
+          </Box>
+        ) : null}
 
         <GoalFormDrawer
           open={isGoalFormDrawerOpen}

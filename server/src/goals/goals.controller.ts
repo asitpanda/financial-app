@@ -8,15 +8,19 @@ import {
   Delete,
   Request,
   ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { GoalsService } from './goals.service';
 import { CreateGoalDto } from './dto/create-goal.dto';
 import { UpdateGoalDto } from './dto/update-goal.dto';
 import { mockUser } from '../mockdata/users';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('goals')
 @Controller('api/goals')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class GoalsController {
   constructor(private readonly goalsService: GoalsService) {}
 

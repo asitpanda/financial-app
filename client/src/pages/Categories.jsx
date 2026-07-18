@@ -43,7 +43,7 @@ import { useDialogStore } from "../store/dialogStore";
 import { useNotificationStore } from "../store/notificationStore";
 import { matchesPageDateFilter, usePageDateFilterStore } from "../store/pageDateFilterStore";
 import { closeDialog, closeDrawer, openDialog, openDrawer } from "../services/navigation";
-import { executeActionContract } from "../utils/actionContract";
+import { executeActionContract, executeDrawerActionContract } from "../utils/actionContract";
 import { buildDeleteCategoryAction, buildSaveCategoryAction } from "../modules/categories/actions";
 
 const getCategoryId = (category) => category._id || category.id;
@@ -431,10 +431,7 @@ export default function Categories() {
       },
     });
 
-    const ok = await executeActionContract(action, { notify: pushNotification });
-    if (!ok && action.feedback?.error) {
-      setError(action.feedback.error);
-    }
+    return executeDrawerActionContract(action, { notify: pushNotification });
   };
 
   const handleDelete = useCallback(async () => {
@@ -461,6 +458,27 @@ export default function Categories() {
     dialogPayload &&
     typeof dialogPayload === "object" &&
     dialogPayload.entity === "category";
+  const hasCategoryFilters =
+    Boolean(search.trim()) ||
+    typeFilter !== "all" ||
+    tableDrilldown.kind !== "all" ||
+    dateRangeShortcut !== "all" ||
+    Boolean(dateRange[0]) ||
+    Boolean(dateRange[1]);
+  const isFirstCategorySetup = categories.length === 0 && !hasCategoryFilters;
+  const categoryTableEmptyState = isFirstCategorySetup
+    ? {
+        title: "No categories created yet",
+        description: "Create your first category to organize transactions by income and expense buckets.",
+        actionLabel: "Add Category",
+        onAction: openAddDrawer,
+      }
+    : {
+        title: "No categories found",
+        description: "Adjust your filters or create a category to begin organizing transactions.",
+        actionLabel: "Add Category",
+        onAction: openAddDrawer,
+      };
 
   const columns = useMemo(
     () => [
@@ -598,9 +616,33 @@ export default function Categories() {
   return (
     <main className="flex-1 w-full">
       <div className="w-full">
-        {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+        {error && !drawerOpen && !dialogOpen ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
-        {!loading && (
+        {!loading && isFirstCategorySetup ? (
+          <Box
+            sx={{
+              minHeight: { xs: "calc(100dvh - 240px)", md: "calc(100dvh - 220px)" },
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "1px solid",
+              borderColor: "divider",
+              borderRadius: 1,
+              backgroundColor: "background.paper",
+              px: 2,
+              py: 3,
+            }}
+          >
+            <EmptyState
+              title="No categories created yet"
+              description="Create your first category to organize transactions by income and expense buckets."
+              actionLabel="Add Category"
+              onAction={openAddDrawer}
+            />
+          </Box>
+        ) : null}
+
+        {!loading && !isFirstCategorySetup && (
           <Box
             sx={{
               display: "grid",
@@ -644,7 +686,7 @@ export default function Categories() {
           </Box>
         )}
 
-        {!loading && (
+        {!loading && !isFirstCategorySetup && (
           <Box
             sx={{
               display: "grid",
@@ -653,7 +695,14 @@ export default function Categories() {
               mb: 2,
             }}
           >
-            <SectionCard title="Category Distribution">
+            <SectionCard
+              title="Category Distribution"
+              empty={categoryDistributionChart.segments.length === 0}
+              emptyState={{
+                title: "No category distribution yet",
+                description: "Transactions linked to categories will fill this distribution view.",
+              }}
+            >
               <Box
                 sx={{
                   display: "grid",
@@ -778,10 +827,14 @@ export default function Categories() {
               </Box>
             </SectionCard>
 
-            <SectionCard title="Top Category Activity">
-              {topCategoryActivity.length === 0 ? (
-                <EmptyState title="No category activity" description="Transactions mapped to categories will appear here." />
-              ) : (
+            <SectionCard
+              title="Top Category Activity"
+              empty={topCategoryActivity.length === 0}
+              emptyState={{
+                title: "No category activity",
+                description: "Transactions mapped to categories will appear here.",
+              }}
+            >
                 <Box sx={{ display: "grid", gap: 1.25 }}>
                   {topCategoryActivity.map((category) => (
                     <Box
@@ -821,16 +874,16 @@ export default function Categories() {
                     </Box>
                   ))}
                 </Box>
-              )}
             </SectionCard>
           </Box>
         )}
 
-        <Box ref={categoryTableRef}>
-          <SectionCard title="Category Details Table">
-            {!loading && (
-              <FilterBar onReset={handleResetFilters}>
-                <SearchBar value={search} onChange={setSearch} placeholder="Search categories" />
+        {!isFirstCategorySetup ? (
+          <Box ref={categoryTableRef}>
+            <SectionCard title="Category Details Table" empty={!loading && rows.length === 0} emptyState={categoryTableEmptyState}>
+              {!loading && (
+                <FilterBar onReset={handleResetFilters}>
+                  <SearchBar value={search} onChange={setSearch} placeholder="Search categories" />
 
                 <Select
                   value={typeFilter}
@@ -878,35 +931,29 @@ export default function Categories() {
                     slotProps={{ textField: { size: "small", fullWidth: true } }}
                   />
                 </LocalizationProvider>
-              </FilterBar>
-            )}
+                </FilterBar>
+              )}
 
-            {loading ? (
-              <div className="text-center py-8">Loading...</div>
-            ) : rows.length === 0 ? (
-              <EmptyState
-                title="No categories found"
-                description="Adjust your filters or create a category to begin organizing transactions."
-                actionLabel="Add Category"
-                onAction={openAddDrawer}
-              />
-            ) : (
-              <DataTable
-                rows={rows}
-                columns={columns}
-                pagination
-                paginationModel={paginationModel}
-                onPaginationModelChange={setPaginationModel}
-                rowBufferPx={400}
-                columnBufferPx={300}
-                containerSx={{ height: tableHeight }}
-                initialState={{
-                  sorting: { sortModel: [{ field: "transactionCount", sort: "desc" }] },
-                }}
-              />
-            )}
-          </SectionCard>
-        </Box>
+              {loading ? (
+                <div className="text-center py-8">Loading...</div>
+              ) : (
+                <DataTable
+                  rows={rows}
+                  columns={columns}
+                  pagination
+                  paginationModel={paginationModel}
+                  onPaginationModelChange={setPaginationModel}
+                  rowBufferPx={400}
+                  columnBufferPx={300}
+                  containerSx={{ height: tableHeight }}
+                  initialState={{
+                    sorting: { sortModel: [{ field: "transactionCount", sort: "desc" }] },
+                  }}
+                />
+              )}
+            </SectionCard>
+          </Box>
+        ) : null}
 
         <CategoryFormDrawer
           open={isCategoryFormDrawerOpen}

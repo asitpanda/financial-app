@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api';
+const API_URL = 'http://localhost:5000/api';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -27,7 +27,11 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Let calling code decide how to handle 401s.
+    if (error?.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
+
     return Promise.reject(error);
   }
 );

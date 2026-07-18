@@ -14,8 +14,10 @@ import { navigateTo } from './services/navigation';
 import { NotificationCenter } from './components/common';
 import './App.css';
 
+const TransactionsPage = Transactions as any;
+
 export default function App() {
-  const { token, user, loading, setLoading, setUser } = useAuthStore();
+  const { token, user, loading, setLoading, setUser, logout } = useAuthStore();
   const activeScreen = useAppStore((state) => state.activeScreen);
   const [transactionsPrefetch, setTransactionsPrefetch] = useState<any[]>([]);
   const [transactionsPrefillFilter, setTransactionsPrefillFilter] = useState<any | null>(null);
@@ -29,7 +31,8 @@ export default function App() {
           const user = await authApi.getMe();
           setUser(user);
         } catch (error) {
-          console.warn('Token validation skipped during bootstrap:', error);
+          console.warn('Token validation failed during bootstrap:', error);
+          logout();
         } finally {
           setLoading(false);
         }
@@ -37,7 +40,7 @@ export default function App() {
     };
 
     initAuth();
-  }, [token, user, setLoading, setUser]);
+  }, [token, user, setLoading, setUser, logout]);
 
   // Show loading spinner while validating token
   if (loading) {
@@ -69,8 +72,8 @@ export default function App() {
     content = <Dashboard onOpenTransactionsFromDashboard={handleOpenTransactionsFromDashboard} />;
   } else if (activeScreen === 'transactions') {
     content = (
-      <Transactions
-        prefetchedTransactions={transactionsPrefetch}
+      <TransactionsPage
+        prefetchedTransactions={transactionsPrefetch as any}
         prefillFilter={transactionsPrefillFilter}
       />
     );

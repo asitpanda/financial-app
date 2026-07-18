@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { Box, Modal, Stack, TextField, Typography, CircularProgress, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import { Box, Modal, Stack, TextField, Typography, CircularProgress, FormControl, InputLabel, Select, MenuItem, FormHelperText } from '@mui/material';
+import { getFinancialAccounts } from '../../api/financialAccounts';
 import dayjs from 'dayjs';
 import AppButton from '../common/AppButton';
 import { useNotificationStore } from '../../store/notificationStore';
 import apiClient from '../../api/client';
+import { validateRecordContributionForm } from '../../validation/investmentSchema';
 
 const modalStyle = {
   position: 'absolute',
@@ -34,14 +36,15 @@ export default function RecordContributionModal({
     sourceAccountId: '',
     notes: '',
   });
+  const [errors, setErrors] = useState({});
   const { pushNotification } = useNotificationStore();
-
+  
   // Load accounts on mount
   React.useEffect(() => {
     const loadAccounts = async () => {
       try {
-        const response = await apiClient.get('/financial-accounts');
-        setAccounts(response.data || []);
+        const response = await getFinancialAccounts();
+        setAccounts(Array.isArray(response) ? response : []);
       } catch (error) {
         console.error('Failed to load accounts:', error);
       }
@@ -52,27 +55,36 @@ export default function RecordContributionModal({
     }
   }, [open]);
 
+  React.useEffect(() => {
+    if (!open) return;
+
+    setFormData({
+      contributionDate: dayjs().format('YYYY-MM-DD'),
+      amount: contributionPlan?.amount || '',
+      sourceAccountId: '',
+      notes: '',
+    });
+    setErrors({});
+  }, [open, contributionPlan?.amount]);
+
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
+
+    setErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
   };
 
   const validateForm = () => {
-    if (!formData.contributionDate) {
-      pushNotification({ message: 'Contribution date is required', type: 'error' });
-      return false;
-    }
-    if (!formData.amount || Number(formData.amount) <= 0) {
-      pushNotification({ message: 'Amount must be greater than 0', type: 'error' });
-      return false;
-    }
-    if (!formData.sourceAccountId) {
-      pushNotification({ message: 'Please select a source account', type: 'error' });
-      return false;
-    }
-    return true;
+    const validationErrors = validateRecordContributionForm(formData);
+    setErrors(validationErrors);
+    return Object.keys(validationErrors).length === 0;
   };
 
   const handleSubmit = async () => {
@@ -103,6 +115,7 @@ export default function RecordContributionModal({
         sourceAccountId: '',
         notes: '',
       });
+      setErrors({});
 
       onContributionRecorded?.(response.data);
       onClose();
@@ -149,6 +162,8 @@ export default function RecordContributionModal({
               size="small"
               value={formData.contributionDate}
               onChange={(e) => handleInputChange('contributionDate', e.target.value)}
+              error={Boolean(errors.contributionDate)}
+              helperText={errors.contributionDate || ''}
               inputProps={{ style: { fontSize: 14 } }}
             />
           </Box>
@@ -164,11 +179,13 @@ export default function RecordContributionModal({
               placeholder="0.00"
               value={formData.amount}
               onChange={(e) => handleInputChange('amount', e.target.value)}
+              error={Boolean(errors.amount)}
+              helperText={errors.amount || ''}
               inputProps={{ step: '0.01', style: { fontSize: 14 } }}
             />
           </Box>
 
-          <FormControl fullWidth size="small">
+          <FormControl fullWidth size="small" error={Boolean(errors.sourceAccountId)}>
             <InputLabel>Source Account</InputLabel>
             <Select
               value={formData.sourceAccountId}
@@ -182,6 +199,7 @@ export default function RecordContributionModal({
                 </MenuItem>
               ))}
             </Select>
+            <FormHelperText>{errors.sourceAccountId || ''}</FormHelperText>
           </FormControl>
 
           <Box>

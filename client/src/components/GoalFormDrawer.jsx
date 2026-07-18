@@ -2,6 +2,7 @@ import React, { useEffect, useMemo } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  Alert,
   Box,
   Step,
   StepLabel,
@@ -40,7 +41,9 @@ export default function GoalFormDrawer({
   initialValues = null,
   title = "Add Goal",
   submitLabel = "Add",
+  submitError = "",
 }) {
+  const [localSubmitError, setLocalSubmitError] = React.useState("");
   const {
     register,
     control,
@@ -84,15 +87,17 @@ export default function GoalFormDrawer({
   useEffect(() => {
     if (!open) return;
     reset(toGoalFormState(initialValues));
+    setLocalSubmitError("");
   }, [open, initialValues, reset]);
 
-  const submit = handleSubmit((values) => {
+  const submit = handleSubmit(async (values) => {
+    setLocalSubmitError("");
     const normalizedCategoryName = values.category?.trim().toLowerCase();
     const matchedCategory = normalizedCategoryName
       ? categoryMetaByName.get(normalizedCategoryName)
       : undefined;
 
-    onSubmit?.({
+    const result = await onSubmit?.({
       name: values.name.trim(),
       category: values.category.trim(),
       categoryId:
@@ -106,7 +111,13 @@ export default function GoalFormDrawer({
       currentAmount: values.currentAmount ?? 0,
       deadline: values.deadline ? dayjs(values.deadline).toISOString() : undefined,
     });
+
+    if (typeof result === "string" && result.trim()) {
+      setLocalSubmitError(result);
+    }
   });
+
+  const resolvedSubmitError = submitError || localSubmitError;
 
   const handleContinueToReview = async () => {
     const valid = await trigger();
@@ -207,6 +218,8 @@ export default function GoalFormDrawer({
 
       {isReviewStep ? (
         <Stack spacing={2}>
+          {resolvedSubmitError ? <Alert severity="error">{resolvedSubmitError}</Alert> : null}
+
           <Box
             sx={{
               border: "1px solid",
@@ -287,6 +300,8 @@ export default function GoalFormDrawer({
         }}
       >
       <Stack spacing={1.5}>
+        {resolvedSubmitError ? <Alert severity="error">{resolvedSubmitError}</Alert> : null}
+
         <LabeledTextField
           labelText="Name"
           {...register("name")}

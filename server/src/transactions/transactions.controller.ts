@@ -21,8 +21,8 @@ import { mockUser } from '../mockdata/users';
 
 @ApiTags('transactions')
 @Controller('api/transactions')
-// @UseGuards(JwtAuthGuard)  // Uncomment when auth is ready
-// @ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
 
@@ -48,12 +48,6 @@ export class TransactionsController {
       return this.transactionsService.findByType(userId, type);
     }
     return this.transactionsService.findAll(userId);
-  }
-
-  @Get('sources')
-  @ApiOperation({ summary: 'Get available transaction bank/source options' })
-  getSources() {
-    return this.transactionsService.getSources();
   }
 
   @Get('date-range')

@@ -105,10 +105,18 @@ export class AuthService {
 
   async validateUser(userId: number | string) {
     if (this.isMockMode) {
+      const matchedUser = registeredUsers.find(
+        (user) => Number(user.id) === Number(userId),
+      );
+
+      if (!matchedUser) {
+        return null;
+      }
+
       return {
-        id: mockUser.id,
-        email: mockUser.email,
-        name: mockUser.name,
+        id: matchedUser.id,
+        email: matchedUser.email,
+        name: matchedUser.name,
       };
     }
 

@@ -5,11 +5,6 @@ export const getTransactions = async () => {
   return data;
 };
 
-export const getTransactionSources = async () => {
-  const { data } = await api.get("/transactions/sources");
-  return data;
-};
-
 export const createTransaction = async (payload) => {
   const { data } = await api.post("/transactions", payload);
   return data;

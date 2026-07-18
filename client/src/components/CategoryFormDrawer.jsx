@@ -2,6 +2,7 @@ import React, { useEffect, useMemo } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  Alert,
   Box,
   FormHelperText,
   Stack,
@@ -42,7 +43,9 @@ export default function CategoryFormDrawer({
   initialValues = null,
   title = "Add Category",
   submitLabel = "Add",
+  submitError = "",
 }) {
+  const [localSubmitError, setLocalSubmitError] = React.useState("");
   const { data: categories = [] } = useCategories();
   const currentCategoryName = initialValues?.name?.trim().toLowerCase() || "";
   const existingCategoryNames = useMemo(
@@ -80,6 +83,7 @@ export default function CategoryFormDrawer({
       icon: formState.icon || DEFAULT_ICON_BY_TYPE[type] || "cart",
       color: formState.color || DEFAULT_TEXT_COLOR,
     });
+    setLocalSubmitError("");
   }, [open, initialValues, reset]);
 
   useEffect(() => {
@@ -97,15 +101,22 @@ export default function CategoryFormDrawer({
     CATEGORY_ICON_OPTIONS.find((item) => item.value === (iconValue || DEFAULT_ICON_BY_TYPE[typeValue] || "cart")) ||
     CATEGORY_ICON_OPTIONS[0];
 
-  const submit = handleSubmit((values) => {
+  const submit = handleSubmit(async (values) => {
+    setLocalSubmitError("");
     const resolvedIcon = values.icon?.trim() || DEFAULT_ICON_BY_TYPE[values.type] || "cart";
-    onSubmit?.({
+    const result = await onSubmit?.({
       name: values.name.trim(),
       type: values.type,
       icon: resolvedIcon,
       color: values.color ? normalizeColor(values.color.trim()) : undefined,
     });
+
+    if (typeof result === "string" && result.trim()) {
+      setLocalSubmitError(result);
+    }
   });
+
+  const resolvedSubmitError = submitError || localSubmitError;
 
   const footer = (
     <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1.5 }}>
@@ -136,6 +147,8 @@ export default function CategoryFormDrawer({
         }}
       >
         <Stack spacing={1.5}>
+          {resolvedSubmitError ? <Alert severity="error">{resolvedSubmitError}</Alert> : null}
+
           <LabeledTextField
             labelText="Name"
             {...register("name")}

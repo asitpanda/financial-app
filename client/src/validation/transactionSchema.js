@@ -29,11 +29,16 @@ export const toTransactionFormState = (initialValues) => {
   const parsedDate = initialValues.date || initialValues.createdAt;
   const normalizedDate = parsedDate && dayjs(parsedDate).isValid() ? dayjs(parsedDate) : dayjs();
 
+  const normalizedSource =
+    initialValues.sourceAccountId != null
+      ? String(initialValues.sourceAccountId)
+      : (initialValues.source ? String(initialValues.source) : "");
+
   return {
     type: initialValues.type || "expense",
     amount: initialValues.amount ?? "",
     category: initialValues.category || "",
-    source: initialValues.source || "",
+    source: normalizedSource,
     goalId: initialValues.goalId || "",
     date: normalizedDate,
     notes: initialValues.notes || "",

@@ -34,15 +34,52 @@ export async function executeActionContract<TPayload>(
     }
 
     return true;
-  } catch {
+  } catch (error) {
     if (contract.rollback) {
       await contract.rollback();
     }
 
-    if (contract.feedback?.error && notify) {
-      notify({ type: 'error', message: contract.feedback.error });
+    const runtimeMessage =
+      (error as any)?.response?.data?.message ||
+      (error as any)?.message;
+
+    if (notify) {
+      if (typeof runtimeMessage === 'string' && runtimeMessage.trim()) {
+        notify({ type: 'error', message: runtimeMessage });
+      } else if (Array.isArray(runtimeMessage) && runtimeMessage.length > 0) {
+        notify({ type: 'error', message: String(runtimeMessage[0]) });
+      } else if (contract.feedback?.error) {
+        notify({ type: 'error', message: contract.feedback.error });
+      }
     }
 
     return false;
   }
+}
+
+export async function executeDrawerActionContract<TPayload>(
+  contract: ActionContract<TPayload>,
+  options: ExecuteActionContractOptions = {}
+): Promise<string | null> {
+  let errorMessage = '';
+
+  const ok = await executeActionContract(contract, {
+    notify: (notification) => {
+      if (notification.type === 'error') {
+        errorMessage = notification.message;
+        return 'drawer-error';
+      }
+
+      if (notification.type === 'info') {
+        return 'drawer-info';
+      }
+
+      if (!options.notify) return 'drawer-notify';
+      return options.notify(notification);
+    },
+  });
+
+  if (ok) return null;
+  if (errorMessage.trim()) return errorMessage;
+  return contract.feedback?.error || 'Action failed';
 }

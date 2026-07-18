@@ -7,12 +7,12 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import dayjs from "dayjs";
 import AddTransactionModal from "../components/AddTransactionModal";
-import Button from "../components/common/AppButton";
 import { useHeaderAction } from "../hooks/useHeaderAction";
 import { useViewportTableHeight } from "../hooks/useViewportTableHeight";
 import { getTransactions } from "../api/transactions";
 import { getCategories } from "../api/categories";
 import { getGoals } from "../api/goals";
+import { getFinancialAccounts } from "../api/financialAccounts";
 import {
   DataTable,
   EmptyState,
@@ -29,7 +29,7 @@ import { useDialogStore } from "../store/dialogStore";
 import { useNotificationStore } from "../store/notificationStore";
 import { matchesPageDateFilter, usePageDateFilterStore } from "../store/pageDateFilterStore";
 import { closeDialog, closeDrawer, openDialog, openDrawer } from "../services/navigation";
-import { executeActionContract } from "../utils/actionContract";
+import { executeActionContract, executeDrawerActionContract } from "../utils/actionContract";
 import {
   buildDeleteTransactionAction,
   buildSaveTransactionAction,
@@ -58,6 +58,7 @@ export default function Transactions({ prefetchedTransactions = [], prefillFilte
   const [transactions, setTransactions] = useState(hasPrefetched ? prefetchedTransactions : []);
   const [categories, setCategories] = useState([]);
   const [goals, setGoals] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(!hasPrefetched);
   const [error, setError] = useState("");
   const pushNotification = useNotificationStore((state) => state.pushNotification);
@@ -151,6 +152,13 @@ export default function Transactions({ prefetchedTransactions = [], prefillFilte
     [goals]
   );
 
+  const accountNameById = useMemo(() => {
+    return accounts.reduce((acc, account) => {
+      acc[Number(account.id)] = account.displayName || account.institutionName || account.name;
+      return acc;
+    }, {});
+  }, [accounts]);
+
   const sortedTransactions = useMemo(() => {
     const pageFilteredTransactions = transactions.filter((tx) => {
       const transactionDate = new Date(tx.date || tx.createdAt || Date.now());
@@ -169,14 +177,19 @@ export default function Transactions({ prefetchedTransactions = [], prefillFilte
       const date = new Date(tx.date || tx.createdAt || Date.now());
       const txDate = dayjs(date);
       const goalName = tx.goalId ? goalNameById[tx.goalId] || "Linked goal removed" : "";
+      const txCategory = tx.category || tx.categoryLabelSnapshot || "";
+      const sourceLabel =
+        accountNameById[Number(tx.sourceAccountId)] ||
+        tx.source ||
+        (tx.sourceAccountId != null ? String(tx.sourceAccountId) : "Unknown source");
 
       if (from && txDate.isBefore(from.startOf("day"))) return false;
       if (to && txDate.isAfter(to.endOf("day"))) return false;
 
       if (typeFilter !== "all" && tx.type !== typeFilter) return false;
-      if (categoryFilter !== "all" && tx.category !== categoryFilter) return false;
+      if (categoryFilter !== "all" && txCategory !== categoryFilter) return false;
 
-      const haystack = `${tx.category || ""} ${tx.type || ""} ${tx.source || ""} ${goalName} ${tx.notes || ""}`.toLowerCase();
+      const haystack = `${txCategory} ${tx.type || ""} ${sourceLabel} ${goalName} ${tx.notes || ""}`.toLowerCase();
       if (search.trim() && !haystack.includes(search.trim().toLowerCase())) return false;
 
       return true;
@@ -188,6 +201,7 @@ export default function Transactions({ prefetchedTransactions = [], prefillFilte
     search,
     dateRange,
     goalNameById,
+    accountNameById,
   ]);
 
   const transactionInsights = useMemo(() => {
@@ -246,14 +260,17 @@ export default function Transactions({ prefetchedTransactions = [], prefillFilte
           tx,
           date: txDate,
           dateLabel: txDate.toLocaleDateString(),
-          category: tx.category || "Uncategorized",
-          source: tx.source || "Unknown source",
+          category: tx.category || tx.categoryLabelSnapshot || "Uncategorized",
+          source:
+            accountNameById[Number(tx.sourceAccountId)] ||
+            tx.source ||
+            (tx.sourceAccountId != null ? String(tx.sourceAccountId) : "Unknown source"),
           type: tx.type || "unknown",
           amount: Number(tx.amount || 0),
           notes: tx.notes || "",
         };
       }),
-    [tableTransactions]
+    [tableTransactions, accountNameById]
   );
   const tableHeight = useViewportTableHeight(transactionTableRef, {
     bottomOffset: 50,
@@ -295,14 +312,26 @@ export default function Transactions({ prefetchedTransactions = [], prefillFilte
   const loadData = useCallback(async (silent = false) => {
     try {
       if (!silent) setLoading(true);
-      const [tx, cs, gs] = await Promise.all([
+      const [tx, cs, gs, ac] = await Promise.all([
         getTransactions(),
         getCategories(),
         getGoals(),
+        getFinancialAccounts(),
       ]);
-      setTransactions(tx);
+      setTransactions(
+        Array.isArray(tx)
+          ? tx.map((item) => ({
+              ...item,
+              category: item.category || item.categoryLabelSnapshot || "",
+              source:
+                item.source ||
+                (item.sourceAccountId != null ? String(item.sourceAccountId) : ""),
+            }))
+          : []
+      );
       setCategories(cs);
       setGoals(gs);
+      setAccounts(Array.isArray(ac) ? ac : []);
       setError(""); // Clear error on success
     } catch (e) {
       setError("Failed to load transactions");
@@ -328,10 +357,7 @@ export default function Transactions({ prefetchedTransactions = [], prefillFilte
       },
     });
 
-    const ok = await executeActionContract(action, { notify: pushNotification });
-    if (!ok && action.feedback?.error) {
-      setError(action.feedback.error);
-    }
+    return executeDrawerActionContract(action, { notify: pushNotification });
   }, [selectedTransaction, loadData, pushNotification]);
 
   const handleDelete = useCallback(async () => {
@@ -347,9 +373,7 @@ export default function Transactions({ prefetchedTransactions = [], prefillFilte
     });
 
     const ok = await executeActionContract(action, { notify: pushNotification });
-    if (!ok && action.feedback?.error) {
-      setError(action.feedback.error);
-    }
+    if (!ok) return;
   }, [dialogPayload, loadData, pushNotification]);
 
   const isTransactionDeleteDialogOpen =
@@ -509,21 +533,74 @@ export default function Transactions({ prefetchedTransactions = [], prefillFilte
       pushNotification({ type: "warning", message: "Please add a category before adding a transaction." });
       return;
     }
+
+    if (accounts.length === 0) {
+      setError("Please add a financial account before adding a transaction.");
+      pushNotification({ type: "warning", message: "Please add a financial account before adding a transaction." });
+      return;
+    }
+
     openDrawer({ type: "transaction", mode: "create", step: "form" });
-  }, [categories, pushNotification]);
+  }, [accounts.length, categories.length, pushNotification]);
+  const hasTransactionFilters =
+    Boolean(search.trim()) ||
+    typeFilter !== "all" ||
+    categoryFilter !== "all" ||
+    tableDrilldownFilter !== "all" ||
+    dateRangeShortcut !== "all" ||
+    Boolean(dateRange[0]) ||
+    Boolean(dateRange[1]);
+  const isFirstTransactionSetup = sortedTransactions.length === 0 && !hasTransactionFilters;
+  const transactionTableEmptyState = isFirstTransactionSetup
+    ? {
+        title: "No transactions yet",
+        description: "Add your first transaction to start tracking cash flow and category trends.",
+        actionLabel: "Add Transaction",
+        onAction: handleOpenAdd,
+      }
+    : {
+        title: "No transactions found",
+        description: "Adjust your filters to widen results, or add a new transaction.",
+        actionLabel: "Add Transaction",
+        onAction: handleOpenAdd,
+      };
 
   useHeaderAction("transactions", {
     label: "Transaction",
     onClick: handleOpenAdd,
-    disabled: loading,
+    disabled: loading || categories.length === 0 || accounts.length === 0,
   });
 
   return (
     <main className="flex-1 w-full">
       <div className="w-full">
-        {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+        {error && !drawerOpen && !dialogOpen ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
-        {!loading && (
+        {!loading && isFirstTransactionSetup ? (
+          <Box
+            sx={{
+              minHeight: { xs: "calc(100dvh - 240px)", md: "calc(100dvh - 220px)" },
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "1px solid",
+              borderColor: "divider",
+              borderRadius: 1,
+              backgroundColor: "background.paper",
+              px: 2,
+              py: 3,
+            }}
+          >
+            <EmptyState
+              title="No transactions yet"
+              description="Add your first transaction to start tracking cash flow and category trends."
+              actionLabel="Add Transaction"
+              onAction={handleOpenAdd}
+            />
+          </Box>
+        ) : null}
+
+        {!loading && !isFirstTransactionSetup && (
           <Box
             sx={{
               display: "grid",
@@ -563,7 +640,7 @@ export default function Transactions({ prefetchedTransactions = [], prefillFilte
           </Box>
         )}
 
-      {!loading && (
+      {!loading && !isFirstTransactionSetup && (
         <FilterBar onReset={handleResetFilters}>
             <SearchBar
               value={search}
@@ -624,44 +701,33 @@ export default function Transactions({ prefetchedTransactions = [], prefillFilte
         </FilterBar>
       )}
 
-      <Box ref={transactionTableRef}>
-      <SectionCard>
-        {loading ? (
-          <div className="text-center py-8">Loading...</div>
-        ) : (
-          <>
-          {rows.length === 0 ? (
-            <EmptyState
-              title="No transactions found"
-              description="Adjust your filters or add a transaction to get started."
-              actionLabel="Add Transaction"
-              onAction={handleOpenAdd}
-            />
+      {!isFirstTransactionSetup ? (
+        <Box ref={transactionTableRef}>
+        <SectionCard empty={!loading && rows.length === 0} emptyState={transactionTableEmptyState}>
+          {loading ? (
+            <div className="text-center py-8">Loading...</div>
           ) : (
-              <DataTable
-                rows={rows}
-                columns={columns}
-                pagination
-                paginationModel={paginationModel}
-                onPaginationModelChange={setPaginationModel}
-                rowBufferPx={400}
-                columnBufferPx={300}
-                containerSx={{ height: tableHeight }}
-                initialState={{
-                  sorting: { sortModel: [{ field: "date", sort: "desc" }] },
-                }}
-              />
+                <DataTable
+                  rows={rows}
+                  columns={columns}
+                  pagination
+                  paginationModel={paginationModel}
+                  onPaginationModelChange={setPaginationModel}
+                  rowBufferPx={400}
+                  columnBufferPx={300}
+                  containerSx={{ height: tableHeight }}
+                  initialState={{
+                    sorting: { sortModel: [{ field: "date", sort: "desc" }] },
+                  }}
+                />
           )}
-          </>
-        )}
-      </SectionCard>
-      </Box>
+        </SectionCard>
+        </Box>
+      ) : null}
 
         <AddTransactionModal
           open={Boolean(isTransactionFormDrawerOpen)}
-          onClose={() => {
-            closeDrawer();
-          }}
+          onClose={closeDrawer}
           onSubmit={handleSubmitTransaction}
           initialValues={selectedTransaction || createTransactionInitialValues}
           title={selectedTransaction ? "Edit Transaction" : "Add Transaction"}

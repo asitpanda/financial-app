@@ -2,13 +2,15 @@ export interface Transaction {
   id: string;
   type: 'income' | 'expense';
   amount: number;
-  category: string;
-  categoryId?: string | null;
+  category?: string;
+  categoryId?: string | number | null;
   categoryLabelSnapshot?: string;
-  source: string;
+  source?: string;
+  sourceAccountId?: number | null;
+  transactionKind?: string;
   date: string;
   notes?: string;
-  goalId?: string | null;
+  goalId?: string | number | null;
   userId: string;
   createdAt: string;
   updatedAt: string;
@@ -17,12 +19,15 @@ export interface Transaction {
 export interface CreateTransactionDto {
   type: 'income' | 'expense';
   amount: number;
-  category: string;
-  categoryId?: string | null;
-  source: string;
-  date?: string;
+  categoryId: number;
+  categoryLabelSnapshot: string;
+  transactionKind: string;
+  sourceAccountId?: number;
+  destinationAccountId?: number;
+  linkedInvestmentEventId?: number;
+  date: string;
   notes?: string;
-  goalId?: string | null;
+  goalId?: number | null;
 }
 
 export interface UpdateTransactionDto extends Partial<CreateTransactionDto> {}

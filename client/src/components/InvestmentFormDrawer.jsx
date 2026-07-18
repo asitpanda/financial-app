@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { alpha, Box, Dialog, DialogActions, DialogContent, DialogTitle, Paper, Stack, Typography } from '@mui/material';
+import { Alert, alpha, Box, Dialog, DialogActions, DialogContent, DialogTitle, Paper, Stack, Typography } from '@mui/material';
 import { RichTreeView } from '@mui/x-tree-view/RichTreeView';
 import AppDrawer from './drawers/AppDrawer';
 import AppButton from './common/AppButton';
@@ -18,20 +18,23 @@ import {
   getInvestmentTypeMeta,
   getInvestmentTypeTreeItems,
   STATUS_OPTIONS,
-  validateInvestmentForm,
 } from '../utils/investmentHelpers';
+import { validateInvestmentForm } from '../validation/investmentSchema';
 
 export default function InvestmentFormDrawer({
   open,
   onClose,
   onSubmit,
   initialValues = null,
+  accounts = [],
   taxonomyNodes = [],
   title = 'Add Investment',
   submitLabel = 'Add',
+  submitError = '',
 }) {
   const [form, setForm] = useState(() => createEmptyInvestmentForm());
   const [errors, setErrors] = useState({});
+  const [localSubmitError, setLocalSubmitError] = useState('');
   const [typePickerOpen, setTypePickerOpen] = useState(false);
   const [typePickerExpandedItems, setTypePickerExpandedItems] = useState([]);
   const [pendingTypeNodeId, setPendingTypeNodeId] = useState(null);
@@ -46,6 +49,7 @@ export default function InvestmentFormDrawer({
     if (!open) return;
     setForm(initialValues ? buildFormFromInvestment(initialValues, taxonomyNodes) : createEmptyInvestmentForm());
     setErrors({});
+    setLocalSubmitError('');
     setContributionType(initialValues?.contributionType === 'recurring' ? 'recurring' : 'one-time');
     setRecurringPlan({
       frequency: initialValues?.contributionFrequency || 'monthly',
@@ -80,6 +84,14 @@ export default function InvestmentFormDrawer({
     () => getInvestmentTypeTreeItems(taxonomyNodes),
     [taxonomyNodes]
   );
+  const accountOptions = useMemo(() => {
+    const mappedAccounts = (Array.isArray(accounts) ? accounts : []).map((account) => ({
+      value: String(account.id),
+      label: account.displayName || account.name || account.institutionName || `Account ${account.id}`,
+    }));
+
+    return [{ value: '', label: 'Select account' }, ...mappedAccounts];
+  }, [accounts]);
   const investmentTypeRootIds = useMemo(
     () => investmentTypeTreeItems.map((item) => item.id),
     [investmentTypeTreeItems]
@@ -111,14 +123,21 @@ export default function InvestmentFormDrawer({
     });
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const validationErrors = validateInvestmentForm(form);
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       return;
     }
-    onSubmit?.(form);
+
+    setLocalSubmitError('');
+    const result = await onSubmit?.(form);
+    if (typeof result === 'string' && result.trim()) {
+      setLocalSubmitError(result);
+    }
   };
+
+  const resolvedSubmitError = submitError || localSubmitError;
 
   const handleRecurringPlanChange = (field, value) => {
     setRecurringPlan((current) => ({ ...current, [field]: value }));
@@ -203,6 +222,8 @@ export default function InvestmentFormDrawer({
       footer={footer}
     >
       <Stack spacing={2.25}>
+        {resolvedSubmitError ? <Alert severity="error">{resolvedSubmitError}</Alert> : null}
+
         <SectionCard title="Investment Setup" subtitle="Keep the drawer on one screen, but shape the top of the form like the wireframe so type and contribution decisions happen first.">
           <Stack spacing={2}>
             {investmentTypeTreeItems.length ? (
@@ -292,6 +313,14 @@ export default function InvestmentFormDrawer({
 
         <SectionCard title="Basic Information">
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, gap: 1.5 }}>
+            <LabeledSelectField
+              labelText="Funding Account"
+              value={String(form.accountId ?? '')}
+              onChange={(event) => handleFormChange('accountId', event.target.value)}
+              options={accountOptions}
+              errorMessage={errors.accountId}
+              helperText={accountOptions.length <= 1 ? 'Create a financial account first.' : ''}
+            />
             <LabeledTextField labelText="Investment Name" value={form.name} onChange={(event) => handleFormChange('name', event.target.value)} errorMessage={errors.name} />
             <LabeledTextField labelText="Institution" value={form.institution} onChange={(event) => handleFormChange('institution', event.target.value)} errorMessage={errors.institution} />
             <LabeledDateField labelText="Start Date" value={form.startDate} onChange={(value) => handleFormChange('startDate', value)} errorMessage={errors.startDate} />

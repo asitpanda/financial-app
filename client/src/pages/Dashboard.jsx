@@ -1,24 +1,29 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Icon from "@mdi/react";
-import { KpiCard } from "../components/common";
+import { useNotificationStore } from "../store/notificationStore";
+import { KpiCard, SectionCard } from "../components/common";
 import AddTransactionModal from "../components/AddTransactionModal";
 import GoalFormDrawer from "../components/GoalFormDrawer";
 import CategoryFormDrawer from "../components/CategoryFormDrawer";
+import FinancialAccountFormDrawer from "../components/FinancialAccountFormDrawer";
 import { getIconPathByKey } from "../constants/categoryIcons";
 import { navigateTo } from "../services/navigation";
 
 import { getTransactions, createTransaction } from "../api/transactions";
 import { getGoals, createGoal, updateGoal } from "../api/goals";
 import { getCategories, createCategory } from "../api/categories";
-import { getInvestments } from "../api/investments";
+import { getFinancialAccounts } from "../api/financialAccounts";
+import { getInvestments, createInvestment } from "../api/investments";
 import { getInvestmentAssetTaxonomy } from "../api/investmentAssetTaxonomy";
-import { getInvestmentCategoryOptions } from "../utils/investmentHelpers";
+import { buildInvestmentFromForm, getInvestmentCategoryOptions } from "../utils/investmentHelpers";
+import { getRuntimeErrorMessage } from "../utils/errorMessage";
 import {
   PAGE_MONTH_OPTIONS,
   FISCAL_YEAR_START_MONTH,
   usePageDateFilterStore,
   matchesPageDateFilter,
 } from "../store/pageDateFilterStore";
+import InvestmentFormDrawer from "../components/InvestmentFormDrawer";
 
 const resolveFiscalMonthYear = (fiscalYearStart, monthIndex) => {
   const year = monthIndex >= FISCAL_YEAR_START_MONTH ? fiscalYearStart : fiscalYearStart + 1;
@@ -38,9 +43,13 @@ const summarizeTransactions = (items) => {
 
   return { income, expense, balance: income - expense };
 };
-const summarizeSources = (items) => {
+const summarizeSources = (items, accountNameById = {}) => {
   return items.reduce((acc, item) => {
-    const sourceName = String(item.source || "Unknown source").trim() || "Unknown source";
+    const sourceId = Number(item.sourceAccountId);
+    const sourceName =
+      accountNameById[sourceId] ||
+      String(item.source || "Unknown source").trim() ||
+      "Unknown source";
 
     if (!acc[sourceName]) {
       acc[sourceName] = {
@@ -95,29 +104,11 @@ const formatDeadline = (value) => {
   }).format(date);
 };
 
-function DashboardCard({ title, action, children, className = "", contentClassName = "" }) {
-  return (
-    <section
-      className={[
-        "rounded-[8px] border border-slate-200 bg-white p-6 shadow-[0_16px_40px_rgba(15,23,42,0.06)]",
-        className,
-      ].filter(Boolean).join(" ")}
-    >
-      {(title || action) && (
-        <div className="mb-5 flex items-start justify-between gap-4">
-          <h2 className="text-lg font-semibold tracking-tight text-slate-900">{title}</h2>
-          {action}
-        </div>
-      )}
-      <div className={contentClassName}>{children}</div>
-    </section>
-  );
-}
-
 export default function Dashboard({ onOpenTransactionsFromDashboard }) {
   const [transactions, setTransactions] = useState([]);
   const [goals, setGoals] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [investments, setInvestments] = useState([]);
   const [taxonomyNodes, setTaxonomyNodes] = useState([]);
   const periodMode = usePageDateFilterStore((state) => state.mode);
@@ -130,6 +121,19 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
   const [showGoalDrawer, setShowGoalDrawer] = useState(false);
   const [editGoal, setEditGoal] = useState(null);
   const [showAddCategory, setShowAddCategory] = useState(false);
+  const [showAccountDrawer, setShowAccountDrawer] = useState(false);
+  const [editAccount, setEditAccount] = useState(null);
+  const [showInvestments, setShowInvestments] = useState(false);
+  const pushNotification = useNotificationStore((state) => state.pushNotification);
+
+  const accountNameById = useMemo(
+    () =>
+      accounts.reduce((acc, account) => {
+        acc[Number(account.id)] = account.displayName || account.institutionName || account.name;
+        return acc;
+      }, {}),
+    [accounts]
+  );
 
   const getTxDate = (tx) => new Date(tx.date || tx.createdAt || Date.now());
 
@@ -149,15 +153,16 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
   }, [transactions]);
 
   const periodBankSummaries = useMemo(() => {
-    return summarizeSources(filteredTransactions);
-  }, [filteredTransactions]);
+    return summarizeSources(filteredTransactions, accountNameById);
+  }, [filteredTransactions, accountNameById]);
 
   const lifetimeBankSummaries = useMemo(() => {
-    return summarizeSources(transactions);
-  }, [transactions]);
+    return summarizeSources(transactions, accountNameById);
+  }, [transactions, accountNameById]);
 
   const accountOverviewRows = useMemo(() => {
     const allSources = new Set([
+      ...accounts.map((account) => account.displayName || account.institutionName || account.name),
       ...Object.keys(lifetimeBankSummaries),
       ...Object.keys(periodBankSummaries),
     ]);
@@ -175,7 +180,7 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
         if (right.periodChange !== left.periodChange) return right.periodChange - left.periodChange;
         return right.transactions - left.transactions;
       });
-  }, [lifetimeBankSummaries, periodBankSummaries]);
+  }, [accounts, lifetimeBankSummaries, periodBankSummaries]);
 
   const categoryPieData = useMemo(() => {
     const filtered = filteredTransactions.filter((tx) => tx.type === "expense");
@@ -206,7 +211,13 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
       .sort((a, b) => b.value - a.value);
 
     const total = items.reduce((sum, item) => sum + item.value, 0);
-    return { items, total };
+    return {
+      total,
+      items: items.map((item) => ({
+        ...item,
+        percentage: total > 0 ? item.value / total : 0,
+      })),
+    };
   }, [filteredTransactions]);
 
   const selectedPeriodLabel =
@@ -399,16 +410,25 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [tx, gs, cs, inv, taxonomy] = await Promise.all([
+      const [tx, gs, cs, ac, inv, taxonomy] = await Promise.all([
         getTransactions(),
         getGoals(),
         getCategories(),
+        getFinancialAccounts(),
         getInvestments(),
         getInvestmentAssetTaxonomy(),
       ]);
-      setTransactions(tx);
+      setTransactions(
+        Array.isArray(tx)
+          ? tx.map((item) => ({
+              ...item,
+              category: item.category || item.categoryLabelSnapshot || "",
+            }))
+          : []
+      );
       setGoals(gs);
       setCategories(cs);
+      setAccounts(Array.isArray(ac) ? ac : []);
       setInvestments(inv);
       setTaxonomyNodes(Array.isArray(taxonomy) ? taxonomy : []);
     } catch (e) {
@@ -424,11 +444,24 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
 
   const handleAddTransaction = async (payload) => {
     try {
-      const created = await createTransaction(payload);
+      const sourceAccountId = Number(payload?.source);
+      const goalId = Number(payload?.goalId);
+      const created = await createTransaction({
+        type: payload?.type,
+        amount: Number(payload?.amount || 0),
+        categoryId: Number(payload?.categoryId),
+        categoryLabelSnapshot: String(payload?.category || '').trim(),
+        transactionKind: payload?.type === 'income' ? 'credit' : 'debit',
+        sourceAccountId: Number.isNaN(sourceAccountId) ? undefined : sourceAccountId,
+        date: payload?.date ? new Date(payload.date).toISOString() : new Date().toISOString(),
+        notes: payload?.notes || '',
+        goalId: Number.isNaN(goalId) ? null : goalId,
+      });
       setTransactions(prev => [created, ...prev]);
       setShowAddTx(false);
-    } catch {
-      setError("Failed to add transaction");
+      return null;
+    } catch (error) {
+      return getRuntimeErrorMessage(error, "Failed to add transaction");
     }
   };
 
@@ -445,8 +478,9 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
 
       setShowGoalDrawer(false);
       setEditGoal(null);
-    } catch {
-      setError(editGoal ? "Failed to update goal" : "Failed to create goal");
+      return null;
+    } catch (error) {
+      return getRuntimeErrorMessage(error, editGoal ? "Failed to update goal" : "Failed to create goal");
     }
   };
 
@@ -460,8 +494,51 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
       const created = await createCategory(payload);
       setCategories(prev => [created, ...prev]);
       setShowAddCategory(false);
-    } catch {
-      setError("Failed to create category");
+      return null;
+    } catch (error) {
+      return getRuntimeErrorMessage(error, "Failed to create category");
+    }
+  };
+
+  const handleInvestmentsUpdated = async () => {
+    const nextInvestments = await getInvestments();
+    setInvestments(Array.isArray(nextInvestments) ? nextInvestments : []);
+  };
+
+  const handleSaveInvestment = async (formValues) => {
+    try {
+      const nextInvestment = buildInvestmentFromForm(formValues, null, taxonomyNodes);
+      await createInvestment(nextInvestment);
+      await handleInvestmentsUpdated();
+      setShowInvestments(false);
+      return null;
+    } catch (error) {
+      return getRuntimeErrorMessage(error, "Failed to add investment");
+    }
+  };
+
+  const handleOpenAddAccount = () => {
+    setEditAccount(null);
+    setShowAccountDrawer(true);
+  };
+
+  const handleOpenEditAccount = (accountName) => {
+    const matchedAccount = accounts.find(
+      (account) => (account.displayName || account.institutionName || account.name) === accountName
+    );
+
+    if (!matchedAccount) return;
+
+    setEditAccount(matchedAccount);
+    setShowAccountDrawer(true);
+  };
+
+  const handleAccountsUpdated = async () => {
+    try {
+      const nextAccounts = await getFinancialAccounts();
+      setAccounts(Array.isArray(nextAccounts) ? nextAccounts : []);
+    } catch (error) {
+      pushNotification({ type: "error", message: getRuntimeErrorMessage(error, "Failed to refresh accounts") });
     }
   };
 
@@ -479,11 +556,47 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
     });
   };
 
+  const handleOpenAddTransactionDrawer = () => {
+    if (categories.length === 0) {
+      const message = "Add at least one category before creating a transaction.";
+      setError(message);
+      pushNotification({ type: "warning", message });
+      return;
+    }
+
+    if (accounts.length === 0) {
+      const message = "Add at least one financial account before creating a transaction.";
+      setError(message);
+      pushNotification({ type: "warning", message });
+      return;
+    }
+
+    setShowAddTx(true);
+  };
+
+  const handleOpenAddInvestmentDrawer = () => {
+    if (accounts.length === 0) {
+      const message = "Add at least one financial account before creating an investment.";
+      setError(message);
+      pushNotification({ type: "warning", message });
+      return;
+    }
+
+    setShowInvestments(true);
+  };
+
+  const hasOverlayOpen =
+    showAddTx ||
+    showGoalDrawer ||
+    showAddCategory ||
+    showAccountDrawer ||
+    showInvestments;
+
   if (loading) return <div className="p-6">Loading...</div>;
 
   return (
     <main className="flex-1 space-y-3 pb-2">
-      {error && <div className="rounded-2xl bg-red-100 p-3 text-red-700">{error}</div>}
+      {error && !hasOverlayOpen ? <div className="rounded-2xl bg-red-100 p-3 text-red-700">{error}</div> : null}
 
       <section className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-7">
         <KpiCard
@@ -529,13 +642,29 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
       </section>
 
       <section className="grid grid-cols-1 gap-3 xl:grid-cols-4">
-        <DashboardCard
+        <SectionCard
           title="Account Overview"
-          className="h-full"
+          action={
+            <button
+              type="button"
+              onClick={handleOpenAddAccount}
+              className="text-sm font-semibold text-emerald-600 transition hover:text-emerald-700"
+            >
+              Add Account
+            </button>
+          }
+          className="h-full shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+          empty={accountOverviewRows.length === 0}
+          emptyState={{
+            title: "No account activity yet",
+            description: "Add a financial account and record transactions to populate balance and period movement.",
+            actionLabel: "Add Account",
+            onAction: handleOpenAddAccount,
+          }}
         >
           <div className="space-y-2">
             <div className="grid gap-3">
-              <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-4">
+              <div className="rounded-[24px] border border-slate-200 bg-white">
                 <div className="flex items-center justify-between gap-4">
                   <p className="text-sm font-medium text-slate-500">Balance till today</p>
                   <div className="text-right text-[30px] font-semibold tracking-tight text-slate-900">
@@ -543,7 +672,7 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
                   </div>
                 </div>
               </div>
-              <div className="rounded-[24px] border border-slate-100 bg-gradient-to-br from-white via-white to-emerald-50/40 px-4 py-4">
+              <div className="rounded-[24px] border border-slate-100 bg-gradient-to-br from-white via-white to-emerald-50/40">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-sm font-medium text-slate-500">Period change</p>
@@ -563,9 +692,11 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
                 const isPeriodPositive = bank.periodChange >= 0;
 
                 return (
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditAccount(bank.name)}
                     key={bank.name}
-                    className="flex items-center justify-between gap-4 rounded-[20px] border border-slate-200 bg-slate-50/80 px-4 py-4"
+                    className="flex w-full items-center justify-between gap-4 rounded-[20px] border border-slate-200 bg-slate-50/80 px-4 py-4 text-left"
                   >
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-slate-900">{bank.name}</div>
@@ -582,7 +713,7 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
                       </div>
                       <div className="mt-1 text-xs text-slate-400">Till today</div>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
 
@@ -593,9 +724,9 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
               ) : null}
             </div>
           </div>
-        </DashboardCard>
+        </SectionCard>
 
-        <DashboardCard
+        <SectionCard
           title="Investments Snapshot"
           action={
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -611,7 +742,14 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
               </button>
             </div>
           }
-          className="h-full xl:col-span-2"
+          className="h-full xl:col-span-2 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+          empty={investments.length === 0}
+          emptyState={{
+            title: "No investments tracked yet",
+            description: "Add your first investment to see portfolio value, allocation mix, upcoming contributions, and maturity signals.",
+            actionLabel: "Add Investment",
+            onAction: handleOpenAddInvestmentDrawer,
+          }}
         >
           <div className="space-y-4">
 
@@ -747,8 +885,8 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
               </button>
             </div>
           </div>
-        </DashboardCard>
-        <DashboardCard
+        </SectionCard>
+        <SectionCard
           title="Recent Transactions"
           action={
             <button
@@ -759,7 +897,14 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
               View All
             </button>
           }
-          className="h-full xl:col-span-1"
+          className="h-full xl:col-span-1 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+          empty={recentTransactions.length === 0}
+          emptyState={{
+            title: "No transactions in this period",
+            description: "Add an income or expense to start building recent activity for the selected period.",
+            actionLabel: "Add Transaction",
+            onAction: handleOpenAddTransactionDrawer,
+          }}
         >
           <div className="divide-y divide-slate-200/80">
             {recentTransactions.map((transaction) => {
@@ -801,17 +946,12 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
               );
             })}
 
-            {recentTransactions.length === 0 ? (
-              <div className="rounded-[24px] bg-slate-50 px-4 py-10 text-center text-sm font-medium text-slate-500">
-                No transactions for this period
-              </div>
-            ) : null}
           </div>
-        </DashboardCard>
+        </SectionCard>
       </section>
 
       <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-        <DashboardCard
+        <SectionCard
           title="Top Spending Categories"
           action={
             <button
@@ -822,7 +962,12 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
               View All
             </button>
           }
-          className="h-full"
+          className="h-full shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+          empty={categoryPieData.items.length === 0}
+          emptyState={{
+            title: "No spending data for this period",
+            description: "Once expense transactions are recorded, your top spending categories will appear here.",
+          }}
         >
           <div className="space-y-5">
             {categoryPieData.items.slice(0, 5).map((item) => (
@@ -844,15 +989,17 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
               </div>
             ))}
 
-            {categoryPieData.items.length === 0 ? (
-              <div className="rounded-[24px] bg-slate-50 px-4 py-10 text-center text-sm font-medium text-slate-500">
-                No spending categories yet
-              </div>
-            ) : null}
           </div>
-        </DashboardCard>
-
-        <DashboardCard title="Monthly Summary" className="h-full">
+        </SectionCard>
+        <SectionCard
+          title="Monthly Summary"
+          className="h-full shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+          empty={monthlySummary.totalTransactions === 0}
+          emptyState={{
+            title: "No monthly summary yet",
+            description: "Record income and expenses to generate highlights for highest income, highest expense, and savings rate.",
+          }}
+        >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="rounded-[22px] bg-slate-50 px-4 py-4">
               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Highest Income</div>
@@ -884,9 +1031,9 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
               </div>
             </div>
           </div>
-        </DashboardCard>
+        </SectionCard>
 
-        <DashboardCard
+        <SectionCard
           title="Goals Overview"
           action={
             <button
@@ -897,7 +1044,17 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
               View All
             </button>
           }
-          className="h-full xl:col-span-2"
+          className="h-full xl:col-span-2 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+          empty={goals.length === 0}
+          emptyState={{
+            title: "No goals yet",
+            description: "Create your first savings goal to track progress, deadlines, and funding momentum.",
+            actionLabel: "Create Goal",
+            onAction: () => {
+              setEditGoal(null);
+              setShowGoalDrawer(true);
+            },
+          }}
         >
           <div className="space-y-2">
             {visibleGoals.map((goal, index) => {
@@ -952,22 +1109,6 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
               );
             })}
 
-            {goals.length === 0 ? (
-              <div className="rounded-[24px] bg-slate-50 px-4 py-10 text-center text-sm font-medium text-slate-500">
-                <p>Start by creating your first savings goal.</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditGoal(null);
-                    setShowGoalDrawer(true);
-                  }}
-                  className="mt-3 text-sm font-semibold text-emerald-600 transition hover:text-emerald-700"
-                >
-                  Create Goal
-                </button>
-              </div>
-            ) : null}
-
             {goals.length > 0 ? (
               <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/40 px-4 py-3 text-sm font-semibold mt-2">
                 <span className="text-emerald-600">{activeGoalsCount} Active Goals</span>
@@ -975,13 +1116,28 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
               </div>
             ) : null}
           </div>
-        </DashboardCard>
+        </SectionCard>
 
-        <DashboardCard title="Quick Actions" className="xl:col-start-5 ">
+        <SectionCard
+          title="Quick Actions"
+          className="xl:col-start-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+          empty={
+            categories.length === 0 &&
+            goals.length === 0 &&
+            transactions.length === 0 &&
+            investments.length === 0
+          }
+          emptyState={{
+            title: "No data yet",
+            description: "Start by adding a transaction, goal, category, or investment to activate quick actions.",
+            actionLabel: "Add Transaction",
+            onAction: handleOpenAddTransactionDrawer,
+          }}
+        >
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
-              onClick={() => setShowAddTx(true)}
+              onClick={handleOpenAddTransactionDrawer}
               className="rounded-[20px] border border-slate-200 px-4 py-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50/60"
             >
               <div className="text-sm font-semibold text-slate-900">Add Transaction</div>
@@ -1008,14 +1164,14 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
             </button>
             <button
               type="button"
-              onClick={() => navigateTo("investments")}
+              onClick={handleOpenAddInvestmentDrawer}
               className="rounded-[20px] border border-slate-200 px-4 py-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50/60"
             >
-              <div className="text-sm font-semibold text-slate-900">Open Investments</div>
+              <div className="text-sm font-semibold text-slate-900">Add Investments</div>
               <div className="mt-1 text-xs text-slate-500">Manage long-term assets, maturity, and reminders</div>
             </button>
           </div>
-        </DashboardCard>
+        </SectionCard>
 
       </section>
 
@@ -1045,6 +1201,29 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
         onSubmit={handleCreateCategory}
         title="Add Category"
         submitLabel="Add"
+      />
+
+      <InvestmentFormDrawer
+        open={showInvestments}
+        onClose={() => setShowInvestments(false)}
+        onSubmit={handleSaveInvestment}
+        initialValues={null}
+        accounts={accounts}
+        taxonomyNodes={taxonomyNodes}
+        title="Add Investment"
+        submitLabel="Add"
+      />
+
+      <FinancialAccountFormDrawer
+        open={showAccountDrawer}
+        onClose={() => {
+          setShowAccountDrawer(false);
+          setEditAccount(null);
+        }}
+        initialValues={editAccount}
+        onUpdated={handleAccountsUpdated}
+        title={editAccount ? "Edit Account" : "Add Account"}
+        submitLabel={editAccount ? "Update" : "Add"}
       />
     </main>
   );

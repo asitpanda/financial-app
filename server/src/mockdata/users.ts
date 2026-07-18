@@ -44,4 +44,13 @@ export const registeredUsers: Array<{
     password: mockCredentials.password, // In mock mode, we store plain password
     createdAt: mockUser.createdAt,
   },
+  {
+    id: 2,
+    userId: 'demo124',
+    email: 'demo2@example.com',
+    mobile: '+1234567891',
+    name: 'Demo User 2',
+    password: mockCredentials.password, // In mock mode, we store plain password
+    createdAt: new Date('2026-01-02'),
+  },
 ];

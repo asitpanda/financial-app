@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Box, Stack } from "@mui/material";
+import { Alert, Box, Stack } from "@mui/material";
 import dayjs from "dayjs";
 import Button from "./common/AppButton";
 import AppDrawer from "./drawers/AppDrawer";
@@ -12,7 +12,7 @@ import {
   LabeledSelectField,
   LabeledTextareaField,
 } from "./common";
-import { getTransactionSources } from "../api/transactions";
+import { getFinancialAccounts } from "../api/financialAccounts";
 import {
   transactionSchema,
   createDefaultTransactionForm,
@@ -28,8 +28,10 @@ export default function AddTransactionModal({
   initialValues = null,
   title = "Add Transaction",
   submitLabel = "Save",
+  submitError = "",
 }) {
   const [sourceOptions, setSourceOptions] = useState([]);
+  const [localSubmitError, setLocalSubmitError] = useState("");
 
   const {
     register,
@@ -78,25 +80,34 @@ export default function AddTransactionModal({
 
   const applyIncomeDefaults = () => {
     const hasSalaryCategory = categoryOptions.some((option) => option.value === "Salary");
-    const hasHdfcSource = sourceOptions.some((option) => option.value === "HDFC Bank");
+    const hdfcSource = sourceOptions.find((option) =>
+      String(option.label || "").toLowerCase().includes("hdfc")
+    );
 
     if (hasSalaryCategory) {
       setValue("category", "Salary", { shouldDirty: true, shouldValidate: true });
     }
 
-    if (hasHdfcSource) {
-      setValue("source", "HDFC Bank", { shouldDirty: true, shouldValidate: true });
+    if (hdfcSource) {
+      setValue("source", String(hdfcSource.value), { shouldDirty: true, shouldValidate: true });
     }
   };
 
   useEffect(() => {
+    if (!open) return;
+
     let active = true;
 
-    const loadSources = async () => {
+    const loadAccounts = async () => {
       try {
-        const sources = await getTransactionSources();
+        const accounts = await getFinancialAccounts();
         if (active) {
-          setSourceOptions((sources || []).map((bank) => ({ value: bank, label: bank })));
+          setSourceOptions(
+            (accounts || []).map((account) => ({
+              value: String(account.id),
+              label: account.displayName || account.institutionName || account.name,
+            }))
+          );
         }
       } catch (error) {
         void error;
@@ -106,19 +117,22 @@ export default function AddTransactionModal({
       }
     };
 
-    loadSources();
+    loadAccounts();
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     reset(toTransactionFormState(initialValues));
+    setLocalSubmitError("");
   }, [open, initialValues, reset]);
 
-  const submit = handleSubmit((values) => {
+  const submit = handleSubmit(async (values) => {
+    setLocalSubmitError("");
+
     const normalizedCategoryName = values.category?.trim().toLowerCase();
     const matchedCategory = normalizedCategoryName
       ? categoryMetaByName.get(normalizedCategoryName)
@@ -138,8 +152,14 @@ export default function AddTransactionModal({
       goalId: values.goalId || null,
       notes: values.notes || "",
     };
-    onSubmit?.(payload);
+
+    const result = await onSubmit?.(payload);
+    if (typeof result === "string" && result.trim()) {
+      setLocalSubmitError(result);
+    }
   });
+
+  const resolvedSubmitError = submitError || localSubmitError;
 
   const footer = (
     <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1.5 }}>
@@ -162,6 +182,8 @@ export default function AddTransactionModal({
     >
       <Box component="form" id="transaction-form" noValidate onSubmit={submit}>
         <Stack spacing={1.5}>
+          {resolvedSubmitError ? <Alert severity="error">{resolvedSubmitError}</Alert> : null}
+
           <Box
             sx={{
               display: "grid",

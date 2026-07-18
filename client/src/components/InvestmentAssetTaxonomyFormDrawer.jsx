@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from '@mdi/react';
 import { mdiDeleteOutline, mdiPencilOutline, mdiPlus } from '@mdi/js';
-import { alpha, Box, Chip, IconButton, Paper, Stack, Typography } from '@mui/material';
+import { Alert, alpha, Box, Chip, IconButton, Paper, Stack, Typography } from '@mui/material';
 import { RichTreeView } from '@mui/x-tree-view/RichTreeView';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import { useTreeItemModel } from '@mui/x-tree-view/hooks';
@@ -9,6 +9,7 @@ import AppDrawer from './drawers/AppDrawer';
 import AppButton from './common/AppButton';
 import { LabeledSelectField, LabeledTextField, SectionCard } from './common';
 import ConfirmDialog from './dialogs/ConfirmDialog';
+import { validateAssetTaxonomyForm } from '../validation/investmentSchema';
 
 const LEVEL_OPTIONS = [1, 2, 3, 4, 5].map((level) => ({ value: String(level), label: `Level ${level}` }));
 const ACTIVE_OPTIONS = [
@@ -167,57 +168,13 @@ const TaxonomyTreeItem = React.forwardRef(function TaxonomyTreeItem(props, ref) 
   );
 });
 
-const validateForm = (form, taxonomyNodes, parentOptions, editingNodeId = null) => {
-  const errors = {};
-  const normalizedLabel = String(form.label || '').trim().toLowerCase();
-  const level = Number(form.level || 0);
-  const sortOrder = Number(form.sortOrder || 0);
-  const selectedParent = taxonomyNodes.find((node) => String(node.id) === String(form.parentId));
-
-  if (!form.label.trim()) {
-    errors.label = 'Label is required';
-  }
-
-  if (!form.nodeType.trim()) {
-    errors.nodeType = 'Node type is required';
-  }
-
-  if (!level || level < 1 || level > 5) {
-    errors.level = 'Level must be between 1 and 5';
-  }
-
-  if (level > 1 && !form.parentId) {
-    errors.parentId = 'Parent is required for nested nodes';
-  }
-
-  if (form.parentId && !parentOptions.some((option) => option.value === String(form.parentId))) {
-    errors.parentId = 'Parent must come from the previous level';
-  }
-
-  if (Number.isNaN(sortOrder)) {
-    errors.sortOrder = 'Sort order must be a number';
-  }
-
-  const duplicateAtLevel = taxonomyNodes.find(
-    (node) =>
-      node.id !== editingNodeId &&
-      String(node.parentId ?? '') === String(selectedParent?.id ?? '') &&
-      String(node.label || '').trim().toLowerCase() === normalizedLabel
-  );
-
-  if (duplicateAtLevel) {
-    errors.label = 'Label already exists under the selected parent';
-  }
-
-  return errors;
-};
-
 export default function InvestmentAssetTaxonomyFormDrawer({
   open,
   onClose,
   onSubmit,
   onDelete,
   taxonomyNodes = [],
+  submitError = '',
 }) {
   const [form, setForm] = useState(() => createEmptyForm());
   const [errors, setErrors] = useState({});
@@ -369,7 +326,11 @@ export default function InvestmentAssetTaxonomyFormDrawer({
   };
 
   const handleSubmit = () => {
-    const validationErrors = validateForm(form, taxonomyNodes, parentOptions, isEditing && selectedNode ? selectedNode.id : null);
+    const validationErrors = validateAssetTaxonomyForm(form, {
+      taxonomyNodes,
+      parentOptions,
+      editingNodeId: isEditing && selectedNode ? selectedNode.id : null,
+    });
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       return;
@@ -441,6 +402,8 @@ export default function InvestmentAssetTaxonomyFormDrawer({
       width={1040}
       footer={footer}
     >
+      {submitError ? <Alert severity="error" sx={{ mb: 2 }}>{submitError}</Alert> : null}
+
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '360px minmax(0, 1fr)' }, gap: 2 }}>
         <SectionCard
           title="Asset Hierarchy"

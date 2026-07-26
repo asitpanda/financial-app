@@ -1,158 +1,596 @@
-# Finance Tracker - Architecture (Single Source of Truth)
+# Frontend Architecture Guidelines
 
-## Purpose
-Build a premium finance workspace, not a CRUD application.
+## Technology Stack
 
-## Product Principles
-- Workspace-first
-- Drawer-first
-- Dashboard-first
-- Insight-driven
-- Reusable components over page-specific code
-
-## Tech Stack
-Frontend:
 - React 19
-- Vite
 - TypeScript
-- MUI
-- Tailwind CSS
-- Zustand
-- TanStack Query
+- TanStack React Query
 - React Hook Form
 - Zod
+- Zustand
 - Axios
-- Recharts
+- MUI
 
-Backend:
-- NestJS
-- Repository Pattern
-- Supabase (initial)
-- Firebase / Mock (future)
+---
 
-## Workspace Model (SPA)
+# Design Principles
 
-Only one workspace is active.
+1. Feature-first architecture.
+2. Keep layers small and focused.
+3. Introduce a layer only when it owns a real responsibility.
+4. Avoid pass-through wrappers.
+5. Prefer composition over abstraction.
+6. Grow architecture as complexity grows.
 
-Dashboard
-Transactions
-Accounts
-Goals
-Budgets
-Categories
-Reports
-Settings
+---
 
-Navigation is managed by Zustand using activeWorkspace.
+# Feature Structure
 
-## Interaction Rules
+```text
+features/
+└── transactions/
+    ├── components/
+    │   ├── AddTransactionModal.tsx
+    │   ├── TransactionTable.tsx
+    │   └── TransactionViewDrawer.tsx
+    │
+    ├── types/
+    │   ├── index.ts
+    │   └── transaction.types.ts
+    │
+    ├── transactions.api.ts
+    ├── transactions.service.ts        (optional)
+    ├── transactions.selectors.ts
+    ├── transactions.schema.ts
+    ├── transactions.mapper.ts         (only if needed)
+    ├── useTransactions.ts
+    └── Transactions.tsx
+```
 
-Workspace
- -> Drawer
-    -> Edit (same drawer)
-    -> Dialog (confirmation / quick action)
+---
 
-Dashboard never exposes CRUD.
+# Architecture
 
-## Dashboard
+## READ FLOW
 
-Purpose:
-- Financial Health
-- Smart Insights
-- Cash Flow
-- Goal Snapshot
-- Budget Snapshot
-- Account Snapshot
-- Recent Transactions
-- Reminders
+```text
+Component
+    │
+    ▼
+Feature Hook (React Query)
+    │
+    ▼
+Feature API
+    │
+    ▼
+Axios Client
+    │
+    ▼
+Backend
+```
 
-Financial Health Score and Smart Insights are calculated, not AI.
+Response
 
-## Workspace Template
+```text
+Backend
+    │
+    ▼
+Axios Client
+    │
+    ▼
+Feature API
+    │
+    ▼
+React Query Cache
+    │
+    ▼
+Selectors
+    │
+    ▼
+Component
+```
 
-Page Header
-KPI Cards
-Toolbar (Search / Filter / Sort)
-Primary Content
-Secondary Analytics
+---
 
-## UI State Contract
+## WRITE FLOW
 
-activeWorkspace
+Simple CRUD
 
-drawer:
-- type
-- mode
-- entityId
-- step
+```text
+Component
+    │
+    ▼
+Feature Hook
+    │
+    ▼
+Feature API
+    │
+    ▼
+Backend
+```
 
-dialog:
-- type
-- payload
+Complex Workflow
 
-viewState:
-- filters
-- sort
-- pagination
-- selectedIds
+```text
+Component
+    │
+    ▼
+Feature Hook
+    │
+    ▼
+Feature Service
+    │
+    ▼
+Feature API
+    │
+    ▼
+Backend
+```
 
-State ownership:
-- Zustand -> UI state
-- TanStack Query -> server state
-- React Hook Form -> form state
-- Zod -> validation
+Service is introduced ONLY when business workflow exists.
 
-## Action Contract
+---
 
-Intent
- -> Precheck
- -> Execute
- -> Feedback
- -> Rollback
+# Layer Responsibilities
 
-## Shared Components
+## Component
 
-AppLayout
-Sidebar
-Header
-PageHeader
-KpiCard
-SectionCard
-ChartCard
-DataTable
-SearchBar
-FilterBar
-RightDrawer
-ConfirmDialog
-ProgressBar
-InsightCard
-FinancialHealthCard
+Responsibilities
 
-## Folder Structure
+- Render UI
+- Handle UI events
+- Hold local UI state
+- Call hooks
+- Call selectors
 
-src/
-  app/
-  layout/
-  modules/
-  shared/
-  services/
-  store/
-  hooks/
-  theme/
-  utils/
-  types/
+Never
 
-## Module Build Order
+- Call APIs
+- Use Axios
+- Perform business workflow
+- Validate forms
 
-1. Foundation
-2. Shared Components
-3. Dashboard
-4. Goals (reference module)
-5. Transactions
-6. Categories
-7. Accounts
-8. Budgets
-9. Reports
-10. Settings
-11. Backend Integration
+---
 
+## Feature Hook
+
+Responsibilities
+
+- React Query
+- useQuery
+- useMutation
+- Loading
+- Error
+- Cache invalidation
+- Retry
+- Expose feature operations
+
+Reads
+
+```text
+Hook → API
+```
+
+Complex Writes
+
+```text
+Hook → Service → API
+```
+
+---
+
+## Feature Service
+
+Create this layer ONLY when needed.
+
+Responsibilities
+
+- Business workflow
+- Create vs Update decision
+- Validation orchestration
+- Mapping orchestration
+- Multiple API calls
+- Business rules
+- Error translation
+
+Never create wrappers like
+
+```ts
+getTransactions() {
+    return transactionsApi.getAll();
+}
+```
+
+If the service only forwards an API call, remove it.
+
+---
+
+## Feature API
+
+Responsibilities
+
+- HTTP communication only
+- GET
+- POST
+- PUT/PATCH
+- DELETE
+
+Never
+
+- Business logic
+- Validation
+- React Query
+- UI logic
+- Toasts
+- Navigation
+
+---
+
+## Schema
+
+Responsibilities
+
+- Runtime validation
+- Zod schemas
+- React Hook Form resolver
+
+---
+
+## Mapper (Optional)
+
+Create only when data models differ.
+
+Responsibilities
+
+- Form Model → Request DTO
+- Response DTO → Application Model
+- Application Model → Request DTO
+
+Never
+
+- Call APIs
+- Validate
+- Use React
+- Perform business workflow
+
+If mapping is very small, keep it inside the service.
+
+---
+
+## Selector
+
+Pure derived-data layer.
+
+Responsibilities
+
+- Filter
+- Sort
+- Group
+- Aggregate
+- Dashboard calculations
+- DataGrid rows
+- View model generation
+
+Examples
+
+- getFilteredTransactions()
+- getTransactionRows()
+- getTransactionInsights()
+
+Selectors must be PURE.
+
+Never
+
+- Call APIs
+- Mutate data
+- Update state
+- Show notifications
+
+---
+
+## Types
+
+Keep only shared contracts.
+
+Examples
+
+```ts
+Transaction;
+
+CreateTransactionDto;
+
+UpdateTransactionDto;
+
+TransactionFilter;
+
+TransactionRow;
+
+TransactionInsights;
+```
+
+Keep implementation-specific interfaces beside the file that owns them.
+
+---
+
+# State Management
+
+There are three kinds of state.
+
+## 1. Local UI State
+
+Owner
+
+React
+
+Library
+
+useState
+
+Examples
+
+- Dialog open
+- Drawer open
+- Search text
+- Pagination
+- Selected row
+- Current tab
+
+---
+
+## 2. Server State
+
+Owner
+
+TanStack React Query
+
+Examples
+
+- Transactions
+- Accounts
+- Goals
+- Investments
+- Categories
+
+Never duplicate server state inside Zustand.
+
+---
+
+## 3. Global Application State
+
+Owner
+
+Zustand
+
+Examples
+
+- Logged user
+- JWT token
+- Theme
+- Sidebar state
+- Notifications
+- Language
+- Workspace
+
+---
+
+# Data Models
+
+## Form Model
+
+Used by React Hook Form.
+
+Example
+
+```text
+TransactionFormValues
+```
+
+---
+
+## Request DTO
+
+Used to communicate with the backend.
+
+Example
+
+```text
+CreateTransactionDto
+```
+
+---
+
+## Response DTO
+
+Represents backend response.
+
+Example
+
+```text
+TransactionResponseDto
+```
+
+---
+
+## Application Model
+
+Used across the frontend.
+
+Example
+
+```text
+Transaction
+```
+
+---
+
+## View Model
+
+Derived specifically for rendering.
+
+Usually produced by selectors.
+
+Example
+
+```text
+TransactionRow
+
+DashboardSummary
+```
+
+---
+
+# Data Flow
+
+Request
+
+```text
+Form
+    │
+    ▼
+Request DTO
+    │
+    ▼
+API
+    │
+    ▼
+Backend
+```
+
+Response
+
+```text
+Backend
+    │
+    ▼
+Response DTO
+    │
+    ▼
+Application Model
+    │
+    ▼
+Selector
+    │
+    ▼
+View Model
+    │
+    ▼
+UI
+```
+
+If Request DTO and Application Model are identical, do not create separate DTOs.
+
+---
+
+# Naming Convention
+
+| Item           | Convention |
+| -------------- | ---------- |
+| Folder         | kebab-case |
+| Components     | PascalCase |
+| Component File | PascalCase |
+| Hook File      | kebab-case |
+| API            | kebab-case |
+| Service        | kebab-case |
+| Selector       | kebab-case |
+| Schema         | kebab-case |
+| Mapper         | kebab-case |
+| Types          | kebab-case |
+| Variables      | camelCase  |
+| Functions      | camelCase  |
+| Interfaces     | PascalCase |
+| Types          | PascalCase |
+| Enums          | PascalCase |
+
+---
+
+# Decision Matrix
+
+## Should I create a Service?
+
+YES
+
+- Business rules
+- Validation
+- Mapping
+- Multiple APIs
+- Workflow
+
+NO
+
+- Just forwarding an API call
+
+---
+
+## Should I create a Mapper?
+
+YES
+
+- API model differs from frontend model
+- Request DTO differs from Form Model
+- Response DTO differs from Application Model
+
+NO
+
+- Models are identical
+
+---
+
+## Should I create a Selector?
+
+YES
+
+- Filter
+- Sort
+- Group
+- Aggregate
+- Build UI rows
+- Dashboard calculations
+
+NO
+
+- API communication
+- Validation
+- Business workflow
+
+---
+
+## Should I use Zustand?
+
+YES
+
+- Global application state
+
+NO
+
+- Server data
+
+Use React Query instead.
+
+---
+
+## Should I use useState?
+
+YES
+
+- Component-only state
+
+NO
+
+- Shared application state
+
+---
+
+# Golden Rules
+
+1. Components never call APIs.
+2. Hooks own TanStack React Query.
+3. API owns HTTP communication.
+4. Service exists only when it adds business value.
+5. Selectors derive UI data.
+6. Validation belongs in schemas.
+7. Keep architecture simple.
+8. Introduce new layers only when they own a responsibility.
+9. React Query owns server state.
+10. Zustand owns application state.
+11. useState owns component state.
+12. Architecture should evolve with complexity, not anticipate it.

@@ -1,26 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import { CircularProgress, Box } from '@mui/material';
-import Dashboard from './pages/Dashboard';
-import Transactions from './pages/Transactions';
-import Goals from './pages/Goals';
-import Categories from './pages/Categories';
-import Investments from './pages/Investments';
-import PrivateRoute from './components/PrivateRoute';
-import AppLayout from './layout/AppLayout';
-import { authApi } from './api/auth';
-import { useAuthStore } from './store/authStore';
-import { useAppStore } from './store/appStore';
-import { navigateTo } from './services/navigation';
-import { NotificationCenter } from './components/common';
-import './App.css';
+import React, { useState, useEffect } from "react";
+import { CircularProgress, Box } from "@mui/material";
+import Dashboard from "./features/dashboard/Dashboard";
+import Transactions from "./features/transactions/Transactions";
+import Goals from "./features/goals/Goals";
+import Categories from "./features/categories/Categories";
+import Investments from "./features/investments/Investments";
+import PrivateRoute from "./features/auth/components/PrivateRoute";
+import AppLayout from "./layout/AppLayout";
+import { authApi } from "./features/auth/auth.api";
+import { useAuth } from "./features/auth/useAuth";
+import { useAppStore } from "./store/appStore";
+import { navigateTo } from "./services/navigation";
+import { NotificationCenter } from "./components/common";
+import "./App.css";
 
 const TransactionsPage = Transactions as any;
 
 export default function App() {
-  const { token, user, loading, setLoading, setUser, logout } = useAuthStore();
+  const { token, user, loading, setLoading, setUser, logout } = useAuth();
   const activeScreen = useAppStore((state) => state.activeScreen);
   const [transactionsPrefetch, setTransactionsPrefetch] = useState<any[]>([]);
-  const [transactionsPrefillFilter, setTransactionsPrefillFilter] = useState<any | null>(null);
+  const [transactionsPrefillFilter, setTransactionsPrefillFilter] = useState<
+    any | null
+  >(null);
 
   // Check for existing token on mount
   useEffect(() => {
@@ -31,7 +33,7 @@ export default function App() {
           const user = await authApi.getMe();
           setUser(user);
         } catch (error) {
-          console.warn('Token validation failed during bootstrap:', error);
+          console.warn("Token validation failed during bootstrap:", error);
           logout();
         } finally {
           setLoading(false);
@@ -47,10 +49,10 @@ export default function App() {
     return (
       <Box
         sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh',
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          minHeight: "100vh",
         }}
       >
         <CircularProgress size={60} />
@@ -64,23 +66,26 @@ export default function App() {
   }) => {
     setTransactionsPrefetch(payload.prefetchedTransactions || []);
     setTransactionsPrefillFilter(payload.prefillFilter || null);
-    navigateTo('transactions');
+    navigateTo("transactions");
   };
 
   let content: React.ReactNode = null;
-  if (activeScreen === 'dashboard') {
-    content = <Dashboard onOpenTransactionsFromDashboard={handleOpenTransactionsFromDashboard} />;
-  } else if (activeScreen === 'transactions') {
+  if (activeScreen === "dashboard") {
+    content = (
+      <Dashboard
+        onOpenTransactionsFromDashboard={handleOpenTransactionsFromDashboard}
+      />
+    );
+  } else if (activeScreen === "transactions") {
     content = (
       <TransactionsPage
         prefetchedTransactions={transactionsPrefetch as any}
         prefillFilter={transactionsPrefillFilter}
       />
     );
-  }
-  else if (activeScreen === 'goals') content = <Goals />;
-  else if (activeScreen === 'categories') content = <Categories />;
-  else if (activeScreen === 'investments') content = <Investments />;
+  } else if (activeScreen === "goals") content = <Goals />;
+  else if (activeScreen === "categories") content = <Categories />;
+  else if (activeScreen === "investments") content = <Investments />;
 
   return (
     <PrivateRoute>

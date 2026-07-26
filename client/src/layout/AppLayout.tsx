@@ -1,5 +1,5 @@
 import React from 'react';
-import Sidebar from '../components/Sidebar';
+import Sidebar from '../features/layout/components/Sidebar';
 import Header from './Header';
 import type { Screen } from '../store/appStore';
 

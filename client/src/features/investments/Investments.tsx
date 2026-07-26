@@ -1,0 +1,680 @@
+// @ts-nocheck
+import React, { useMemo, useState } from "react";
+import Icon from "@mdi/react";
+import { mdiDeleteOutline, mdiEyeOutline, mdiPencilOutline } from "@mdi/js";
+import { Box, IconButton, Paper, Typography } from "@mui/material";
+import InvestmentAssetTaxonomyFormDrawer from "./components/InvestmentAssetTaxonomyFormDrawer";
+import InvestmentFormDrawer from "./components/InvestmentFormDrawer";
+import AppButton from "../../components/common/AppButton";
+import { EmptyState, StatusChip } from "../../components/common";
+import ConfirmDialog from "../../components/dialogs/ConfirmDialog";
+import { InvestmentViewDrawer } from "./components/InvestmentViewDrawer";
+import InvestmentsAssetsView from "./components/InvestmentsAssetsView";
+import InvestmentsCalendarView from "./components/InvestmentsCalendarView";
+import InvestmentsDashboardView from "./components/InvestmentsDashboardView";
+import RecordContributionModal from "./components/RecordContributionModal";
+import { useHeaderAction } from "../../hooks/useHeaderAction";
+import { useNotificationStore } from "../../store/notificationStore";
+import {
+  buildInvestmentFromForm,
+  formatInvestmentCurrency,
+  formatInvestmentDate,
+  getInvestmentCategoryLabel,
+  getInvestmentCategoryOptions,
+  getInvestmentStatusTone,
+} from "../../utils/investmentHelpers";
+import { getRuntimeErrorMessage } from "../../utils/errorMessage";
+import {
+  useInvestmentPageData,
+  useRemoveInvestment,
+  useSaveInvestment,
+} from "./hooks/useInvestments";
+import {
+  useRemoveInvestmentAssetTaxonomy,
+  useSaveInvestmentAssetTaxonomy,
+} from "./hooks/useInvestmentAssetTaxonomy";
+import {
+  getFilteredInvestments,
+  getInvestmentCalendarGroups,
+  getInvestmentCategoryBreakdown,
+  getInvestmentCategoryLabelMap,
+  getInvestmentDashboardKpis,
+  getInvestmentSelectedById,
+  getInvestmentTimeSeriesData,
+  getNormalizedInvestments,
+  getRecentInvestments,
+  getTopInvestmentCurrentValueItems,
+  getUpcomingMaturityItems,
+  getInvestmentContributionViewItems,
+} from "./investments.selectors";
+
+const VIEW_OPTIONS = [
+  { value: "dashboard", label: "Dashboard" },
+  { value: "assets", label: "Assets" },
+  { value: "calendar", label: "Calendar" },
+];
+
+export default function Investments() {
+  const [activeView, setActiveView] = useState("dashboard");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [uiError, setUiError] = useState("");
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [assetTaxonomyDrawerOpen, setAssetTaxonomyDrawerOpen] = useState(false);
+  const [drawerMode, setDrawerMode] = useState("create");
+  const [selectedInvestmentId, setSelectedInvestmentId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [selectedYearForDrill, setSelectedYearForDrill] = useState(null);
+  const [taxonomyFormError, setTaxonomyFormError] = useState("");
+  const [recordContributionModalOpen, setRecordContributionModalOpen] =
+    useState(false);
+  const [
+    selectedContributionForRecording,
+    setSelectedContributionForRecording,
+  ] = useState(null);
+  const pushNotification = useNotificationStore(
+    (state) => state.pushNotification,
+  );
+  const saveInvestmentMutation = useSaveInvestment();
+  const removeInvestmentMutation = useRemoveInvestment();
+  const saveTaxonomyMutation = useSaveInvestmentAssetTaxonomy();
+  const removeTaxonomyMutation = useRemoveInvestmentAssetTaxonomy();
+  const {
+    investments: rawInvestments,
+    taxonomyNodes,
+    accounts,
+    loading,
+    error: pageDataError,
+    reload,
+  } = useInvestmentPageData();
+  const error = uiError || (pageDataError ? "Failed to load investments" : "");
+
+  const investments = useMemo(
+    () =>
+      Array.isArray(rawInvestments)
+        ? getNormalizedInvestments(rawInvestments, taxonomyNodes)
+        : [],
+    [rawInvestments, taxonomyNodes],
+  );
+
+  const openCreateDrawer = () => {
+    if (accounts.length === 0) {
+      pushNotification({
+        type: "warning",
+        message: "Please add a financial account before adding an investment.",
+      });
+      return;
+    }
+
+    setDrawerMode("create");
+    setSelectedInvestmentId(null);
+    setDrawerOpen(true);
+  };
+
+  const openAssetTaxonomyDrawer = () => {
+    setTaxonomyFormError("");
+    setAssetTaxonomyDrawerOpen(true);
+  };
+
+  useHeaderAction("investments", {
+    label: "Investment",
+    onClick: openCreateDrawer,
+    disabled: loading || accounts.length === 0,
+  });
+
+  const filteredInvestments = getFilteredInvestments(investments, {
+    search,
+    statusFilter,
+    categoryFilter,
+  });
+  const hasInvestmentFilters =
+    Boolean(search.trim()) ||
+    statusFilter !== "all" ||
+    categoryFilter !== "all";
+  const isFirstInvestmentSetup =
+    investments.length === 0 && !hasInvestmentFilters;
+
+  const dashboardKpis = getInvestmentDashboardKpis(investments);
+
+  const topCurrentValueItems = getTopInvestmentCurrentValueItems(investments);
+
+  const upcomingMaturityItems = getUpcomingMaturityItems(investments);
+
+  const recentInvestments = getRecentInvestments(investments);
+
+  const upcomingContributions = getInvestmentContributionViewItems(investments);
+
+  const categoryBreakdown = useMemo(
+    () => getInvestmentCategoryBreakdown(investments, taxonomyNodes),
+    [investments, taxonomyNodes],
+  );
+
+  const categoryOptions = getInvestmentCategoryOptions(taxonomyNodes);
+
+  const categoryLabelMap = getInvestmentCategoryLabelMap(taxonomyNodes);
+
+  const timeSeriesData = getInvestmentTimeSeriesData(
+    investments,
+    selectedYearForDrill,
+  );
+
+  const calendarGroups = getInvestmentCalendarGroups(investments);
+
+  const selectedInvestment = getInvestmentSelectedById(
+    investments,
+    selectedInvestmentId,
+  );
+
+  const openEditDrawer = (investment) => {
+    setDrawerMode("edit");
+    setSelectedInvestmentId(investment.id);
+    setDrawerOpen(true);
+  };
+
+  const openViewDrawer = (investment) => {
+    setDrawerMode("view");
+    setSelectedInvestmentId(investment.id);
+    setDrawerOpen(true);
+  };
+
+  const openRecordContributionModal = (investment, contributionPlan) => {
+    setSelectedContributionForRecording({ investment, contributionPlan });
+    setRecordContributionModalOpen(true);
+  };
+
+  const closeRecordContributionModal = () => {
+    setRecordContributionModalOpen(false);
+    setSelectedContributionForRecording(null);
+  };
+
+  const handleContributionRecorded = async (response) => {
+    // Refresh the investment data
+    try {
+      await reload();
+      pushNotification({
+        type: "success",
+        message: "Contribution recorded and investment data updated",
+      });
+    } catch (error) {
+      pushNotification({
+        type: "error",
+        message: "Contribution recorded but failed to refresh data",
+      });
+    }
+  };
+
+  const closeInvestmentDrawer = () => {
+    setDrawerOpen(false);
+    setSelectedInvestmentId(null);
+    setDrawerMode("create");
+  };
+
+  const closeAssetTaxonomyDrawer = () => {
+    setTaxonomyFormError("");
+    setAssetTaxonomyDrawerOpen(false);
+  };
+
+  const handleResetFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setCategoryFilter("all");
+  };
+
+  const handleSaveInvestment = async (formValues) => {
+    const nextInvestment = buildInvestmentFromForm(
+      formValues,
+      drawerMode === "edit" ? selectedInvestmentId : null,
+      taxonomyNodes,
+    );
+
+    try {
+      await saveInvestmentMutation.mutateAsync({
+        payload: nextInvestment,
+        selectedInvestmentId:
+          drawerMode === "edit" ? selectedInvestmentId : null,
+      });
+      await reload();
+
+      pushNotification({
+        type: "success",
+        message:
+          drawerMode === "edit" ? "Investment updated" : "Investment added",
+      });
+      setUiError("");
+      closeInvestmentDrawer();
+      return null;
+    } catch (error) {
+      setUiError(
+        drawerMode === "edit"
+          ? "Failed to update investment"
+          : "Failed to add investment",
+      );
+      return getRuntimeErrorMessage(
+        error,
+        drawerMode === "edit"
+          ? "Failed to update investment"
+          : "Failed to add investment",
+      );
+    }
+  };
+
+  const handleDeleteInvestment = () => {
+    if (!deleteTarget) return;
+
+    const removeInvestment = async () => {
+      try {
+        await removeInvestmentMutation.mutateAsync(deleteTarget.id);
+        await reload();
+        setDeleteTarget(null);
+        setUiError("");
+        pushNotification({ type: "success", message: "Investment removed" });
+      } catch (error) {
+        void error;
+        setUiError("Failed to remove investment");
+        pushNotification({
+          type: "error",
+          message: "Failed to remove investment",
+        });
+      }
+    };
+
+    void removeInvestment();
+  };
+
+  const handleSaveAssetTaxonomy = (formValues) => {
+    const persistAssetTaxonomy = async () => {
+      setTaxonomyFormError("");
+      try {
+        const savedNode = await saveTaxonomyMutation.mutateAsync(formValues);
+        await reload();
+        pushNotification({
+          type: "success",
+          message: formValues.id
+            ? "Asset taxonomy updated"
+            : "Asset taxonomy saved",
+        });
+        setTaxonomyFormError("");
+        return savedNode;
+      } catch (error) {
+        setTaxonomyFormError(
+          getRuntimeErrorMessage(
+            error,
+            formValues.id
+              ? "Failed to update asset taxonomy"
+              : "Failed to save asset taxonomy",
+          ),
+        );
+        return null;
+      }
+    };
+
+    return persistAssetTaxonomy();
+  };
+
+  const handleDeleteAssetTaxonomy = (targetNode) => {
+    const removeAssetTaxonomy = async () => {
+      try {
+        await removeTaxonomyMutation.mutateAsync(targetNode.id);
+        await reload();
+        pushNotification({
+          type: "success",
+          message: "Asset taxonomy removed",
+        });
+      } catch (error) {
+        void error;
+        pushNotification({
+          type: "error",
+          message: "Failed to remove asset taxonomy",
+        });
+      }
+    };
+
+    void removeAssetTaxonomy();
+  };
+
+  const columns = [
+    {
+      field: "name",
+      headerName: "Name",
+      flex: 1.4,
+      minWidth: 220,
+      renderCell: ({ row }) => (
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 0.5,
+            height: "100%",
+            justifyContent: "center",
+            py: 1,
+          }}
+        >
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            {row.name}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {row.type}
+          </Typography>
+        </Box>
+      ),
+    },
+    {
+      field: "institution",
+      headerName: "Institution",
+      flex: 1,
+      minWidth: 160,
+      renderCell: ({ row }) => (
+        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+          <Typography variant="body2">{row.institution}</Typography>
+        </Box>
+      ),
+    },
+    {
+      field: "totalInvested",
+      headerName: "Invested",
+      width: 150,
+      renderCell: ({ row }) => (
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 0.5,
+            height: "100%",
+            justifyContent: "center",
+            py: 1,
+          }}
+        >
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            {formatInvestmentCurrency(row.totalInvested)}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {row.currentValue
+              ? `Current ${formatInvestmentCurrency(row.currentValue)}`
+              : "No current value"}
+          </Typography>
+        </Box>
+      ),
+    },
+    {
+      field: "category",
+      headerName: "Category",
+      flex: 1,
+      minWidth: 160,
+      renderCell: ({ row }) => (
+        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+          <Typography variant="body2">
+            {getInvestmentCategoryLabel(row.category, taxonomyNodes)}
+          </Typography>
+        </Box>
+      ),
+    },
+    {
+      field: "maturityDate",
+      headerName: "Maturity",
+      flex: 1,
+      minWidth: 160,
+      sortable: false,
+      renderCell: ({ row }) => (
+        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+          <Typography variant="body2">
+            {formatInvestmentDate(row.maturityDate)}
+          </Typography>
+        </Box>
+      ),
+    },
+    {
+      field: "status",
+      headerName: "Status",
+      width: 120,
+      renderCell: ({ row }) => (
+        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+          <StatusChip
+            label={row.status}
+            tone={getInvestmentStatusTone(row.status)}
+          />
+        </Box>
+      ),
+    },
+    {
+      field: "actions",
+      headerName: "Actions",
+      sortable: false,
+      filterable: false,
+      flex: 0.8,
+      minWidth: 160,
+      renderCell: ({ row }) => (
+        <Box
+          sx={{ display: "flex", alignItems: "center", gap: 1, height: "100%" }}
+        >
+          <IconButton
+            size="small"
+            variant="contained"
+            disableElevation
+            onClick={() => openViewDrawer(row)}
+            aria-label={`View ${row.name}`}
+            sx={{ minWidth: 36, width: 36, height: 36, p: 0 }}
+          >
+            <Icon path={mdiEyeOutline} size={0.8} />
+          </IconButton>
+          <IconButton
+            size="small"
+            variant="contained"
+            disableElevation
+            onClick={() => openEditDrawer(row)}
+            aria-label={`Edit ${row.name}`}
+            sx={{ minWidth: 36, width: 36, height: 36, p: 0 }}
+          >
+            <Icon path={mdiPencilOutline} size={0.8} />
+          </IconButton>
+          <IconButton
+            size="small"
+            variant="contained"
+            disableElevation
+            color="error"
+            onClick={() => setDeleteTarget(row)}
+            aria-label={`Delete ${row.name}`}
+            sx={{ minWidth: 36, width: 36, height: 36, p: 0 }}
+          >
+            <Icon path={mdiDeleteOutline} size={0.8} />
+          </IconButton>
+        </Box>
+      ),
+    },
+  ];
+
+  const renderDashboardView = () => (
+    <InvestmentsDashboardView
+      investments={investments}
+      timeSeriesData={timeSeriesData}
+      isDrillMode={Boolean(selectedYearForDrill)}
+      onDrillYear={setSelectedYearForDrill}
+      onResetDrill={() => setSelectedYearForDrill(null)}
+      dashboardKpis={dashboardKpis}
+      categoryBreakdown={categoryBreakdown}
+      categoryLabelMap={categoryLabelMap}
+      topCurrentValueItems={topCurrentValueItems}
+      upcomingContributions={upcomingContributions}
+      upcomingMaturityItems={upcomingMaturityItems}
+      recentInvestments={recentInvestments}
+      taxonomyNodes={taxonomyNodes}
+      onCreateInvestment={openCreateDrawer}
+      onRecordContribution={openRecordContributionModal}
+      formatCurrency={formatInvestmentCurrency}
+    />
+  );
+
+  const renderAssetsView = () => (
+    <InvestmentsAssetsView
+      filteredInvestments={filteredInvestments}
+      columns={columns}
+      search={search}
+      onSearchChange={setSearch}
+      statusFilter={statusFilter}
+      onStatusFilterChange={setStatusFilter}
+      categoryFilter={categoryFilter}
+      onCategoryFilterChange={setCategoryFilter}
+      categoryOptions={categoryOptions}
+      onResetFilters={handleResetFilters}
+      onOpenAssetTaxonomyDrawer={openAssetTaxonomyDrawer}
+      onCreateInvestment={openCreateDrawer}
+      isFirstInvestmentSetup={isFirstInvestmentSetup}
+    />
+  );
+
+  const renderCalendarView = () => (
+    <InvestmentsCalendarView calendarGroups={calendarGroups} />
+  );
+
+  return (
+    <Box sx={{ pb: 3 }}>
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: { xs: "stretch", md: "center" },
+          justifyContent: "space-between",
+          gap: 2,
+          flexWrap: "wrap",
+          mb: 2,
+        }}
+      >
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 800 }}>
+            Investments
+          </Typography>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ mt: 0.5, maxWidth: 760 }}
+          >
+            Organize mutual funds, deposits, retirement accounts, insurance
+            policies, metals, and other long-term assets in one operational
+            workspace.
+          </Typography>
+        </Box>
+
+        {!loading && !isFirstInvestmentSetup ? (
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 0.5,
+              display: "inline-flex",
+              gap: 0.5,
+              borderRadius: 1,
+              flexWrap: "wrap",
+            }}
+          >
+            {VIEW_OPTIONS.map((option) => {
+              const selected = activeView === option.value;
+              return (
+                <AppButton
+                  key={option.value}
+                  variant={selected ? "contained" : "text"}
+                  onClick={() => setActiveView(option.value)}
+                  sx={{ minWidth: 110 }}
+                >
+                  {option.label}
+                </AppButton>
+              );
+            })}
+          </Paper>
+        ) : null}
+      </Box>
+
+      {error ? (
+        <Typography color="error" sx={{ mb: 1 }}>
+          {error}
+        </Typography>
+      ) : null}
+
+      {loading ? (
+        <Typography color="text.secondary">Loading investments...</Typography>
+      ) : null}
+      {!loading && isFirstInvestmentSetup ? (
+        <Box
+          sx={{
+            minHeight: {
+              xs: "calc(100dvh - 240px)",
+              md: "calc(100dvh - 220px)",
+            },
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: "1px solid",
+            borderColor: "divider",
+            borderRadius: 1,
+            backgroundColor: "background.paper",
+            px: 2,
+            py: 3,
+          }}
+        >
+          <EmptyState
+            title="No investments added yet"
+            description="Add your first investment to unlock portfolio insights, allocation mix, and scheduled contribution tracking."
+            actionLabel="Add Investment"
+            onAction={openCreateDrawer}
+          />
+        </Box>
+      ) : null}
+      {!loading && !isFirstInvestmentSetup && activeView === "dashboard"
+        ? renderDashboardView()
+        : null}
+      {!loading && !isFirstInvestmentSetup && activeView === "assets"
+        ? renderAssetsView()
+        : null}
+      {!loading && !isFirstInvestmentSetup && activeView === "calendar"
+        ? renderCalendarView()
+        : null}
+
+      <InvestmentFormDrawer
+        open={drawerOpen && drawerMode !== "view"}
+        onClose={closeInvestmentDrawer}
+        onSubmit={handleSaveInvestment}
+        initialValues={drawerMode === "edit" ? selectedInvestment : null}
+        accounts={accounts}
+        taxonomyNodes={taxonomyNodes}
+        title={drawerMode === "edit" ? "Edit Investment" : "Add Investment"}
+        submitLabel={drawerMode === "edit" ? "Update" : "Add"}
+      />
+
+      <InvestmentViewDrawer
+        open={drawerOpen && drawerMode === "view"}
+        onClose={closeInvestmentDrawer}
+        investment={selectedInvestment}
+        taxonomyNodes={taxonomyNodes}
+        onEdit={openEditDrawer}
+      />
+
+      <InvestmentAssetTaxonomyFormDrawer
+        open={assetTaxonomyDrawerOpen}
+        onClose={closeAssetTaxonomyDrawer}
+        onSubmit={handleSaveAssetTaxonomy}
+        onDelete={handleDeleteAssetTaxonomy}
+        taxonomyNodes={taxonomyNodes}
+        submitError={taxonomyFormError}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Delete investment"
+        description={
+          deleteTarget
+            ? `Remove ${deleteTarget.name} from the organizer? This only affects the current MVP dataset.`
+            : ""
+        }
+        confirmLabel="Delete"
+        confirmColor="error"
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteInvestment}
+      />
+
+      <RecordContributionModal
+        open={recordContributionModalOpen}
+        onClose={closeRecordContributionModal}
+        investment={selectedContributionForRecording?.investment}
+        contributionPlan={selectedContributionForRecording?.contributionPlan}
+        onContributionRecorded={handleContributionRecorded}
+      />
+    </Box>
+  );
+}

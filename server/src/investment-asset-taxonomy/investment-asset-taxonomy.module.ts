@@ -1,23 +1,26 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
+import { DatabaseModule } from '../database/database.module';
 import { InvestmentAssetTaxonomyController } from './investment-asset-taxonomy.controller';
 import { InvestmentAssetTaxonomyService } from './investment-asset-taxonomy.service';
-import { MockInvestmentAssetTaxonomyRepository } from './repositories/mock-investment-asset-taxonomy.repository';
+import { AssetTaxonomyMockRepository } from './repositories/asset-taxonomy.mock.repository';
+import { AssetTaxonomyPrismaRepository } from './repositories/asset-taxonomy.prisma.repository';
+import { AssetTaxonomyRepository } from './repositories/asset-taxonomy.repository';
+import { createProviderBackedBinding } from '../database/db-provider';
 
 @Module({
-  imports: [ConfigModule],
+  imports: [ConfigModule, DatabaseModule],
   controllers: [InvestmentAssetTaxonomyController],
   providers: [
-    MockInvestmentAssetTaxonomyRepository,
-    {
-      provide: 'INVESTMENT_ASSET_TAXONOMY_REPOSITORY',
-      useFactory: (configService: ConfigService, mockRepo: MockInvestmentAssetTaxonomyRepository) => {
-        const dbProvider = configService.get('DB_PROVIDER', 'mock');
-        console.log(`🗂️ Investment asset taxonomy using ${dbProvider} repository`);
-        return mockRepo;
-      },
-      inject: [ConfigService, MockInvestmentAssetTaxonomyRepository],
-    },
+    AssetTaxonomyPrismaRepository,
+    AssetTaxonomyMockRepository,
+    createProviderBackedBinding({
+      token: 'INVESTMENT_ASSET_TAXONOMY_DATA_SOURCE',
+      databaseToken: AssetTaxonomyPrismaRepository,
+      mockToken: AssetTaxonomyMockRepository,
+      logLabel: '🗂️ Investment asset taxonomy',
+    }),
+    AssetTaxonomyRepository,
     InvestmentAssetTaxonomyService,
   ],
 })

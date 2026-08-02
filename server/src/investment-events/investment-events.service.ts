@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { MockInvestmentEventRepository } from './repositories/mock-investment-event.repository';
+import { EventRepository } from './repositories/event.repository';
 import { CreateInvestmentEventDto } from './dto/create-investment-event.dto';
 import { UpdateInvestmentEventDto } from './dto/update-investment-event.dto';
 
 @Injectable()
 export class InvestmentEventsService {
-  constructor(private readonly repository: MockInvestmentEventRepository) {}
+  constructor(private readonly repository: EventRepository) {}
 
   async create(createInvestmentEventDto: CreateInvestmentEventDto) {
     return this.repository.create(createInvestmentEventDto);

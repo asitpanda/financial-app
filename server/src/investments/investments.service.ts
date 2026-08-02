@@ -1,17 +1,16 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { MockInvestmentContributionPlanRepository } from '../investment-contribution-plans/repositories/mock-investment-contribution-plan.repository';
-import { MockValuationSnapshotRepository } from '../valuation-snapshots/repositories/mock-valuation-snapshot.repository';
+import { Injectable } from '@nestjs/common';
+import { InvestmentContributionPlansService } from '../investment-contribution-plans/investment-contribution-plans.service';
+import { ValuationSnapshotsService } from '../valuation-snapshots/valuation-snapshots.service';
 import { CreateInvestmentDto } from './dto/create-investment.dto';
 import { UpdateInvestmentDto } from './dto/update-investment.dto';
-import { IInvestmentRepository } from './repositories/investment.repository.interface';
+import { InvestmentRepository } from './repositories/investment.repository';
 
 @Injectable()
 export class InvestmentsService {
   constructor(
-    @Inject('INVESTMENT_REPOSITORY')
-    private readonly repository: IInvestmentRepository,
-    private readonly contributionPlanRepository: MockInvestmentContributionPlanRepository,
-    private readonly valuationSnapshotRepository: MockValuationSnapshotRepository,
+    private readonly repository: InvestmentRepository,
+    private readonly contributionPlansService: InvestmentContributionPlansService,
+    private readonly valuationSnapshotsService: ValuationSnapshotsService,
   ) {}
 
   async create(createInvestmentDto: CreateInvestmentDto, userId: number) {
@@ -21,10 +20,10 @@ export class InvestmentsService {
   async findAll(userId: number) {
     const investments = await this.repository.findAll(userId);
     const allPlans = await Promise.all(
-      investments.map((inv) => this.contributionPlanRepository.findAllByInvestment(String(inv.id))),
+      investments.map((inv) => this.contributionPlansService.findAllByInvestment(String(inv.id))),
     );
     const allSnapshots = await Promise.all(
-      investments.map((inv) => this.valuationSnapshotRepository.findAllByInvestment(String(inv.id))),
+      investments.map((inv) => this.valuationSnapshotsService.findAllByInvestment(String(inv.id))),
     );
     return investments.map((inv, i) => {
       const activePlan = allPlans[i].find((p) => p.status === 'active') ?? null;
@@ -32,10 +31,15 @@ export class InvestmentsService {
         ...inv,
         activeContributionPlan: activePlan
           ? {
+              id: activePlan.id,
               amount: activePlan.amount,
               cadenceUnit: activePlan.cadenceUnit,
               cadenceInterval: activePlan.cadenceInterval,
+              historicalImportMode: activePlan.historicalImportMode,
+              anchorDate: activePlan.anchorDate,
               nextDueDate: activePlan.nextDueDate,
+              endDate: activePlan.endDate,
+              status: activePlan.status,
             }
           : null,
         valuationSnapshots: allSnapshots[i],
@@ -47,18 +51,23 @@ export class InvestmentsService {
     const investment = await this.repository.findOne(id, userId);
     if (!investment) return null;
 
-    const activePlan = (await this.contributionPlanRepository.findAllByInvestment(String(investment.id)))
+    const activePlan = (await this.contributionPlansService.findAllByInvestment(String(investment.id)))
       .find((p) => p.status === 'active') ?? null;
-    const valuationSnapshots = await this.valuationSnapshotRepository.findAllByInvestment(String(investment.id));
+    const valuationSnapshots = await this.valuationSnapshotsService.findAllByInvestment(String(investment.id));
 
     return {
       ...investment,
       activeContributionPlan: activePlan
         ? {
+            id: activePlan.id,
             amount: activePlan.amount,
             cadenceUnit: activePlan.cadenceUnit,
             cadenceInterval: activePlan.cadenceInterval,
+            historicalImportMode: activePlan.historicalImportMode,
+            anchorDate: activePlan.anchorDate,
             nextDueDate: activePlan.nextDueDate,
+            endDate: activePlan.endDate,
+            status: activePlan.status,
           }
         : null,
       valuationSnapshots,

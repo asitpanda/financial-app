@@ -1,9 +1,9 @@
 import { dateFromBaseDate } from './shared';
-import type { MockTransaction } from './types';
+import type { TransactionRecord } from './types';
 
 const baseDate = new Date();
 
-export const mockTransactionsData: MockTransaction[] = [
+export const mockTransactionsData: TransactionRecord[] = [
   {
     id: 1,
     userId: 1,

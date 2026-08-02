@@ -1,32 +1,29 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { CreateInvestmentAssetTaxonomyDto } from './dto/create-investment-asset-taxonomy.dto';
 import { UpdateInvestmentAssetTaxonomyDto } from './dto/update-investment-asset-taxonomy.dto';
-import { IInvestmentAssetTaxonomyRepository } from './repositories/investment-asset-taxonomy.repository.interface';
+import { AssetTaxonomyRepository } from './repositories/asset-taxonomy.repository';
 
 @Injectable()
 export class InvestmentAssetTaxonomyService {
-  constructor(
-    @Inject('INVESTMENT_ASSET_TAXONOMY_REPOSITORY')
-    private readonly repository: IInvestmentAssetTaxonomyRepository,
-  ) {}
+  constructor(private readonly repository: AssetTaxonomyRepository) {}
 
-  async create(createDto: CreateInvestmentAssetTaxonomyDto) {
-    return this.repository.create(createDto);
+  async create(createDto: CreateInvestmentAssetTaxonomyDto, userId: number) {
+    return this.repository.create({ ...createDto, userId });
   }
 
-  async findAll() {
-    return this.repository.findAll();
+  async findAll(userId: number) {
+    return this.repository.findAll(userId);
   }
 
-  async findOne(id: number) {
-    return this.repository.findOne(id);
+  async findOne(id: number, userId: number) {
+    return this.repository.findOne(id, userId);
   }
 
-  async update(id: number, updateDto: UpdateInvestmentAssetTaxonomyDto) {
-    return this.repository.update(id, updateDto);
+  async update(id: number, updateDto: UpdateInvestmentAssetTaxonomyDto, userId: number) {
+    return this.repository.update(id, userId, updateDto);
   }
 
-  async remove(id: number) {
-    return this.repository.delete(id);
+  async remove(id: number, userId: number) {
+    return this.repository.delete(id, userId);
   }
 }

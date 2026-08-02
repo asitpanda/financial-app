@@ -1,9 +1,9 @@
 import { dateFromBaseDate } from './shared';
-import type { MockInvestmentContributionPlan } from './types';
+import type { InvestmentContributionPlanRecord } from './types';
 
 const baseDate = new Date();
 
-export const mockInvestmentContributionPlansData: MockInvestmentContributionPlan[] = [
+export const mockInvestmentContributionPlansData: InvestmentContributionPlanRecord[] = [
   {
     id: 1,
     investmentId: 1,
@@ -12,7 +12,9 @@ export const mockInvestmentContributionPlansData: MockInvestmentContributionPlan
     amount: 12000,
     cadenceUnit: 'month',
     cadenceInterval: 1,
+    historicalImportMode: 'MANUAL_REVIEW',
     anchorDate: dateFromBaseDate(baseDate, -365),
+    lastGeneratedDueDate: dateFromBaseDate(baseDate, -35),
     nextDueDate: dateFromBaseDate(baseDate, -5),
     endDate: null,
     reminderDaysBefore: 3,
@@ -29,7 +31,9 @@ export const mockInvestmentContributionPlansData: MockInvestmentContributionPlan
     amount: 12500,
     cadenceUnit: 'year',
     cadenceInterval: 1,
+    historicalImportMode: 'TRACK_FROM_TODAY',
     anchorDate: dateFromBaseDate(baseDate, -700),
+    lastGeneratedDueDate: dateFromBaseDate(baseDate, -325),
     nextDueDate: dateFromBaseDate(baseDate, 40),
     endDate: null,
     reminderDaysBefore: 15,
@@ -46,7 +50,9 @@ export const mockInvestmentContributionPlansData: MockInvestmentContributionPlan
     amount: 6000,
     cadenceUnit: 'month',
     cadenceInterval: 1,
+    historicalImportMode: 'GENERATE_ALL',
     anchorDate: dateFromBaseDate(baseDate, -320),
+    lastGeneratedDueDate: dateFromBaseDate(baseDate, -16),
     nextDueDate: dateFromBaseDate(baseDate, 15),
     endDate: null,
     reminderDaysBefore: 5,
@@ -63,7 +69,9 @@ export const mockInvestmentContributionPlansData: MockInvestmentContributionPlan
     amount: 9000,
     cadenceUnit: 'month',
     cadenceInterval: 1,
+    historicalImportMode: 'OPENING_BALANCE',
     anchorDate: dateFromBaseDate(baseDate, -280),
+    lastGeneratedDueDate: dateFromBaseDate(baseDate, -1),
     nextDueDate: dateFromBaseDate(baseDate, 1),
     endDate: dateFromBaseDate(baseDate, 457),
     reminderDaysBefore: 2,

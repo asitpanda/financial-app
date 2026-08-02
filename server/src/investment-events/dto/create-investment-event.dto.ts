@@ -10,6 +10,11 @@ export class CreateInvestmentEventDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  recurringPlanId?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   sourceAccountId?: string;
 
   @ApiProperty({ required: false })
@@ -21,6 +26,26 @@ export class CreateInvestmentEventDto {
   @IsNotEmpty()
   @IsString()
   eventType: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsDateString()
+  dueDate?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  eventSource?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  sequenceNumber?: number;
 
   @ApiProperty()
   @IsNotEmpty()

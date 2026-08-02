@@ -1,9 +1,9 @@
 import { dateFromBaseDate } from './shared';
-import type { MockInvestment } from './types';
+import type { InvestmentRecord } from './types';
 
 const baseDate = new Date();
 
-export const mockInvestmentsData: MockInvestment[] = [
+export const mockInvestmentsData: InvestmentRecord[] = [
   {
     id: 1,
     userId: 1,

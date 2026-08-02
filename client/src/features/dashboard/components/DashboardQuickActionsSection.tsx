@@ -29,19 +29,6 @@ export default function DashboardQuickActionsSection({
     <SectionCard
       title="Quick Actions"
       className="xl:col-start-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
-      empty={
-        categories.length === 0 &&
-        goals.length === 0 &&
-        transactions.length === 0 &&
-        investments.length === 0
-      }
-      emptyState={{
-        title: "No data yet",
-        description:
-          "Start by adding a transaction, goal, category, or investment to activate quick actions.",
-        actionLabel: "Add Transaction",
-        onAction: onAddTransaction,
-      }}
     >
       <div className="grid grid-cols-2 gap-3">
         <button

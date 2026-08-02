@@ -1,282 +1,176 @@
-# My Financial App - Modern Architecture
+# My Financial
 
-A full-stack personal finance management application built with a modern tech stack.
+Full-stack personal finance platform with a frozen architecture for client and server.
 
-## 🏗️ Architecture
+## Current Architecture Status
 
-### Frontend
-- **React 19** - UI library
-- **TypeScript** - Type safety
-- **Redux Toolkit** - Global state management
-- **React Query (TanStack Query)** - Server state & caching
-- **Material UI** - Ready-made components
-- **Tailwind CSS** - Layout, spacing, responsiveness
+- Client architecture: frozen
+- Server architecture: frozen
+- Provider strategy: frozen (`mock | postgres | supabase`)
+- Repository naming and layering: frozen
 
-### Backend
-- **NestJS** - Progressive Node.js framework
-- **Express** - Default NestJS HTTP server
-- **JWT Authentication** - Secure user authentication
-- **Swagger** - API documentation
-- **Prisma ORM** - Type-safe database access
+## Tech Stack
 
-### Database
-- **Supabase PostgreSQL** - Primary production database
-- **Mock Repository** - Development fallback (no database required)
-- **Firebase** - Optional (config-based switching)
+### Client
 
-### Repository Pattern
+- React 19 + TypeScript
+- TanStack Query
+- Zustand
+- MUI + Tailwind
+- React Hook Form + Zod
+
+### Server
+
+- NestJS + TypeScript
+- Prisma ORM
+- PostgreSQL
+- JWT auth
+- Swagger
+
+## Provider Modes
+
+`DB_PROVIDER` supports:
+
+- `mock`: returns data from mock adapters
+- `postgres`: uses Prisma adapters against PostgreSQL
+- `supabase`: also uses Prisma adapters (database-backed path)
+
+Provider normalization and binding live in server/src/database/db-provider.ts.
+
+## Backend Data Access Pattern
+
+```text
+Controller
+  -> Service
+    -> Stable Repository (<feature>.repository.ts)
+      -> DataSource Port (<feature>.datasource.port.ts)
+        -> Prisma Adapter (<feature>.prisma.repository.ts)
+        -> Mock Adapter (<feature>.mock.repository.ts)
 ```
-ITransactionRepository
-    ├── SupabaseRepository (Prisma + PostgreSQL)
-    ├── FirebaseRepository (Firebase Firestore)
-    └── MockRepository (In-memory data)
-```
 
-## 📁 Project Structure
+Provider selection happens at module DI binding time, not inside services.
 
-```
+## Documentation Map
+
+- Handoff bundle by audience: docs/HANDOFF_BUNDLE.md
+- Frozen architecture: docs/ARCHITECTURE.md
+- Data model and schema guide: docs/DATA_MODEL_AND_SCHEMA.md
+- Backend folder structure: docs/BACKEND_FOLDER_STRUCTURE.md
+- ER diagram: docs/data-model/INVESTMENT_ER_DIAGRAM.md
+- Frontend architecture guidelines: ARCHITECTURE.md
+
+### Recent Schema/Behavior Updates
+
+- `investment_asset_taxonomy` is now user-owned (`userId` FK) and all read/write paths are tenant scoped.
+- Recurring investment scheduler model is part of canonical schema (`investment_contribution_plans` + recurring metadata in `investment_events`).
+- Baseline schema SQL and alter SQL are both updated in `server/prisma/sql/`.
+
+## Project Structure
+
+```text
 my-financial/
-├── client/                 # React Frontend (TypeScript)
-│   ├── src/
-│   │   ├── api/           # API client & endpoints
-│   │   ├── components/    # React components
-│   │   ├── hooks/         # React Query & custom hooks
-│   │   ├── pages/         # Page components
-│   │   ├── store/         # Redux store & slices
-│   │   ├── types/         # TypeScript interfaces
-│   │   ├── App.tsx
-│   │   └── index.tsx
-│   ├── package.json
-│   └── tsconfig.json
-│
-└── server/                # NestJS Backend (TypeScript)
-    ├── src/
-    │   ├── auth/          # JWT authentication
-    │   ├── transactions/  # Transactions CRUD
-    │   │   ├── dto/
-    │   │   └── repositories/
-    │   ├── goals/         # Financial goals
-    │   ├── categories/    # Categories
-    │   ├── database/      # Prisma service
-    │   ├── app.module.ts
-    │   └── main.ts
-    ├── prisma/
-    │   └── schema.prisma
-    ├── package.json
-    └── tsconfig.json
+  client/
+    src/
+      features/
+      components/
+      store/
+      api/
+  server/
+    src/
+      auth/
+      categories/
+      financial-accounts/
+      goals/
+      transactions/
+      investments/
+      investment-asset-taxonomy/
+      investment-events/
+      investment-contribution-plans/
+      valuation-snapshots/
+      database/
+      common/
+      domain/
+      mockdata/
+    prisma/
+      schema.prisma
+  docs/
+    ARCHITECTURE.md
+    DATA_MODEL_AND_SCHEMA.md
+    BACKEND_FOLDER_STRUCTURE.md
+    data-model/
+      INVESTMENT_ER_DIAGRAM.md
 ```
 
-## 🚀 Getting Started
+## Quick Start
 
-### Quick Start
+### 1) Install dependencies
+
 ```bash
-# Backend
-cd server
-npm install
-cp .env.example .env
-# Edit .env (see Configuration section)
-npm run start:dev
-
-# Frontend (in new terminal)
-cd client
-npm install
-cp .env.example .env
-npm start
+cd server && npm install
+cd ../client && npm install
 ```
 
-Visit:
-- **Frontend**: http://localhost:3000
-- **API Docs**: http://localhost:5000/api/docs
+### 2) Configure environment
 
-## 📦 Installation Commands
+Create server `.env`:
 
-### Backend Dependencies
-```bash
-cd server
-npm install
-```
-
-Installs:
-- NestJS framework (@nestjs/core, @nestjs/common, @nestjs/platform-express)
-- Swagger (@nestjs/swagger)
-- JWT & Passport (@nestjs/jwt, @nestjs/passport, passport-jwt)
-- Prisma (@prisma/client, prisma)
-- Authentication (bcrypt)
-- Validation (class-validator, class-transformer)
-- TypeScript & development tools
-
-### Frontend Dependencies
-```bash
-cd client
-npm install
-```
-
-Installs:
-- React & React DOM (v19)
-- TypeScript
-- Redux Toolkit & React Redux
-- TanStack Query (React Query)
-- Material UI (@mui/material, @emotion/react, @emotion/styled)
-- Tailwind CSS (tailwindcss, postcss, autoprefixer)
-- Axios (HTTP client)
-- Development tools
-
-## ⚙️ Configuration
-
-### Backend (.env)
 ```env
-# Database
 DATABASE_URL="postgresql://user:password@localhost:5432/myfinancial"
-DB_PROVIDER="mock"  # Options: mock, supabase, firebase
-
-# JWT
-JWT_SECRET="your-secret-key-here"
+DB_PROVIDER="mock"
+JWT_SECRET="change-me"
 JWT_EXPIRES_IN="7d"
-
-# Server
 PORT=5000
-NODE_ENV="development"
 FRONTEND_URL="http://localhost:3000"
 ```
 
-**For Development**: Use `DB_PROVIDER="mock"` - no database needed!
+Create client `.env`:
 
-**For Supabase**: 
-1. Create project at https://supabase.com
-2. Get connection URL
-3. Set `DB_PROVIDER="supabase"`
-4. Run `npm run prisma:generate && npm run prisma:push`
-
-### Frontend (.env)
 ```env
 REACT_APP_API_URL=http://localhost:5000
 ```
 
-## 🎯 Available Scripts
+### 3) Run server and client
 
-### Backend
+Server:
+
 ```bash
-npm run start:dev      # Development with watch mode
-npm run start:prod     # Production mode
-npm run build          # Build TypeScript
-npm run prisma:generate # Generate Prisma Client
-npm run prisma:push    # Push schema to DB
-npm run prisma:studio  # Open Prisma Studio GUI
+cd server
+npm run prisma:generate
+npm run start:dev
 ```
 
-### Frontend
+Client:
+
 ```bash
-npm start              # Development server
-npm run build          # Production build
-npm test               # Run tests
+cd client
+npm start
 ```
 
-## 📚 API Endpoints
+## Backend Scripts
 
-Full API documentation available at: **http://localhost:5000/api/docs**
+From server:
 
-### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Login user
-- `GET /api/auth/me` - Get current user
+- `npm run build`
+- `npm run start:dev`
+- `npm run prisma:generate`
+- `npm run prisma:push`
+- `npm run prisma:migrate`
+- `npm run prisma:studio`
 
-### Transactions
-- `GET /api/transactions` - Get all transactions
-- `POST /api/transactions` - Create transaction
-- `PATCH /api/transactions/:id` - Update transaction
-- `DELETE /api/transactions/:id` - Delete transaction
+## Runtime Logging And Error Contract
 
-### Goals
-- `GET /api/goals` - Get all goals
-- `POST /api/goals` - Create goal
-- `PATCH /api/goals/:id` - Update goal
-- `DELETE /api/goals/:id` - Delete goal
+- Request/response logging with `x-request-id` is configured globally.
+- Validation errors are flattened with `field` + `details` payload.
+- Prisma and HTTP exceptions are normalized by a global exception filter.
+- Set `LOG_FORMAT=json` for JSON log output.
 
-### Categories
-- `GET /api/categories` - Get all categories
-- `POST /api/categories` - Create category
-- `PATCH /api/categories/:id` - Update category
-- `DELETE /api/categories/:id` - Delete category
+## API Docs
 
-## 🌟 Key Features
+Swagger is available at:
 
-### Backend
-- ✅ NestJS modular architecture
-- ✅ Repository pattern for database abstraction
-- ✅ Multiple database provider support (Supabase/Firebase/Mock)
-- ✅ JWT authentication with bcrypt
-- ✅ Swagger API documentation
-- ✅ Type-safe with TypeScript
-- ✅ Prisma ORM with PostgreSQL
-- ✅ Validation with class-validator
+- http://localhost:5000/api/docs
 
-### Frontend  
-- ✅ React 19 with TypeScript
-- ✅ Redux Toolkit for global state
-- ✅ React Query for server state & caching
-- ✅ Material UI components
-- ✅ Tailwind CSS for styling
-- ✅ Axios with interceptors
-- ✅ Type-safe API client
-- ✅ Custom React hooks
+## Notes
 
-## 🛠️ Tech Stack Rationale
-
-**Why NestJS?**
-- Enterprise-grade architecture
-- Built-in TypeScript support
-- Modular and scalable
-- Excellent documentation
-
-**Why Prisma?**
-- Type-safe database queries
-- Auto-generated types
-- Easy migrations
-- Great developer experience
-
-**Why Redux Toolkit + React Query?**
-- Redux Toolkit: Global UI state (auth, modals)
-- React Query: Server state (caching, refetching)
-- Clear separation of concerns
-
-**Why Material UI + Tailwind?**
-- Material UI: Complex components (tables, modals)
-- Tailwind: Quick layouts, spacing, responsive design
-- Best of both worlds
-
-## 🔧 Development Tips
-
-1. **Use Mock Provider**: Start with `DB_PROVIDER="mock"` for quick development
-2. **API Documentation**: Check Swagger docs for all endpoints
-3. **Redux DevTools**: Install browser extension for state debugging
-4. **React Query DevTools**: Included - toggle to see cache state
-5. **Prisma Studio**: Run `npm run prisma:studio` for GUI database viewer
-
-## 🐛 Troubleshooting
-
-**Backend won't start:**
-- Check port 5000 is free
-- Verify `.env` file exists
-- Run `npm install` again
-
-**Frontend won't start:**
-- Check port 3000 is free
-- Clear `node_modules` and reinstall
-- Verify TypeScript version compatibility
-
-**TypeScript errors:**
-- Run `npm run prisma:generate` in server
-- Delete `node_modules` and reinstall
-
-**Database issues:**
-- Switch to `DB_PROVIDER="mock"` for testing
-- Verify DATABASE_URL is correct
-- Check Supabase project is active
-
-## 📄 License
-
-ISC
-
----
-
-**See [INSTALLATION.md](INSTALLATION.md) for detailed setup guide**
+- `mock` mode must remain non-breaking and shape-compatible with DB-backed modes.
+- `postgres` and `supabase` intentionally share the same Prisma-backed adapter path.

@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { queryClient } from "../../api/queryClient";
 import { authApi } from "./auth.api";
 import { AuthResponse, LoginDto, RegisterDto, User } from "./auth.types";
+import { useAppStore } from "../../store/appStore";
 
 interface AuthState {
   user: User | null;
@@ -27,6 +29,8 @@ export const useAuth = create<AuthState>((set) => ({
   isAuthenticated: Boolean(storedToken),
   loading: false,
   setCredentials: ({ user, token }) => {
+    // Prevent stale data from a previous session from flashing for the new user.
+    queryClient.clear();
     sessionStorage.setItem("token", token);
     sessionStorage.setItem("user", JSON.stringify(user));
     set({ user, token, isAuthenticated: true });
@@ -37,8 +41,11 @@ export const useAuth = create<AuthState>((set) => ({
   },
   setLoading: (loading) => set({ loading }),
   logout: () => {
+    void queryClient.cancelQueries();
+    queryClient.clear();
     sessionStorage.removeItem("token");
     sessionStorage.removeItem("user");
+    useAppStore.setState({ activeScreen: "dashboard" });
     set({ user: null, token: null, isAuthenticated: false });
   },
 }));

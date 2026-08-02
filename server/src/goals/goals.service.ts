@@ -1,14 +1,11 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { CreateGoalDto } from './dto/create-goal.dto';
 import { UpdateGoalDto } from './dto/update-goal.dto';
-import { IGoalRepository } from './repositories/goal.repository.interface';
+import { GoalRepository } from './repositories/goal.repository';
 
 @Injectable()
 export class GoalsService {
-  constructor(
-    @Inject('GOAL_REPOSITORY')
-    private goalRepository: IGoalRepository,
-  ) {}
+  constructor(private goalRepository: GoalRepository) {}
 
   async create(createGoalDto: CreateGoalDto, userId: number) {
     return this.goalRepository.create(createGoalDto, userId);

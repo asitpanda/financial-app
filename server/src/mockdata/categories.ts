@@ -1,7 +1,7 @@
 import { withAuditFields } from './shared';
-import type { MockCategory } from './types';
+import type { CategoryRecord } from './types';
 
-export const mockCategoriesData: MockCategory[] = [
+export const mockCategoriesData: CategoryRecord[] = [
   { id: 1, name: 'Groceries', type: 'expense', icon: 'cart', color: '#FF6B6B', isSystem: true },
   { id: 2, name: 'Salary', type: 'income', icon: 'cash', color: '#4ECDC4', isSystem: true },
   { id: 3, name: 'Transportation', type: 'expense', icon: 'car', color: '#95E1D3', isSystem: true },

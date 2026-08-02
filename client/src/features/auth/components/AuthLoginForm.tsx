@@ -1,14 +1,9 @@
 import React from "react";
-import {
-  Alert,
-  Box,
-  CircularProgress,
-  TextField,
-  Typography,
-} from "@mui/material";
+import { Alert, Box, CircularProgress, Typography } from "@mui/material";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Button from "../../../components/common/AppButton";
+import LabeledTextField from "../../../components/common/LabeledTextField";
 import { loginSchema } from "../auth.schemas";
 import type { LoginDto } from "../auth.types";
 
@@ -50,26 +45,22 @@ export default function AuthLoginForm({
           ))}
         </Alert>
       ) : null}
-      <TextField
-        fullWidth
-        label="Email, User ID, or Mobile"
+      <LabeledTextField
+        labelText="Email, User ID, or Mobile"
         type="text"
-        margin="normal"
         placeholder="demo@example.com or demo123 or +1234567890"
-        error={!!loginForm.formState.errors.identifier}
+        errorMessage={loginForm.formState.errors.identifier?.message}
         helperText={
           loginForm.formState.errors.identifier?.message ||
           "Enter your email, user ID, or mobile number"
         }
         {...loginForm.register("identifier")}
       />
-      <TextField
-        fullWidth
-        label="Password"
+      <LabeledTextField
+        labelText="Password"
         type="password"
-        margin="normal"
         autoComplete="current-password"
-        error={!!loginForm.formState.errors.password}
+        errorMessage={loginForm.formState.errors.password?.message}
         helperText={loginForm.formState.errors.password?.message}
         {...loginForm.register("password")}
       />

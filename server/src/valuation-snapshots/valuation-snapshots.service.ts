@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { MockValuationSnapshotRepository } from './repositories/mock-valuation-snapshot.repository';
 import { CreateValuationSnapshotDto } from './dto/create-valuation-snapshot.dto';
 import { UpdateValuationSnapshotDto } from './dto/update-valuation-snapshot.dto';
+import { ValuationSnapshotRepository } from './repositories/valuation-snapshot.repository';
 
 @Injectable()
 export class ValuationSnapshotsService {
-  constructor(private readonly repository: MockValuationSnapshotRepository) {}
+  constructor(private readonly repository: ValuationSnapshotRepository) {}
 
   async create(createValuationSnapshotDto: CreateValuationSnapshotDto) {
     return this.repository.create(createValuationSnapshotDto);

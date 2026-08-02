@@ -641,7 +641,7 @@ export default function Transactions({
   useHeaderAction("transactions", {
     label: "Transaction",
     onClick: handleOpenAdd,
-    disabled: loading || categories.length === 0 || accounts.length === 0,
+    disabled: loading,
   });
 
   return (

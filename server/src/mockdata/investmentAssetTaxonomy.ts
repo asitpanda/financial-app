@@ -1,9 +1,9 @@
 import { MOCK_SEED_DATE } from './shared';
-import { MockInvestmentAssetTaxonomy } from './types';
+import { InvestmentAssetTaxonomyRecord } from './types';
 
 const now = MOCK_SEED_DATE;
 
-export const mockInvestmentAssetTaxonomyData: MockInvestmentAssetTaxonomy[] = [
+export const mockInvestmentAssetTaxonomyData: InvestmentAssetTaxonomyRecord[] = [
   {
     id: 1,
     label: 'Market',

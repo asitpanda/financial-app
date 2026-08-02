@@ -6,9 +6,13 @@ export interface InvestmentDocumentsMeta {
 
 export interface InvestmentContributionPlan {
 	id: string | number;
+	status?: string;
 	cadenceUnit: string;
 	cadenceInterval: number;
 	amount: number;
+	historicalImportMode?: string;
+	anchorDate?: string | null;
+	endDate?: string | null;
 	nextDueDate?: string | null;
 	isActive?: boolean;
 }

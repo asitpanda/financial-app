@@ -3,8 +3,10 @@ import React, { useMemo, useState } from "react";
 import Icon from "@mdi/react";
 import { mdiDeleteOutline, mdiEyeOutline, mdiPencilOutline } from "@mdi/js";
 import { Box, IconButton, Paper, Typography } from "@mui/material";
+import dayjs from "dayjs";
 import InvestmentAssetTaxonomyFormDrawer from "./components/InvestmentAssetTaxonomyFormDrawer";
 import InvestmentFormDrawer from "./components/InvestmentFormDrawer";
+import RecurringOccurrencesReviewDialog from "./components/RecurringOccurrencesReviewDialog";
 import AppButton from "../../components/common/AppButton";
 import { EmptyState, StatusChip } from "../../components/common";
 import ConfirmDialog from "../../components/dialogs/ConfirmDialog";
@@ -47,12 +49,89 @@ import {
   getUpcomingMaturityItems,
   getInvestmentContributionViewItems,
 } from "./investments.selectors";
+import {
+  previewRecurringContributionPlan,
+  confirmRecurringContributionPlan,
+} from "./api/contributionPlans.api";
 
 const VIEW_OPTIONS = [
   { value: "dashboard", label: "Dashboard" },
   { value: "assets", label: "Assets" },
   { value: "calendar", label: "Calendar" },
 ];
+
+export const mapFrequencyToCadence = (frequency) => {
+  if (frequency === "weekly")
+    return { cadenceUnit: "week", cadenceInterval: 1 };
+  if (frequency === "quarterly")
+    return { cadenceUnit: "quarter", cadenceInterval: 1 };
+  if (frequency === "halfyearly")
+    return { cadenceUnit: "month", cadenceInterval: 6 };
+  if (frequency === "yearly")
+    return { cadenceUnit: "year", cadenceInterval: 1 };
+  return { cadenceUnit: "month", cadenceInterval: 1 };
+};
+
+export const toDateOnly = (value) => {
+  if (!value) return null;
+  const parsed = dayjs(value);
+  if (!parsed.isValid()) return null;
+  return parsed.format("YYYY-MM-DD");
+};
+
+export const buildRecurringPayloadFromFormValues = (baseValues) => {
+  const plan = baseValues?.recurringPlan || {};
+  const cadence = mapFrequencyToCadence(plan.frequency);
+
+  return {
+    sourceAccountId:
+      baseValues.accountId !== undefined &&
+      baseValues.accountId !== null &&
+      baseValues.accountId !== ""
+        ? String(baseValues.accountId)
+        : undefined,
+    amount: Number(plan.amount || 0),
+    cadenceUnit: cadence.cadenceUnit,
+    cadenceInterval: cadence.cadenceInterval,
+    anchorDate: toDateOnly(plan.anchorDate || baseValues.startDate),
+    endDate: toDateOnly(plan.endDate) || undefined,
+    historicalImportMode: plan.historicalImportMode || "TRACK_FROM_TODAY",
+    autoCreateEvent: false,
+    openingPrincipalAmount:
+      plan.openingPrincipalAmount !== "" &&
+      plan.openingPrincipalAmount !== undefined
+        ? Number(plan.openingPrincipalAmount)
+        : undefined,
+    openingIncomeAmount:
+      plan.openingIncomeAmount !== "" && plan.openingIncomeAmount !== undefined
+        ? Number(plan.openingIncomeAmount)
+        : undefined,
+  };
+};
+
+export const buildReviewedHistoricalItems = (occurrences) =>
+  Array.isArray(occurrences)
+    ? occurrences.map((item) => ({
+        dueDate: item.dueDate,
+        amount: Number(item.amount || 0),
+        selected: item.selected !== false,
+        status: item.suggestedStatus || "PENDING",
+        eventDate: item.dueDate,
+        eventType: item.eventType || "CONTRIBUTION",
+        sequenceNumber: item.sequenceNumber,
+        notes: item.source ? `Generated via ${item.source}` : "",
+      }))
+    : [];
+
+export const buildRecurringConfirmPayload = (
+  recurringPayload,
+  reviewedHistoricalItems,
+) => ({
+  ...recurringPayload,
+  reviewedHistoricalItems: Array.isArray(reviewedHistoricalItems)
+    ? reviewedHistoricalItems
+    : [],
+});
 
 export default function Investments() {
   const [activeView, setActiveView] = useState("dashboard");
@@ -69,6 +148,9 @@ export default function Investments() {
   const [taxonomyFormError, setTaxonomyFormError] = useState("");
   const [recordContributionModalOpen, setRecordContributionModalOpen] =
     useState(false);
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [recurringConfirmLoading, setRecurringConfirmLoading] = useState(false);
+  const [pendingRecurringReview, setPendingRecurringReview] = useState(null);
   const [
     selectedContributionForRecording,
     setSelectedContributionForRecording,
@@ -229,18 +311,93 @@ export default function Investments() {
     );
 
     try {
-      await saveInvestmentMutation.mutateAsync({
+      const savedInvestment = await saveInvestmentMutation.mutateAsync({
         payload: nextInvestment,
         selectedInvestmentId:
           drawerMode === "edit" ? selectedInvestmentId : null,
       });
+
+      const wantsRecurringPlan = formValues?.contributionType === "recurring";
+      const alreadyHasActivePlan =
+        drawerMode === "edit" &&
+        Boolean(selectedInvestment?.activeContributionPlan);
+      const requestedHistoricalMode =
+        formValues?.recurringPlan?.historicalImportMode || "TRACK_FROM_TODAY";
+
+      if (wantsRecurringPlan && !alreadyHasActivePlan) {
+        const targetInvestmentId =
+          drawerMode === "edit"
+            ? selectedInvestmentId
+            : savedInvestment?.id ||
+              savedInvestment?.investment?.id ||
+              savedInvestment?.data?.id;
+
+        if (targetInvestmentId) {
+          const recurringPayload =
+            buildRecurringPayloadFromFormValues(formValues);
+          const preview = await previewRecurringContributionPlan(
+            targetInvestmentId,
+            recurringPayload,
+          );
+
+          setPendingRecurringReview({
+            targetInvestmentId,
+            recurringPayload,
+            reviewedHistoricalItems: buildReviewedHistoricalItems(
+              preview?.occurrences,
+            ),
+            historicalImportMode: recurringPayload.historicalImportMode,
+            investmentName: nextInvestment.name,
+          });
+
+          setReviewDialogOpen(true);
+          await reload();
+          closeInvestmentDrawer();
+
+          pushNotification({
+            type: "info",
+            message:
+              "Investment saved. Review historical occurrences before confirming recurring plan.",
+          });
+          return null;
+        }
+
+        pushNotification({
+          type: "error",
+          message:
+            "Investment saved, but could not open recurring review because investment ID was not available in the save response.",
+        });
+
+        return "Investment saved, but recurring review could not be opened. Please refresh and retry.";
+      }
+
       await reload();
 
       pushNotification({
         type: "success",
-        message:
-          drawerMode === "edit" ? "Investment updated" : "Investment added",
+        message: wantsRecurringPlan
+          ? drawerMode === "edit"
+            ? alreadyHasActivePlan
+              ? "Investment updated. Existing recurring plan kept as-is"
+              : "Investment updated with recurring plan"
+            : "Investment added with recurring plan"
+          : drawerMode === "edit"
+            ? "Investment updated"
+            : "Investment added",
       });
+
+      if (
+        wantsRecurringPlan &&
+        alreadyHasActivePlan &&
+        requestedHistoricalMode !== "TRACK_FROM_TODAY"
+      ) {
+        pushNotification({
+          type: "warning",
+          message:
+            "Historical review was skipped because this investment already has an active recurring plan. Update or replace the existing plan first.",
+        });
+      }
+
       setUiError("");
       closeInvestmentDrawer();
       return null;
@@ -256,6 +413,66 @@ export default function Investments() {
           ? "Failed to update investment"
           : "Failed to add investment",
       );
+    }
+  };
+
+  const handleRecurringOccurrenceChange = (index, patch) => {
+    setPendingRecurringReview((current) => {
+      if (!current) return current;
+      const nextItems = [...current.reviewedHistoricalItems];
+      nextItems[index] = {
+        ...nextItems[index],
+        ...patch,
+      };
+
+      return {
+        ...current,
+        reviewedHistoricalItems: nextItems,
+      };
+    });
+  };
+
+  const handleCancelRecurringReview = async () => {
+    setReviewDialogOpen(false);
+    setPendingRecurringReview(null);
+    await reload();
+    pushNotification({
+      type: "warning",
+      message:
+        "Recurring plan setup cancelled. Investment was saved without a recurring plan.",
+    });
+  };
+
+  const handleConfirmRecurringReview = async () => {
+    if (!pendingRecurringReview) return;
+
+    setRecurringConfirmLoading(true);
+    try {
+      await confirmRecurringContributionPlan(
+        pendingRecurringReview.targetInvestmentId,
+        buildRecurringConfirmPayload(
+          pendingRecurringReview.recurringPayload,
+          pendingRecurringReview.reviewedHistoricalItems,
+        ),
+      );
+
+      await reload();
+      setReviewDialogOpen(false);
+      setPendingRecurringReview(null);
+      pushNotification({
+        type: "success",
+        message: "Recurring plan confirmed",
+      });
+    } catch (error) {
+      pushNotification({
+        type: "error",
+        message: getRuntimeErrorMessage(
+          error,
+          "Failed to confirm recurring plan",
+        ),
+      });
+    } finally {
+      setRecurringConfirmLoading(false);
     }
   };
 
@@ -553,31 +770,43 @@ export default function Investments() {
           </Typography>
         </Box>
 
-        {!loading && !isFirstInvestmentSetup ? (
-          <Paper
-            variant="outlined"
+        {!loading ? (
+          <Box
             sx={{
-              p: 0.5,
-              display: "inline-flex",
-              gap: 0.5,
-              borderRadius: 1,
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
               flexWrap: "wrap",
             }}
           >
-            {VIEW_OPTIONS.map((option) => {
-              const selected = activeView === option.value;
-              return (
-                <AppButton
-                  key={option.value}
-                  variant={selected ? "contained" : "text"}
-                  onClick={() => setActiveView(option.value)}
-                  sx={{ minWidth: 110 }}
-                >
-                  {option.label}
-                </AppButton>
-              );
-            })}
-          </Paper>
+            <AppButton variant="outlined" onClick={openAssetTaxonomyDrawer}>
+              Manage Assets
+            </AppButton>
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 0.5,
+                display: "inline-flex",
+                gap: 0.5,
+                borderRadius: 1,
+                flexWrap: "wrap",
+              }}
+            >
+              {VIEW_OPTIONS.map((option) => {
+                const selected = activeView === option.value;
+                return (
+                  <AppButton
+                    key={option.value}
+                    variant={selected ? "contained" : "text"}
+                    onClick={() => setActiveView(option.value)}
+                    sx={{ minWidth: 110 }}
+                  >
+                    {option.label}
+                  </AppButton>
+                );
+              })}
+            </Paper>
+          </Box>
         ) : null}
       </Box>
 
@@ -590,7 +819,7 @@ export default function Investments() {
       {loading ? (
         <Typography color="text.secondary">Loading investments...</Typography>
       ) : null}
-      {!loading && isFirstInvestmentSetup ? (
+      {!loading && isFirstInvestmentSetup && activeView === "dashboard" ? (
         <Box
           sx={{
             minHeight: {
@@ -619,12 +848,8 @@ export default function Investments() {
       {!loading && !isFirstInvestmentSetup && activeView === "dashboard"
         ? renderDashboardView()
         : null}
-      {!loading && !isFirstInvestmentSetup && activeView === "assets"
-        ? renderAssetsView()
-        : null}
-      {!loading && !isFirstInvestmentSetup && activeView === "calendar"
-        ? renderCalendarView()
-        : null}
+      {!loading && activeView === "assets" ? renderAssetsView() : null}
+      {!loading && activeView === "calendar" ? renderCalendarView() : null}
 
       <InvestmentFormDrawer
         open={drawerOpen && drawerMode !== "view"}
@@ -643,6 +868,7 @@ export default function Investments() {
         investment={selectedInvestment}
         taxonomyNodes={taxonomyNodes}
         onEdit={openEditDrawer}
+        onPlanUpdated={reload}
       />
 
       <InvestmentAssetTaxonomyFormDrawer
@@ -674,6 +900,17 @@ export default function Investments() {
         investment={selectedContributionForRecording?.investment}
         contributionPlan={selectedContributionForRecording?.contributionPlan}
         onContributionRecorded={handleContributionRecorded}
+      />
+
+      <RecurringOccurrencesReviewDialog
+        open={reviewDialogOpen}
+        loading={recurringConfirmLoading}
+        items={pendingRecurringReview?.reviewedHistoricalItems || []}
+        historicalImportMode={pendingRecurringReview?.historicalImportMode}
+        investmentName={pendingRecurringReview?.investmentName}
+        onCancel={handleCancelRecurringReview}
+        onConfirm={handleConfirmRecurringReview}
+        onChangeItem={handleRecurringOccurrenceChange}
       />
     </Box>
   );

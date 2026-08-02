@@ -10,9 +10,36 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum HistoricalImportMode {
+  GENERATE_ALL
+  MANUAL_REVIEW
+  OPENING_BALANCE
+  TRACK_FROM_TODAY
+}
+
+enum InvestmentEventStatus {
+  EXPECTED
+  PENDING
+  CONFIRMED
+  SKIPPED
+  FAILED
+  CANCELLED
+}
+
+enum InvestmentEventSource {
+  MANUAL
+  RECURRING_PLAN
+  HISTORICAL_IMPORT
+  BANK_IMPORT
+  BROKER_IMPORT
+  SYSTEM_GENERATED
+}
+
 model User {
   id        Int      @id @default(autoincrement())
+  userId    String?  @unique @db.VarChar(30)
   email     String   @unique
+  mobile    String?  @unique @db.VarChar(15)
   password  String
   name      String?
   createdAt DateTime @default(now())
@@ -23,19 +50,20 @@ model User {
   transactions       Transaction[]
   goals              Goal[]
   investments        Investment[]
+  investmentAssetTaxonomy InvestmentAssetTaxonomy[]
   valuationSnapshots ValuationSnapshot[]
 
   @@map("users")
 }
 
 model Transaction {
-  id                      BigInt   @id @default(autoincrement())
+  id                      Int      @id @default(autoincrement())
   userId                  Int
   categoryId              Int
   goalId                  Int?
   sourceAccountId         Int?
   destinationAccountId    Int?
-  linkedInvestmentEventId Int?     @unique
+  linkedInvestmentEventId Int?
   type                    String
   transactionKind         String
   amount                  Float
@@ -50,8 +78,8 @@ model Transaction {
   goal                Goal?             @relation(fields: [goalId], references: [id], onDelete: SetNull)
   sourceAccount       FinancialAccount? @relation("SourceAccountTransactions", fields: [sourceAccountId], references: [id], onDelete: SetNull)
   destinationAccount  FinancialAccount? @relation("DestinationAccountTransactions", fields: [destinationAccountId], references: [id], onDelete: SetNull)
-  linkedInvestmentEvent InvestmentEvent? @relation("TransactionLinkedInvestmentEvent", fields: [linkedInvestmentEventId], references: [id], onDelete: SetNull)
-  cashLinkEvent       InvestmentEvent?  @relation("InvestmentEventLinkedTransaction")
+  linkedInvestmentEvent InvestmentEvent?  @relation("TransactionLinkedInvestmentEvent", fields: [linkedInvestmentEventId], references: [id], onDelete: SetNull)
+  cashLinkEvents      InvestmentEvent[]   @relation("InvestmentEventLinkedTransaction")
 
   @@index([userId])
   @@index([date])
@@ -102,7 +130,6 @@ model Category {
   transactions Transaction[]
   goals        Goal[]
 
-  @@unique([name, userId])
   @@index([userId])
   @@map("categories")
 }
@@ -172,6 +199,7 @@ model Investment {
 
 model InvestmentAssetTaxonomy {
   id          Int      @id @default(autoincrement())
+  userId      Int
   label       String
   nodeType    String
   level       Int
@@ -181,11 +209,12 @@ model InvestmentAssetTaxonomy {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  user        User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   parent      InvestmentAssetTaxonomy?  @relation("InvestmentAssetTaxonomyTree", fields: [parentId], references: [id], onDelete: SetNull)
   children    InvestmentAssetTaxonomy[] @relation("InvestmentAssetTaxonomyTree")
   investments Investment[]
 
-  @@unique([parentId, label])
+  @@index([userId])
   @@index([parentId])
   @@index([nodeType])
   @@index([level])
@@ -195,26 +224,36 @@ model InvestmentAssetTaxonomy {
 model InvestmentEvent {
   id                    Int      @id @default(autoincrement())
   investmentId          Int
+  recurringPlanId       Int?
   sourceAccountId       Int?
-  linkedTransactionId   BigInt?  @unique
+  linkedTransactionId   Int?
   eventType             String
+  dueDate               DateTime?
+  status                InvestmentEventStatus @default(PENDING)
+  eventSource           InvestmentEventSource @default(MANUAL)
+  sequenceNumber        Int?
   eventDate             DateTime
-  amount                Float?
+  amount                Decimal? @db.Decimal(18, 2)
   units                 Float?
-  pricePerUnit          Float?
-  netAmount             Float?
+  pricePerUnit          Decimal? @db.Decimal(18, 2)
+  netAmount             Decimal? @db.Decimal(18, 2)
   notes                 String?
   meta                  Json?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
   investment            Investment         @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  recurringPlan         InvestmentContributionPlan? @relation(fields: [recurringPlanId], references: [id], onDelete: SetNull)
   sourceAccount         FinancialAccount?  @relation("InvestmentEventSourceAccount", fields: [sourceAccountId], references: [id], onDelete: SetNull)
   linkedTransaction     Transaction?       @relation("InvestmentEventLinkedTransaction", fields: [linkedTransactionId], references: [id], onDelete: SetNull)
-  linkedFromTransaction Transaction?       @relation("TransactionLinkedInvestmentEvent")
+  linkedFromTransactions Transaction[]     @relation("TransactionLinkedInvestmentEvent")
 
   @@index([investmentId])
+  @@index([recurringPlanId])
+  @@index([dueDate])
+  @@index([status])
   @@index([sourceAccountId])
+  @@unique([recurringPlanId, dueDate, eventType])
   @@map("investment_events")
 }
 
@@ -223,10 +262,12 @@ model InvestmentContributionPlan {
   investmentId       Int
   sourceAccountId    Int?
   status             String
-  amount             Float
+  amount             Decimal @db.Decimal(18, 2)
   cadenceUnit        String
   cadenceInterval    Int
+  historicalImportMode HistoricalImportMode @default(MANUAL_REVIEW)
   anchorDate         DateTime
+  lastGeneratedDueDate DateTime?
   nextDueDate        DateTime?
   endDate            DateTime?
   reminderDaysBefore Int?
@@ -237,6 +278,7 @@ model InvestmentContributionPlan {
 
   investment    Investment        @relation(fields: [investmentId], references: [id], onDelete: Cascade)
   sourceAccount FinancialAccount? @relation("InvestmentContributionPlanSourceAccount", fields: [sourceAccountId], references: [id], onDelete: SetNull)
+  events        InvestmentEvent[]
 
   @@index([investmentId])
   @@index([sourceAccountId])

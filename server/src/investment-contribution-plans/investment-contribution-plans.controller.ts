@@ -1,11 +1,17 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Request, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CreateInvestmentContributionPlanDto } from './dto/create-investment-contribution-plan.dto';
 import { UpdateInvestmentContributionPlanDto } from './dto/update-investment-contribution-plan.dto';
+import { PreviewRecurringContributionPlanDto } from './dto/preview-recurring-contribution-plan.dto';
+import { ConfirmRecurringContributionPlanDto } from './dto/confirm-recurring-contribution-plan.dto';
 import { InvestmentContributionPlansService } from './investment-contribution-plans.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { mockUser } from '../mockdata/users';
 
 @ApiTags('investment-contribution-plans')
 @Controller('api/investments/:investmentId/contribution-plans')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class InvestmentContributionPlansController {
   constructor(private readonly contributionPlansService: InvestmentContributionPlansService) {}
 
@@ -13,6 +19,33 @@ export class InvestmentContributionPlansController {
   @ApiOperation({ summary: 'Create a contribution plan for an investment' })
   create(@Param('investmentId') investmentId: string, @Body() createDto: CreateInvestmentContributionPlanDto) {
     return this.contributionPlansService.create({ ...createDto, investmentId });
+  }
+
+  @Post('preview')
+  @ApiOperation({ summary: 'Preview historical recurring contribution occurrences without writing data' })
+  preview(
+    @Param('investmentId') investmentId: string,
+    @Body() previewDto: PreviewRecurringContributionPlanDto,
+  ) {
+    return this.contributionPlansService.previewRecurringPlan(investmentId, {
+      ...previewDto,
+      investmentId,
+    });
+  }
+
+  @Post('confirm')
+  @ApiOperation({ summary: 'Create recurring contribution plan and selected historical events' })
+  confirm(
+    @Param('investmentId') investmentId: string,
+    @Body() confirmDto: ConfirmRecurringContributionPlanDto,
+    @Request() req,
+  ) {
+    const userId = Number(req.user?.id ?? mockUser.id);
+    return this.contributionPlansService.confirmRecurringPlan(
+      investmentId,
+      confirmDto,
+      userId,
+    );
   }
 
   @Get()

@@ -1,19 +1,16 @@
-import { Injectable, Inject, BadRequestException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { ITransactionRepository } from './repositories/transaction.repository.interface';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { RecordContributionDto } from './dto/record-contribution.dto';
 import { InvestmentEventsService } from '../investment-events/investment-events.service';
 import { InvestmentContributionPlansService } from '../investment-contribution-plans/investment-contribution-plans.service';
 import { mockFinancialAccountsData } from '../mockdata';
+import { TransactionRepository } from './repositories/transaction.repository';
 
 @Injectable()
 export class TransactionsService {
   constructor(
-    @Inject('TRANSACTION_REPOSITORY')
-    private readonly repository: ITransactionRepository,
-    private readonly configService: ConfigService,
+    private readonly repository: TransactionRepository,
     private readonly investmentEventsService: InvestmentEventsService,
     private readonly contributionPlansService: InvestmentContributionPlansService,
   ) {}

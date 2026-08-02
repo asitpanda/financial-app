@@ -1,4 +1,12 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RegisterDto {
@@ -10,11 +18,22 @@ export class RegisterDto {
   @ApiProperty({ description: 'User ID (unique identifier)', required: false })
   @IsOptional()
   @IsString()
+  @MinLength(3)
+  @MaxLength(30)
+  @Matches(/^[a-zA-Z0-9._-]+$/, {
+    message:
+      'userId can only contain letters, numbers, dot, underscore, and hyphen',
+  })
   userId?: string;
 
   @ApiProperty({ description: 'Mobile number', required: false })
   @IsOptional()
   @IsString()
+  @MinLength(10)
+  @MaxLength(15)
+  @Matches(/^\+?[0-9]+$/, {
+    message: 'mobile must contain only digits and optional leading +',
+  })
   mobile?: string;
 
   @ApiProperty({ description: 'User password', minLength: 6 })

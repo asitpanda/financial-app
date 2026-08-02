@@ -17,7 +17,8 @@ import "./App.css";
 const TransactionsPage = Transactions as any;
 
 export default function App() {
-  const { token, user, loading, setLoading, setUser, logout } = useAuth();
+  const { token, user, isAuthenticated, loading, setLoading, setUser, logout } =
+    useAuth();
   const activeScreen = useAppStore((state) => state.activeScreen);
   const [transactionsPrefetch, setTransactionsPrefetch] = useState<any[]>([]);
   const [transactionsPrefillFilter, setTransactionsPrefillFilter] = useState<
@@ -43,6 +44,12 @@ export default function App() {
 
     initAuth();
   }, [token, user, setLoading, setUser, logout]);
+
+  useEffect(() => {
+    if (isAuthenticated) return;
+    setTransactionsPrefetch([]);
+    setTransactionsPrefillFilter(null);
+  }, [isAuthenticated]);
 
   // Show loading spinner while validating token
   if (loading) {

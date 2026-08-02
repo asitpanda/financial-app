@@ -1,28 +1,28 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
+import { DatabaseModule } from '../database/database.module';
 import { FinancialAccountsController } from './financial-accounts.controller';
 import { FinancialAccountsService } from './financial-accounts.service';
-import { MockFinancialAccountRepository } from './repositories/mock-financial-account.repository';
+import { FinancialAccountMockRepository } from './repositories/financial-account.mock.repository';
+import { FinancialAccountPrismaRepository } from './repositories/financial-account.prisma.repository';
+import { FinancialAccountRepository } from './repositories/financial-account.repository';
+import { createProviderBackedBinding } from '../database/db-provider';
 
 @Module({
-  imports: [ConfigModule],
+  imports: [ConfigModule, DatabaseModule],
   controllers: [FinancialAccountsController],
   providers: [
-    MockFinancialAccountRepository,
-    {
-      provide: 'FINANCIAL_ACCOUNT_REPOSITORY',
-      useFactory: (
-        configService: ConfigService,
-        mockRepo: MockFinancialAccountRepository,
-      ) => {
-        const dbProvider = configService.get('DB_PROVIDER', 'mock');
-        console.log(`🏦 Financial accounts using ${dbProvider} repository`);
-        return mockRepo;
-      },
-      inject: [ConfigService, MockFinancialAccountRepository],
-    },
+    FinancialAccountPrismaRepository,
+    FinancialAccountMockRepository,
+    createProviderBackedBinding({
+      token: 'FINANCIAL_ACCOUNT_DATA_SOURCE',
+      databaseToken: FinancialAccountPrismaRepository,
+      mockToken: FinancialAccountMockRepository,
+      logLabel: '🏦 Financial accounts',
+    }),
+    FinancialAccountRepository,
     FinancialAccountsService,
   ],
-  exports: [FinancialAccountsService, MockFinancialAccountRepository],
+  exports: [FinancialAccountsService],
 })
 export class FinancialAccountsModule {}

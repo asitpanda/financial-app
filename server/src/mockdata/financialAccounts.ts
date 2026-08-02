@@ -1,7 +1,7 @@
 import { MOCK_SEED_DATE } from './shared';
-import type { MockFinancialAccount } from './types';
+import type { FinancialAccountRecord } from './types';
 
-export const mockFinancialAccountsData: MockFinancialAccount[] = [
+export const mockFinancialAccountsData: FinancialAccountRecord[] = [
   {
     id: 1,
     userId: 1,

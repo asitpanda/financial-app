@@ -1,9 +1,9 @@
 import { dateFromBaseDate } from './shared';
-import type { MockGoal } from './types';
+import type { GoalRecord } from './types';
 
 const baseDate = new Date();
 
-export const mockGoalsData: MockGoal[] = [
+export const mockGoalsData: GoalRecord[] = [
   {
     id: 1,
     name: 'Emergency Fund',

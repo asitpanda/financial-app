@@ -19,6 +19,7 @@ export const authApi = {
 
   logout: () => {
     sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
   },
 };
 

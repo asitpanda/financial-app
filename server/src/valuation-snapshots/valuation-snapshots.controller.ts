@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Put, Delete, Body, Param, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Req } from '@nestjs/common';
 import { ValuationSnapshotsService } from './valuation-snapshots.service';
 import { CreateValuationSnapshotDto } from './dto/create-valuation-snapshot.dto';
 import { UpdateValuationSnapshotDto } from './dto/update-valuation-snapshot.dto';
@@ -9,10 +9,17 @@ export class ValuationSnapshotsController {
 
   @Post('snapshots')
   async create(@Body() createValuationSnapshotDto: CreateValuationSnapshotDto, @Req() req) {
-    // Use current user ID if not provided
+    const resolvedUserId = createValuationSnapshotDto.userId || req.user?.id;
+    if (!resolvedUserId) {
+      throw new BadRequestException({
+        field: 'userId',
+        message: 'userId is required either in auth context or payload.',
+      });
+    }
+
     const dto = {
       ...createValuationSnapshotDto,
-      userId: createValuationSnapshotDto.userId || '1', // Default to user 1 for mock
+      userId: String(resolvedUserId),
     };
     return this.service.create(dto);
   }

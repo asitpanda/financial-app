@@ -6,11 +6,15 @@ import AddTransactionModal from "../transactions/components/TransactionsAddEditD
 import GoalFormDrawer from "../goals/components/GoalFormDrawer";
 import CategoryFormDrawer from "../categories/components/CategoriesFormDrawer";
 import FinancialAccountFormDrawer from "../accounts/components/FinancialAccountFormDrawer";
+import { getFinancialAccounts } from "../accounts/financialAccounts.api";
 
 import { saveTransaction } from "../transactions/transactions.service";
 import { createGoal, updateGoal } from "../goals/goals.api";
 import { createCategory } from "../categories/categories.api";
-import { createInvestment } from "../investments/api/investments.api";
+import {
+  createInvestment,
+  getInvestments,
+} from "../investments/api/investments.api";
 import {
   buildInvestmentFromForm,
   getInvestmentCategoryOptions,
@@ -255,25 +259,23 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
 
   const handleAddTransaction = async (payload) => {
     try {
-      const sourceAccountId = Number(payload?.source);
-      const goalId = Number(payload?.goalId);
-      const created = await saveTransaction({
-        type: payload?.type,
-        amount: Number(payload?.amount || 0),
-        categoryId: Number(payload?.categoryId),
-        categoryLabelSnapshot: String(payload?.category || "").trim(),
-        transactionKind: payload?.type === "income" ? "credit" : "debit",
-        sourceAccountId: Number.isNaN(sourceAccountId)
-          ? undefined
-          : sourceAccountId,
-        date: payload?.date
-          ? new Date(payload.date).toISOString()
-          : new Date().toISOString(),
-        notes: payload?.notes || "",
-        goalId: Number.isNaN(goalId) ? null : goalId,
-      });
-      setTransactions((prev) => [created, ...prev]);
+      const created = await saveTransaction({ payload });
+      setTransactions((prev) => [
+        {
+          ...created,
+          category:
+            created?.category ||
+            created?.categoryLabelSnapshot ||
+            String(payload?.category || "").trim(),
+        },
+        ...prev,
+      ]);
       setShowAddTx(false);
+      setError("");
+      pushNotification({
+        type: "success",
+        message: "Transaction added successfully",
+      });
       return null;
     } catch (error) {
       return getRuntimeErrorMessage(error, "Failed to add transaction");
@@ -288,13 +290,22 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
         setGoals((prev) =>
           prev.map((g) => (getGoalId(g) === updatedGoalId ? updated : g)),
         );
+        pushNotification({
+          type: "success",
+          message: "Goal updated successfully",
+        });
       } else {
         const created = await createGoal(payload);
         setGoals((prev) => [created, ...prev]);
+        pushNotification({
+          type: "success",
+          message: "Goal added successfully",
+        });
       }
 
       setShowGoalDrawer(false);
       setEditGoal(null);
+      setError("");
       return null;
     } catch (error) {
       return getRuntimeErrorMessage(
@@ -314,6 +325,11 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
       const created = await createCategory(payload);
       setCategories((prev) => [created, ...prev]);
       setShowAddCategory(false);
+      setError("");
+      pushNotification({
+        type: "success",
+        message: "Category added successfully",
+      });
       return null;
     } catch (error) {
       return getRuntimeErrorMessage(error, "Failed to create category");
@@ -335,6 +351,11 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
       await createInvestment(nextInvestment);
       await handleInvestmentsUpdated();
       setShowInvestments(false);
+      setError("");
+      pushNotification({
+        type: "success",
+        message: "Investment added successfully",
+      });
       return null;
     } catch (error) {
       return getRuntimeErrorMessage(error, "Failed to add investment");
@@ -363,6 +384,13 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
     try {
       const nextAccounts = await getFinancialAccounts();
       setAccounts(Array.isArray(nextAccounts) ? nextAccounts : []);
+      setError("");
+      pushNotification({
+        type: "success",
+        message: editAccount
+          ? "Account updated successfully"
+          : "Account added successfully",
+      });
     } catch (error) {
       pushNotification({
         type: "error",

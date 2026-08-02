@@ -1,5 +1,5 @@
 import { dateFromBaseDate } from './shared';
-import type { MockValuationSnapshot } from './types';
+import type { ValuationSnapshotRecord } from './types';
 
 const baseDate = new Date();
 
@@ -59,7 +59,7 @@ const investment1StartDate = new Date(2023, 3, 21); // Month is 0-indexed, so 3 
 // totalInvested: 420000, currentValue: 458000
 const { snapshots: sipData, nextId: nextIdAfterSIP } = generateSIPData(1, 1, 1, investment1StartDate, 420000, 458000);
 
-export const mockValuationSnapshotsData: MockValuationSnapshot[] = [
+export const mockValuationSnapshotsData: ValuationSnapshotRecord[] = [
   // Investment 1: Axis Bluechip SIP - 60 MONTHS OF DATA (test for scalability)
   ...sipData,
 

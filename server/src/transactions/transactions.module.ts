@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { TransactionsService } from './transactions.service';
 import { TransactionsController } from './transactions.controller';
-import { SupabaseTransactionRepository } from './repositories/supabase-transaction.repository';
-import { MockTransactionRepository } from './repositories/mock-transaction.repository';
-import { FirebaseTransactionRepository } from './repositories/firebase-transaction.repository';
+import { TransactionPrismaRepository } from './repositories/transaction.prisma.repository';
+import { TransactionMockRepository } from './repositories/transaction.mock.repository';
+import { TransactionRepository } from './repositories/transaction.repository';
 import { InvestmentEventsModule } from '../investment-events/investment-events.module';
 import { InvestmentContributionPlansModule } from '../investment-contribution-plans/investment-contribution-plans.module';
 import { InvestmentsModule } from '../investments/investments.module';
+import { createProviderBackedBinding } from '../database/db-provider';
 
 @Module({
   imports: [
@@ -18,36 +18,15 @@ import { InvestmentsModule } from '../investments/investments.module';
   controllers: [TransactionsController],
   providers: [
     TransactionsService,
-    SupabaseTransactionRepository,
-    MockTransactionRepository,
-    FirebaseTransactionRepository,
-    {
-      provide: 'TRANSACTION_REPOSITORY',
-      useFactory: (
-        configService: ConfigService,
-        supabaseRepo: SupabaseTransactionRepository,
-        mockRepo: MockTransactionRepository,
-        firebaseRepo: FirebaseTransactionRepository,
-      ) => {
-        const dbProvider = configService.get('DB_PROVIDER', 'mock');
-        
-        switch (dbProvider) {
-          case 'supabase':
-            return supabaseRepo;
-          case 'firebase':
-            return firebaseRepo;
-          case 'mock':
-          default:
-            return mockRepo;
-        }
-      },
-      inject: [
-        ConfigService,
-        SupabaseTransactionRepository,
-        MockTransactionRepository,
-        FirebaseTransactionRepository,
-      ],
-    },
+    TransactionPrismaRepository,
+    TransactionMockRepository,
+    createProviderBackedBinding({
+      token: 'TRANSACTION_DATA_SOURCE',
+      databaseToken: TransactionPrismaRepository,
+      mockToken: TransactionMockRepository,
+      logLabel: '💸 Transactions',
+    }),
+    TransactionRepository,
   ],
 })
 export class TransactionsModule {}

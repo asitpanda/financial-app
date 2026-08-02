@@ -1,13 +1,8 @@
-import {
-  Alert,
-  Box,
-  CircularProgress,
-  TextField,
-  Typography,
-} from "@mui/material";
+import { Alert, Box, CircularProgress, Typography } from "@mui/material";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Button from "../../../components/common/AppButton";
+import LabeledTextField from "../../../components/common/LabeledTextField";
 import { registerSchema } from "../auth.schemas";
 import type { RegisterDto } from "../auth.types";
 
@@ -52,52 +47,48 @@ export default function AuthRegisterForm({
           ))}
         </Alert>
       ) : null}
-      <TextField
-        fullWidth
-        label="Name"
-        margin="normal"
+      <LabeledTextField
+        labelText="Name"
         autoComplete="name"
         placeholder="John Doe"
-        error={!!registerForm.formState.errors.name}
-        helperText={registerForm.formState.errors.name?.message}
+        errorMessage={registerForm.formState.errors.name?.message}
         {...registerForm.register("name")}
       />
-      <TextField
-        fullWidth
-        label="Email"
+      <LabeledTextField
+        labelText="Email"
         type="email"
-        margin="normal"
         autoComplete="email"
         placeholder="user@example.com"
-        error={!!registerForm.formState.errors.email}
-        helperText={registerForm.formState.errors.email?.message}
+        errorMessage={registerForm.formState.errors.email?.message}
         {...registerForm.register("email")}
       />
-      <TextField
-        fullWidth
-        label="User ID (Optional)"
-        margin="normal"
+      <LabeledTextField
+        labelText="User ID (Optional)"
         placeholder="myuserid123"
-        helperText="Unique identifier for login"
-        error={!!registerForm.formState.errors.userId}
+        errorMessage={registerForm.formState.errors.userId?.message}
+        helperText={
+          registerForm.formState.errors.userId?.message ||
+          "Unique identifier for login (3-30 chars)"
+        }
+        slotProps={{ htmlInput: { maxLength: 30 } }}
         {...registerForm.register("userId")}
       />
-      <TextField
-        fullWidth
-        label="Mobile (Optional)"
-        margin="normal"
+      <LabeledTextField
+        labelText="Mobile (Optional)"
         placeholder="+1234567890"
-        helperText="Mobile number for login"
-        error={!!registerForm.formState.errors.mobile}
+        errorMessage={registerForm.formState.errors.mobile?.message}
+        helperText={
+          registerForm.formState.errors.mobile?.message ||
+          "Mobile number for login (10-15 digits)"
+        }
+        slotProps={{ htmlInput: { maxLength: 15 } }}
         {...registerForm.register("mobile")}
       />
-      <TextField
-        fullWidth
-        label="Password"
+      <LabeledTextField
+        labelText="Password"
         type="password"
-        margin="normal"
         autoComplete="new-password"
-        error={!!registerForm.formState.errors.password}
+        errorMessage={registerForm.formState.errors.password?.message}
         helperText={
           registerForm.formState.errors.password?.message ||
           "Minimum 6 characters"

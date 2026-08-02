@@ -1,7 +1,7 @@
-import type { MockUser } from './types';
+import type { UserRecord } from './types';
 
 // Mock user for authentication
-export const mockUser: MockUser & { userId: string; mobile: string } = {
+export const mockUser: UserRecord = {
   id: 1,
   userId: 'demo123',
   email: 'demo@example.com',
@@ -26,15 +26,7 @@ export const mockToken = 'mock-jwt-token-demo-user';
 
 // In-memory store for registered users (mock mode only)
 // This will be reset when server restarts
-export const registeredUsers: Array<{
-  id: number;
-  userId?: string;
-  email: string;
-  mobile?: string;
-  name?: string;
-  password: string;
-  createdAt: Date;
-}> = [
+export const registeredUsers: UserRecord[] = [
   {
     id: 1,
     userId: mockUser.userId,
@@ -43,6 +35,7 @@ export const registeredUsers: Array<{
     name: mockUser.name,
     password: mockCredentials.password, // In mock mode, we store plain password
     createdAt: mockUser.createdAt,
+    updatedAt: mockUser.updatedAt,
   },
   {
     id: 2,
@@ -52,5 +45,6 @@ export const registeredUsers: Array<{
     name: 'Demo User 2',
     password: mockCredentials.password, // In mock mode, we store plain password
     createdAt: new Date('2026-01-02'),
+    updatedAt: new Date('2026-01-02'),
   },
 ];

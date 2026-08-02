@@ -1,15 +1,20 @@
 import { dateFromBaseDate } from './shared';
-import type { MockInvestmentEvent } from './types';
+import type { InvestmentEventRecord } from './types';
 
 const baseDate = new Date();
 
-export const mockInvestmentEventsData: MockInvestmentEvent[] = [
+export const mockInvestmentEventsData: InvestmentEventRecord[] = [
   {
     id: 1,
     investmentId: 1,
+    recurringPlanId: 1,
     sourceAccountId: 1,
-    linkedTransactionId: 20,
+    linkedTransactionId: null,
     eventType: 'contribution',
+    dueDate: dateFromBaseDate(baseDate, -35),
+    status: 'CONFIRMED',
+    eventSource: 'RECURRING_PLAN',
+    sequenceNumber: 11,
     eventDate: dateFromBaseDate(baseDate, -35),
     amount: 12000,
     units: 145.23,
@@ -23,9 +28,14 @@ export const mockInvestmentEventsData: MockInvestmentEvent[] = [
   {
     id: 2,
     investmentId: 6,
+    recurringPlanId: 4,
     sourceAccountId: 2,
-    linkedTransactionId: 21,
+    linkedTransactionId: null,
     eventType: 'deposit',
+    dueDate: dateFromBaseDate(baseDate, -30),
+    status: 'CONFIRMED',
+    eventSource: 'RECURRING_PLAN',
+    sequenceNumber: 8,
     eventDate: dateFromBaseDate(baseDate, -30),
     amount: 9000,
     units: null,
@@ -39,9 +49,14 @@ export const mockInvestmentEventsData: MockInvestmentEvent[] = [
   {
     id: 3,
     investmentId: 5,
+    recurringPlanId: 3,
     sourceAccountId: 1,
-    linkedTransactionId: 22,
+    linkedTransactionId: null,
     eventType: 'premium',
+    dueDate: dateFromBaseDate(baseDate, -15),
+    status: 'CONFIRMED',
+    eventSource: 'RECURRING_PLAN',
+    sequenceNumber: 10,
     eventDate: dateFromBaseDate(baseDate, -15),
     amount: 6000,
     units: null,

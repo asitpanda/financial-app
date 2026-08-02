@@ -1,14 +1,11 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { CreateFinancialAccountDto } from './dto/create-financial-account.dto';
 import { UpdateFinancialAccountDto } from './dto/update-financial-account.dto';
-import { IFinancialAccountRepository } from './repositories/financial-account.repository.interface';
+import { FinancialAccountRepository } from './repositories/financial-account.repository';
 
 @Injectable()
 export class FinancialAccountsService {
-  constructor(
-    @Inject('FINANCIAL_ACCOUNT_REPOSITORY')
-    private readonly repository: IFinancialAccountRepository,
-  ) {}
+  constructor(private readonly repository: FinancialAccountRepository) {}
 
   async create(createDto: CreateFinancialAccountDto, userId: number) {
     return this.repository.create(createDto, String(userId));

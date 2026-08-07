@@ -16,8 +16,6 @@ BEGIN
     WHERE t.typname = 'HistoricalImportMode' AND n.nspname = 'public'
   ) THEN
     CREATE TYPE public."HistoricalImportMode" AS ENUM (
-      'GENERATE_ALL',
-      'MANUAL_REVIEW',
       'OPENING_BALANCE',
       'TRACK_FROM_TODAY'
     );
@@ -231,7 +229,7 @@ CREATE TABLE IF NOT EXISTS public.investment_contribution_plans (
   "amount" DECIMAL(18,2) NOT NULL,
   "cadenceUnit" TEXT NOT NULL,
   "cadenceInterval" INTEGER NOT NULL,
-  "historicalImportMode" public."HistoricalImportMode" NOT NULL DEFAULT 'MANUAL_REVIEW',
+  "historicalImportMode" public."HistoricalImportMode" NOT NULL DEFAULT 'TRACK_FROM_TODAY',
   "anchorDate" TIMESTAMPTZ NOT NULL,
   "lastGeneratedDueDate" TIMESTAMPTZ NULL,
   "nextDueDate" TIMESTAMPTZ NULL,

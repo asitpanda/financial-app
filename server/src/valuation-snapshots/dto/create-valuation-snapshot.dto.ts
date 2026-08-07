@@ -1,11 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsDateString, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsNotFutureDate } from '../../common/validators/is-not-future-date.validator';
 
 export class CreateValuationSnapshotDto {
-  @ApiProperty()
-  @IsNotEmpty()
+  @ApiProperty({ required: false })
+  @IsOptional()
   @IsString()
-  userId: string;
+  userId?: string;
 
   @ApiProperty()
   @IsNotEmpty()
@@ -15,6 +16,7 @@ export class CreateValuationSnapshotDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsDateString()
+  @IsNotFutureDate()
   snapshotDate: string;
 
   @ApiProperty()

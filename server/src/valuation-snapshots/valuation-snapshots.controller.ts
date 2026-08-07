@@ -1,27 +1,19 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ValuationSnapshotsService } from './valuation-snapshots.service';
 import { CreateValuationSnapshotDto } from './dto/create-valuation-snapshot.dto';
 import { UpdateValuationSnapshotDto } from './dto/update-valuation-snapshot.dto';
 
 @Controller('api/valuations')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class ValuationSnapshotsController {
   constructor(private readonly service: ValuationSnapshotsService) {}
 
   @Post('snapshots')
-  async create(@Body() createValuationSnapshotDto: CreateValuationSnapshotDto, @Req() req) {
-    const resolvedUserId = createValuationSnapshotDto.userId || req.user?.id;
-    if (!resolvedUserId) {
-      throw new BadRequestException({
-        field: 'userId',
-        message: 'userId is required either in auth context or payload.',
-      });
-    }
-
-    const dto = {
-      ...createValuationSnapshotDto,
-      userId: String(resolvedUserId),
-    };
-    return this.service.create(dto);
+  async create(@Body() createValuationSnapshotDto: CreateValuationSnapshotDto) {
+    return this.service.create(createValuationSnapshotDto);
   }
 
   @Get('snapshots/investment/:investmentId')

@@ -194,8 +194,25 @@ BEGIN
     WHERE t.typname = 'HistoricalImportMode' AND n.nspname = 'public'
   ) THEN
     CREATE TYPE public."HistoricalImportMode" AS ENUM (
-      'GENERATE_ALL',
-      'MANUAL_REVIEW',
+      'OPENING_BALANCE',
+      'TRACK_FROM_TODAY'
+    );
+  ELSIF EXISTS (
+    SELECT 1
+    FROM pg_enum e
+    JOIN pg_type t ON t.oid = e.enumtypid
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE t.typname = 'HistoricalImportMode'
+      AND n.nspname = 'public'
+      AND e.enumlabel IN ('GENERATE_ALL', 'MANUAL_REVIEW')
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE t.typname = 'HistoricalImportMode_legacy' AND n.nspname = 'public'
+  ) THEN
+    ALTER TYPE public."HistoricalImportMode" RENAME TO "HistoricalImportMode_legacy";
+    CREATE TYPE public."HistoricalImportMode" AS ENUM (
       'OPENING_BALANCE',
       'TRACK_FROM_TODAY'
     );
@@ -272,22 +289,43 @@ ALTER TABLE IF EXISTS public.investment_contribution_plans
   ADD COLUMN IF NOT EXISTS "lastGeneratedDueDate" TIMESTAMPTZ NULL;
 
 UPDATE public.investment_contribution_plans
-SET "historicalImportMode" = 'MANUAL_REVIEW'
+SET "historicalImportMode" = 'TRACK_FROM_TODAY'
 WHERE "historicalImportMode" IS NULL;
+
+UPDATE public.investment_contribution_plans
+SET "historicalImportMode" = 'TRACK_FROM_TODAY'
+WHERE "historicalImportMode"::text IN ('GENERATE_ALL', 'MANUAL_REVIEW');
 
 ALTER TABLE public.investment_contribution_plans
   ALTER COLUMN "historicalImportMode" DROP DEFAULT;
 
 ALTER TABLE public.investment_contribution_plans
-  ALTER COLUMN "historicalImportMode" TYPE public."HistoricalImportMode" USING "historicalImportMode"::public."HistoricalImportMode",
+  ALTER COLUMN "historicalImportMode" TYPE public."HistoricalImportMode" USING (
+    CASE
+      WHEN "historicalImportMode"::text = 'OPENING_BALANCE' THEN 'OPENING_BALANCE'
+      ELSE 'TRACK_FROM_TODAY'
+    END
+  )::public."HistoricalImportMode",
   ALTER COLUMN "historicalImportMode" SET NOT NULL,
-  ALTER COLUMN "historicalImportMode" SET DEFAULT 'MANUAL_REVIEW'::public."HistoricalImportMode";
+  ALTER COLUMN "historicalImportMode" SET DEFAULT 'TRACK_FROM_TODAY'::public."HistoricalImportMode";
 
 ALTER TABLE IF EXISTS public.investment_contribution_plans
   ALTER COLUMN "amount" TYPE DECIMAL(18,2) USING "amount"::DECIMAL(18,2);
 
 ALTER TABLE public.valuation_snapshots
   ALTER COLUMN "createdAt" SET DEFAULT now();
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE t.typname = 'HistoricalImportMode_legacy' AND n.nspname = 'public'
+  ) THEN
+    DROP TYPE public."HistoricalImportMode_legacy";
+  END IF;
+END $$;
 
 -- 4) Enforce users auth identifier constraints from Prisma.
 -- userId: optional, unique, VARCHAR(30)

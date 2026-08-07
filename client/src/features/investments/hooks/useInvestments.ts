@@ -2,10 +2,16 @@ import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getFinancialAccounts } from '../../accounts/financialAccounts.api';
 import investmentApi from '../api/investments.api';
+import investmentEventsApi from '../api/investmentEvents.api';
 import investmentAssetTaxonomyApi from '../api/investmentAssetTaxonomy.api';
 import { useNotificationStore } from '../../../store/notificationStore';
 import { removeInvestment, saveInvestment } from '../service/investments.service';
-import type { CreateInvestmentDto, Investment, UpdateInvestmentDto } from '../types/investment.types';
+import type {
+  CreateInvestmentDto,
+  Investment,
+  InvestmentEvent,
+  UpdateInvestmentDto,
+} from '../types/investment.types';
 import type { InvestmentAssetTaxonomyNode } from '../types/investmentAssetTaxonomy.types';
 
 interface FinancialAccountRecord {
@@ -17,6 +23,7 @@ interface FinancialAccountRecord {
 
 interface InvestmentPageData {
   investments: Investment[];
+  investmentEvents: InvestmentEvent[];
   taxonomyNodes: InvestmentAssetTaxonomyNode[];
   accounts: FinancialAccountRecord[];
 }
@@ -120,8 +127,18 @@ export const useInvestmentPageData = () => {
         getFinancialAccounts(),
       ]);
 
+      const normalizedInvestments = Array.isArray(investments) ? investments : [];
+      const eventGroups = await Promise.all(
+        normalizedInvestments.map((investment) =>
+          investmentEventsApi
+            .getByInvestmentId(investment.id)
+            .catch(() => [] as InvestmentEvent[]),
+        ),
+      );
+
       return {
-        investments: Array.isArray(investments) ? investments : [],
+        investments: normalizedInvestments,
+        investmentEvents: eventGroups.flat(),
         taxonomyNodes: Array.isArray(taxonomyNodes) ? taxonomyNodes : [],
         accounts: Array.isArray(accounts) ? accounts : [],
       };
@@ -135,6 +152,7 @@ export const useInvestmentPageData = () => {
 
   return {
     investments: query.data?.investments || [],
+    investmentEvents: query.data?.investmentEvents || [],
     taxonomyNodes: query.data?.taxonomyNodes || [],
     accounts: query.data?.accounts || [],
     loading: query.isLoading,

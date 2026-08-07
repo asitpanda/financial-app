@@ -61,6 +61,7 @@ export default function TimeSeriesVisualization({
       padding.top + plotHeight - (item.return / maxTotal) * plotHeight;
     return { x, yInvested, yReturn, ...item, idx };
   });
+  const hoverBandWidth = Math.max(plotWidth / Math.max(data.length, 1), 36);
 
   const linePathInvested = points
     .map(
@@ -120,22 +121,31 @@ export default function TimeSeriesVisualization({
         </Box>
       )}
 
-      <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+          alignItems: "stretch",
+          minWidth: 0,
+        }}
+      >
         <Box
           sx={{
-            overflowX: "auto",
+            width: "100%",
+            minWidth: 0,
             p: 2,
             bgcolor: "background.paper",
             borderRadius: 1,
             border: "1px solid",
             borderColor: "divider",
-            flexShrink: 0,
+            overflow: "hidden",
           }}
         >
           <svg
-            width={chartWidth}
-            height={chartHeight}
-            style={{ display: "block" }}
+            viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+            preserveAspectRatio="xMidYMid meet"
+            style={{ display: "block", width: "100%", height: "auto" }}
           >
             <line
               x1={padding.left}
@@ -197,9 +207,33 @@ export default function TimeSeriesVisualization({
                 ? Math.max(padding.top, point.yInvested + tooltipGap)
                 : point.yInvested - tooltipHeight - tooltipGap;
               const textBaseY = positionBelow ? tooltipY + 18 : tooltipY + 13;
+              const bandX = Math.max(
+                padding.left,
+                Math.min(
+                  point.x - hoverBandWidth / 2,
+                  chartWidth - padding.right - hoverBandWidth,
+                ),
+              );
 
               return (
-                <g key={`point-${point.idx}`}>
+                <g
+                  key={`point-${point.idx}`}
+                  onMouseEnter={() => setHoveredIndex(point.idx)}
+                  onMouseLeave={() =>
+                    setHoveredIndex((current) =>
+                      current === point.idx ? null : current,
+                    )
+                  }
+                >
+                  <rect
+                    x={bandX}
+                    y={padding.top}
+                    width={hoverBandWidth}
+                    height={plotHeight}
+                    fill="transparent"
+                    onClick={() => !isDrillMode && onDrill(point.label)}
+                    style={{ cursor: !isDrillMode ? "pointer" : "default" }}
+                  />
                   <circle
                     cx={point.x}
                     cy={point.yInvested}
@@ -211,8 +245,6 @@ export default function TimeSeriesVisualization({
                       cursor: !isDrillMode ? "pointer" : "default",
                       transition: "all 0.15s",
                     }}
-                    onMouseEnter={() => setHoveredIndex(point.idx)}
-                    onMouseLeave={() => setHoveredIndex(null)}
                   />
                   <circle
                     cx={point.x}
@@ -225,12 +257,10 @@ export default function TimeSeriesVisualization({
                       cursor: !isDrillMode ? "pointer" : "default",
                       transition: "all 0.15s",
                     }}
-                    onMouseEnter={() => setHoveredIndex(point.idx)}
-                    onMouseLeave={() => setHoveredIndex(null)}
                   />
 
                   {hoveredIndex === point.idx && (
-                    <g>
+                    <g pointerEvents="none">
                       <rect
                         x={tooltipX}
                         y={tooltipY}
@@ -297,7 +327,7 @@ export default function TimeSeriesVisualization({
           </svg>
         </Box>
 
-        <Box sx={{ flex: 1, minWidth: 220 }}>
+        <Box sx={{ width: "100%", minWidth: 0 }}>
           {hoveredIndex !== null && data[hoveredIndex] ? (
             <Box
               sx={{
@@ -306,9 +336,9 @@ export default function TimeSeriesVisualization({
                 borderRadius: 1,
                 border: "1px solid",
                 borderColor: "divider",
-                height: "100%",
+                height: 320,
+                minHeight: 320,
                 overflowY: "auto",
-                maxHeight: 400,
               }}
             >
               <Typography variant="body2" sx={{ fontWeight: 700, mb: 1.5 }}>
@@ -441,7 +471,8 @@ export default function TimeSeriesVisualization({
                 border: "1px solid",
                 borderColor: "divider",
                 textAlign: "center",
-                height: "100%",
+                height: 320,
+                minHeight: 320,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",

@@ -9,6 +9,7 @@ import { CreateInvestmentContributionPlanDto } from './dto/create-investment-con
 import { UpdateInvestmentContributionPlanDto } from './dto/update-investment-contribution-plan.dto';
 import { ConfirmRecurringContributionPlanDto } from './dto/confirm-recurring-contribution-plan.dto';
 import { PreviewRecurringContributionPlanDto } from './dto/preview-recurring-contribution-plan.dto';
+import { SkipCurrentContributionDto } from './dto/skip-current-contribution.dto';
 import { ContributionPlanRepository } from './repositories/contribution-plan.repository';
 import { RecurringScheduleCalculator } from './recurring-schedule-calculator.service';
 
@@ -101,31 +102,10 @@ export class InvestmentContributionPlansService {
       };
     }
 
-    const occurrences = allDueDatesThroughToday.map((dueDate, index) => ({
-      sequenceNumber: index + 1,
-      dueDate: this.toDateOnlyString(dueDate),
-      amount: Number(dto.amount),
-      selected: true,
-      suggestedStatus:
-        dto.historicalImportMode === 'MANUAL_REVIEW' ? 'PENDING' : 'EXPECTED',
-      source:
-        dto.historicalImportMode === 'MANUAL_REVIEW'
-          ? 'MANUAL_REVIEW'
-          : 'HISTORICAL_IMPORT',
-      eventType: 'CONTRIBUTION',
-    }));
-
-    return {
-      investmentId,
-      historicalImportMode: dto.historicalImportMode,
-      historicalOccurrenceCount: occurrences.length,
-      expectedHistoricalTotal: occurrences.reduce(
-        (sum, item) => sum + Number(item.amount || 0),
-        0,
-      ),
-      nextDueDate,
-      occurrences,
-    };
+    // Only OPENING_BALANCE and TRACK_FROM_TODAY are supported modes.
+    throw new BadRequestException(
+      `Unsupported historicalImportMode: ${dto.historicalImportMode}`,
+    );
   }
 
   async confirmRecurringPlan(
@@ -156,28 +136,7 @@ export class InvestmentContributionPlansService {
       (item) => item.selected,
     );
 
-    // For GENERATE_ALL, server must remain source-of-truth even when UI sends no reviewed items.
-    if (
-      dto.historicalImportMode === 'GENERATE_ALL' &&
-      selectedHistoricalItems.length === 0
-    ) {
-      const preview = await this.previewRecurringPlan(investmentId, {
-        ...dto,
-        investmentId,
-      });
-      const generatedItems = (preview?.occurrences || []).map((item) => ({
-        dueDate: item.dueDate,
-        amount: Number(item.amount || 0),
-        selected: true,
-        status: item.suggestedStatus || 'EXPECTED',
-        eventDate: item.dueDate,
-        eventType: item.eventType || 'CONTRIBUTION',
-        sequenceNumber: item.sequenceNumber,
-        notes: item.source ? `Generated via ${item.source}` : '',
-      }));
-
-      selectedHistoricalItems.push(...generatedItems);
-    }
+    // GENERATE_ALL mode removed — clients should supply reviewedHistoricalItems when necessary.
 
     if (dto.historicalImportMode !== 'OPENING_BALANCE') {
       const anchor = this.toUtcDateOnly(dto.anchorDate);
@@ -278,27 +237,51 @@ export class InvestmentContributionPlansService {
     return this.repository.delete(id);
   }
 
+  async skipCurrentContribution(
+    investmentId: string,
+    planId: string,
+    userId: number,
+    dto: SkipCurrentContributionDto,
+  ) {
+    const plan = await this.repository.findOne(planId);
+    if (!plan || String(plan.investmentId) !== String(investmentId)) {
+      throw new NotFoundException('Recurring plan not found');
+    }
+
+    if (!plan.nextDueDate) {
+      throw new BadRequestException('Recurring plan does not have a due contribution to skip');
+    }
+
+    const nextDueDate = this.calculateNextDueDate(plan);
+
+    try {
+      return await this.repository.skipCurrentContribution({
+        investmentId,
+        planId,
+        userId,
+        dueDate: this.toDateOnlyString(this.toUtcDateOnly(plan.nextDueDate)),
+        nextDueDate,
+        notes: dto.notes,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+
+      if (message.includes('not found')) {
+        throw new NotFoundException(message);
+      }
+
+      throw new BadRequestException(message);
+    }
+  }
+
   async advanceNextDueDate(id: number) {
     // Get the current plan
     const plan = await this.repository.findOne(String(id));
     if (!plan) return null;
 
-    // Calculate next due date based on cadence
-    const nextDueDateObj = new Date(plan.nextDueDate);
-    
-    if (plan.cadenceUnit === 'month') {
-      nextDueDateObj.setMonth(nextDueDateObj.getMonth() + plan.cadenceInterval);
-    } else if (plan.cadenceUnit === 'year') {
-      nextDueDateObj.setFullYear(nextDueDateObj.getFullYear() + plan.cadenceInterval);
-    } else if (plan.cadenceUnit === 'week') {
-      nextDueDateObj.setDate(nextDueDateObj.getDate() + (plan.cadenceInterval * 7));
-    } else if (plan.cadenceUnit === 'day') {
-      nextDueDateObj.setDate(nextDueDateObj.getDate() + plan.cadenceInterval);
-    }
-
     // Update the plan
     const updateDto: UpdateInvestmentContributionPlanDto = {
-      nextDueDate: nextDueDateObj.toISOString().split('T')[0],
+      nextDueDate: this.calculateNextDueDate(plan),
     };
 
     return this.repository.update(String(id), updateDto);
@@ -332,5 +315,25 @@ export class InvestmentContributionPlansService {
 
   private toDateOnlyString(value: Date): string {
     return value.toISOString().split('T')[0];
+  }
+
+  private calculateNextDueDate(plan: {
+    nextDueDate?: string | Date | null;
+    anchorDate: string | Date;
+    cadenceUnit: string;
+    cadenceInterval: number;
+  }): string | null {
+    if (!plan.nextDueDate) return null;
+
+    const nextDueDate = this.scheduleCalculator.firstDueDateOnOrAfter({
+      anchorDate: this.toDateOnlyString(this.toUtcDateOnly(plan.anchorDate)),
+      cadenceUnit: plan.cadenceUnit as any,
+      cadenceInterval: Number(plan.cadenceInterval) || 1,
+      referenceDate: this.toDateOnlyString(
+        this.toUtcDateOnly(new Date(new Date(plan.nextDueDate).getTime() + 24 * 60 * 60 * 1000)),
+      ),
+    });
+
+    return nextDueDate ? this.toDateOnlyString(nextDueDate) : null;
   }
 }

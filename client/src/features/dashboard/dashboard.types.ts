@@ -29,7 +29,16 @@ export interface DashboardInvestmentRecord {
   insuranceCover?: number;
   referenceNumber?: string | null;
   createdAt?: string;
+  lastValuationAt?: string | null;
   activeContributionPlan?: DashboardInvestmentContributionPlan | null;
+}
+
+export interface DashboardInvestmentActionItem {
+  id: string | number;
+  name: string;
+  kind: 'overdue' | 'due' | 'maturing';
+  date: string;
+  amount: number;
 }
 
 export interface DashboardTaxonomyNode {
@@ -98,8 +107,8 @@ export interface DashboardInvestmentSummary {
     pct: number;
   }>;
   upcomingContributionAmount: number;
-  upcomingMaturities: DashboardInvestmentRecord[];
   upcomingMaturityAmount: number;
-  allContribDue: DashboardInvestmentRecord[];
-  overdueCount: number;
+  actionItems: DashboardInvestmentActionItem[];
+  actionItemsTotalCount: number;
+  staleValuationCount: number;
 }

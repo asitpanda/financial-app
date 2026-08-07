@@ -41,6 +41,17 @@ export class ContributionPlanRepository {
     return this.dataSource.createPlanWithHistoricalEvents(data);
   }
 
+  async skipCurrentContribution(data: {
+    investmentId: string;
+    planId: string;
+    userId: number;
+    dueDate: string;
+    nextDueDate: string | null;
+    notes?: string;
+  }): Promise<any> {
+    return this.dataSource.skipCurrentContribution(data);
+  }
+
   async generateDueRecurringInvestmentEvents(data: {
     cutoffDate: Date;
     limit?: number;

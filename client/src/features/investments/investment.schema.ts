@@ -29,7 +29,10 @@ export const investmentSchema = z
       z.union([z.string(), z.number()]).nullable().optional()
     ),
     institution: z.string().trim().min(1, "Institution is required"),
-    totalInvested: z.coerce.number().gt(0, "Total invested amount must be greater than 0"),
+    totalInvested: z.preprocess(
+      (value) => (value === "" || value === null || value === undefined ? undefined : Number(value)),
+      z.number().min(0, "Total invested cannot be negative").optional(),
+    ),
     currentValue: z.preprocess(
       (value) => (value === "" || value === null || value === undefined ? undefined : Number(value)),
       z.number().min(0, "Current value cannot be negative").optional()

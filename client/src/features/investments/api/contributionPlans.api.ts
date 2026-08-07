@@ -34,10 +34,23 @@ export const updateContributionPlan = async (
   return response.data;
 };
 
+export const skipCurrentContributionPlan = async (
+  investmentId: string | number,
+  planId: string | number,
+  payload: Record<string, unknown> = {},
+) => {
+  const response = await apiClient.post(
+    `/investments/${investmentId}/contribution-plans/${planId}/skip-current`,
+    payload,
+  );
+  return response.data;
+};
+
 const contributionPlansApi = {
   previewRecurringContributionPlan,
   confirmRecurringContributionPlan,
   updateContributionPlan,
+  skipCurrentContributionPlan,
 };
 
 export default contributionPlansApi;

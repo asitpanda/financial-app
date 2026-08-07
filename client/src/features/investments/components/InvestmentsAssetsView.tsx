@@ -1,5 +1,6 @@
-import { Box, MenuItem, Paper, Select, Stack, Typography } from "@mui/material";
-import AppButton from "../../../components/common/AppButton";
+import type { ReactNode } from "react";
+import { Box, MenuItem, Select, Stack } from "@mui/material";
+import type { GridColDef } from "@mui/x-data-grid";
 import {
   DataTable,
   FilterBar,
@@ -18,7 +19,7 @@ import type { Investment } from "../types/investment.types";
 
 interface InvestmentsAssetsViewProps {
   filteredInvestments: Investment[];
-  columns: unknown[];
+  columns: readonly GridColDef<Investment>[];
   search: string;
   onSearchChange: (value: string) => void;
   statusFilter: string;
@@ -27,9 +28,12 @@ interface InvestmentsAssetsViewProps {
   onCategoryFilterChange: (value: string) => void;
   categoryOptions: Array<{ value: string; label: string }>;
   onResetFilters: () => void;
-  onOpenAssetTaxonomyDrawer: () => void;
   onCreateInvestment: () => void;
   isFirstInvestmentSetup: boolean;
+  title?: string;
+  subtitle?: string;
+  action?: ReactNode;
+  showSummaryCards?: boolean;
 }
 
 export default function InvestmentsAssetsView({
@@ -43,47 +47,53 @@ export default function InvestmentsAssetsView({
   onCategoryFilterChange,
   categoryOptions,
   onResetFilters,
-  onOpenAssetTaxonomyDrawer,
   onCreateInvestment,
   isFirstInvestmentSetup,
+  title = "Investment Assets",
+  subtitle =
+    "Primary CRUD workspace for all holdings, contribution schedules, maturity dates, and attached notes.",
+  action,
+  showSummaryCards = true,
 }: InvestmentsAssetsViewProps) {
   return (
     <Stack spacing={2}>
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: { xs: "1fr", md: "repeat(4, minmax(0, 1fr))" },
-          gap: 1.5,
-        }}
-      >
-        <KpiCard
-          title="Tracked Assets"
-          value={filteredInvestments.length}
-          icon={<Icon path={mdiBankOutline} size={1} />}
-        />
-        <KpiCard
-          title="Active Assets"
-          value={
-            filteredInvestments.filter((item) => item.status === "active")
-              .length
-          }
-          icon={<Icon path={mdiCheckCircleOutline} size={1} />}
-        />
-        <KpiCard
-          title="Maturity Tracked"
-          value={filteredInvestments.filter((item) => item.maturityDate).length}
-          icon={<Icon path={mdiCalendarClockOutline} size={1} />}
-        />
-        <KpiCard
-          title="Insured Assets"
-          value={
-            filteredInvestments.filter(
-              (item) => Number(item.insuranceCover || 0) > 0,
-            ).length
-          }
-          icon={<Icon path={mdiShieldCheckOutline} size={1} />}
-        />
-      </Box>
+      {showSummaryCards ? (
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", md: "repeat(4, minmax(0, 1fr))" },
+            gap: 1.5,
+          }}
+        >
+          <KpiCard
+            title="Tracked Assets"
+            value={filteredInvestments.length}
+            icon={<Icon path={mdiBankOutline} size={1} />}
+          />
+          <KpiCard
+            title="Active Assets"
+            value={
+              filteredInvestments.filter((item) => item.status === "active")
+                .length
+            }
+            icon={<Icon path={mdiCheckCircleOutline} size={1} />}
+          />
+          <KpiCard
+            title="Maturity Tracked"
+            value={filteredInvestments.filter((item) => item.maturityDate).length}
+            icon={<Icon path={mdiCalendarClockOutline} size={1} />}
+          />
+          <KpiCard
+            title="Insured Assets"
+            value={
+              filteredInvestments.filter(
+                (item) => Number(item.insuranceCover || 0) > 0,
+              ).length
+            }
+            icon={<Icon path={mdiShieldCheckOutline} size={1} />}
+          />
+        </Box>
+      ) : null}
 
       <FilterBar onReset={onResetFilters}>
         <SearchBar
@@ -117,15 +127,9 @@ export default function InvestmentsAssetsView({
       </FilterBar>
 
       <SectionCard
-        title="Investment Assets"
-        subtitle="Primary CRUD workspace for all holdings, contribution schedules, maturity dates, and attached notes."
-        action={
-          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-            <AppButton variant="outlined" onClick={onOpenAssetTaxonomyDrawer}>
-              Manage Assets
-            </AppButton>
-          </Box>
-        }
+        title={title}
+        subtitle={subtitle}
+        action={action}
         empty={filteredInvestments.length === 0}
         emptyState={
           isFirstInvestmentSetup

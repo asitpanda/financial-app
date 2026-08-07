@@ -4,6 +4,7 @@ import { CreateInvestmentContributionPlanDto } from './dto/create-investment-con
 import { UpdateInvestmentContributionPlanDto } from './dto/update-investment-contribution-plan.dto';
 import { PreviewRecurringContributionPlanDto } from './dto/preview-recurring-contribution-plan.dto';
 import { ConfirmRecurringContributionPlanDto } from './dto/confirm-recurring-contribution-plan.dto';
+import { SkipCurrentContributionDto } from './dto/skip-current-contribution.dto';
 import { InvestmentContributionPlansService } from './investment-contribution-plans.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { mockUser } from '../mockdata/users';
@@ -45,6 +46,23 @@ export class InvestmentContributionPlansController {
       investmentId,
       confirmDto,
       userId,
+    );
+  }
+
+  @Post(':id/skip-current')
+  @ApiOperation({ summary: 'Skip the current due recurring contribution and advance the plan' })
+  skipCurrent(
+    @Param('investmentId') investmentId: string,
+    @Param('id') id: string,
+    @Body() skipDto: SkipCurrentContributionDto,
+    @Request() req,
+  ) {
+    const userId = Number(req.user?.id ?? mockUser.id);
+    return this.contributionPlansService.skipCurrentContribution(
+      investmentId,
+      id,
+      userId,
+      skipDto,
     );
   }
 

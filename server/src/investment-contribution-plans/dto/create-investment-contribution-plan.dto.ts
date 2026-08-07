@@ -30,7 +30,7 @@ export class CreateInvestmentContributionPlanDto {
   @IsInt()
   cadenceInterval: number;
 
-  @ApiProperty({ required: false, enum: ['GENERATE_ALL', 'MANUAL_REVIEW', 'OPENING_BALANCE', 'TRACK_FROM_TODAY'] })
+  @ApiProperty({ required: false, enum: ['OPENING_BALANCE', 'TRACK_FROM_TODAY'] })
   @IsOptional()
   @IsString()
   historicalImportMode?: string;

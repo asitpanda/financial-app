@@ -4,16 +4,23 @@ import {
   Alert,
   Box,
   Chip,
-  Stack,
-  Typography,
   IconButton,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
+  Typography,
 } from "@mui/material";
-import { mdiPlus } from "@mdi/js";
+import { mdiDeleteOutline, mdiPencilOutline, mdiPlus } from "@mdi/js";
 import Icon from "@mdi/react";
 import dayjs from "dayjs";
 import AppDrawer from "../../../components/drawers/AppDrawer";
 import AppButton from "../../../components/common/AppButton";
+import ConfirmDialog from "../../../components/dialogs/ConfirmDialog";
 import {
   EmptyState,
   SectionCard,
@@ -21,7 +28,9 @@ import {
 } from "../../../components/common";
 import RecordValuationModal from "./RecordValuationModal";
 import { updateContributionPlan } from "../api/contributionPlans.api";
+import { deleteValuationSnapshot } from "../api/valuationSnapshots.api";
 import { useNotificationStore } from "../../../store/notificationStore";
+import { getRuntimeErrorMessage } from "../../../utils/errorMessage";
 import {
   formatInvestmentCurrency,
   formatInvestmentDate,
@@ -32,7 +41,6 @@ import {
 function InvestmentPerformanceChart({ investment, formatValue }) {
   const [hoveredIndex, setHoveredIndex] = React.useState(null);
 
-  // Build performance data from valuationSnapshots if available
   const performanceData = React.useMemo(() => {
     if (
       !investment.valuationSnapshots ||
@@ -46,70 +54,23 @@ function InvestmentPerformanceChart({ investment, formatValue }) {
       (a, b) => new Date(a.snapshotDate) - new Date(b.snapshotDate),
     );
 
-    // Get the earliest snapshot date to calculate contributions from
-    const earliestDate =
-      sorted.length > 0 ? new Date(sorted[0].snapshotDate) : new Date();
-    const today = new Date();
-    const totalDaysSpan = (today - earliestDate) / (1000 * 60 * 60 * 24);
-
-    return sorted.map((snapshot, idx) => {
-      const snapshotDate = new Date(snapshot.snapshotDate);
-      const daysFromStart =
-        (snapshotDate - earliestDate) / (1000 * 60 * 60 * 24);
-
-      // Calculate cumulative contribution based on SIP cadence if available
-      let cumulativeContribution;
-
-      if (investment.activeContributionPlan) {
-        // Use actual contribution plan data for accurate historical contributions
-        const { amount, cadenceInterval, cadenceUnit } =
-          investment.activeContributionPlan;
-
-        // Calculate number of periods elapsed (including the initial contribution)
-        let periodsElapsed = 0;
-        if (cadenceUnit === "month") {
-          periodsElapsed = Math.floor(daysFromStart / 30) + 1; // +1 for initial contribution
-        } else if (cadenceUnit === "quarter") {
-          periodsElapsed = Math.floor(daysFromStart / 90) + 1;
-        } else if (cadenceUnit === "year") {
-          periodsElapsed = Math.floor(daysFromStart / 365) + 1;
-        } else if (cadenceUnit === "week") {
-          periodsElapsed = Math.floor(daysFromStart / 7) + 1;
-        }
-
-        // Each period contributes (amount * cadenceInterval)
-        cumulativeContribution = periodsElapsed * amount * cadenceInterval;
-        cumulativeContribution = Math.max(
-          0,
-          Math.min(investment.totalInvested, cumulativeContribution),
-        );
-      } else {
-        // Fallback: assume linear contribution if no plan data
-        const progressRatio =
-          totalDaysSpan > 0 ? daysFromStart / totalDaysSpan : 0;
-        cumulativeContribution = Math.round(
-          investment.totalInvested * progressRatio,
-        );
-        cumulativeContribution = Math.max(
-          0,
-          Math.min(investment.totalInvested, cumulativeContribution),
-        );
-      }
+    return sorted.map((snapshot) => {
+      const currentValue = Number(snapshot.marketValue ?? 0);
+      const investedValue = Number(investment.totalInvested ?? 0);
+      const gainLossValue = currentValue - investedValue;
+      const gainLossPercentage =
+        investedValue > 0 ? (gainLossValue / investedValue) * 100 : 0;
 
       return {
         date: snapshot.snapshotDate,
         label: dayjs(snapshot.snapshotDate).format("MMM YY"),
-        marketValue: snapshot.marketValue,
-        contribution: cumulativeContribution,
-        return: snapshot.marketValue - cumulativeContribution,
-        idx,
+        currentValue,
+        investedValue,
+        gainLossValue,
+        gainLossPercentage,
       };
     });
-  }, [
-    investment.valuationSnapshots,
-    investment.totalInvested,
-    investment.activeContributionPlan,
-  ]);
+  }, [investment.valuationSnapshots, investment.totalInvested]);
 
   if (performanceData.length === 0) {
     return (
@@ -120,9 +81,12 @@ function InvestmentPerformanceChart({ investment, formatValue }) {
   }
 
   const maxValue = Math.max(
-    ...performanceData.map((d) => Math.max(d.marketValue, d.contribution)),
+    ...performanceData.map((d) => Math.max(d.currentValue, d.investedValue)),
   );
-  const minValue = Math.min(...performanceData.map((d) => d.return), 0);
+  const minValue = Math.min(
+    ...performanceData.map((d) => Math.min(d.currentValue, d.investedValue)),
+    0,
+  );
   const range = maxValue - minValue;
 
   const padding = { top: 24, right: 24, bottom: 50, left: 70 };
@@ -149,19 +113,15 @@ function InvestmentPerformanceChart({ investment, formatValue }) {
     const x =
       padding.left +
       (idx / Math.max(performanceData.length - 1, 1)) * plotWidth;
-    const yContribution =
+    const yInvestedValue =
       padding.top +
       plotHeight -
-      ((item.contribution - minValue) / range) * plotHeight;
-    const yMarketValue =
+      ((item.investedValue - minValue) / Math.max(range, 1)) * plotHeight;
+    const yCurrentValue =
       padding.top +
       plotHeight -
-      ((item.marketValue - minValue) / range) * plotHeight;
-    const yReturn =
-      padding.top +
-      plotHeight -
-      ((item.return - minValue) / range) * plotHeight;
-    return { x, yContribution, yMarketValue, yReturn, ...item };
+      ((item.currentValue - minValue) / Math.max(range, 1)) * plotHeight;
+    return { x, yInvestedValue, yCurrentValue, ...item };
   });
 
   // Smart dot frequency based on total data points
@@ -174,14 +134,11 @@ function InvestmentPerformanceChart({ investment, formatValue }) {
     (p, idx) => idx % dotFrequency === 0 || idx === points.length - 1,
   );
 
-  const linePathContribution = points
-    .map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x} ${p.yContribution}`)
+  const linePathInvestedValue = points
+    .map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x} ${p.yInvestedValue}`)
     .join(" ");
-  const linePathMarketValue = points
-    .map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x} ${p.yMarketValue}`)
-    .join(" ");
-  const linePathReturn = points
-    .map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x} ${p.yReturn}`)
+  const linePathCurrentValue = points
+    .map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x} ${p.yCurrentValue}`)
     .join(" ");
 
   // Y-axis gridlines and labels
@@ -284,89 +241,61 @@ function InvestmentPerformanceChart({ investment, formatValue }) {
 
         {/* Lines */}
         <path
-          d={linePathContribution}
+          d={linePathInvestedValue}
           fill="none"
-          stroke="#94a3b8"
+          stroke="#f59e0b"
           strokeWidth="2"
-          strokeDasharray="4,4"
         />
         <path
-          d={linePathMarketValue}
+          d={linePathCurrentValue}
           fill="none"
           stroke="#3b82f6"
           strokeWidth="2.5"
         />
-        <path
-          d={linePathReturn}
-          fill="none"
-          stroke="#10b981"
-          strokeWidth="2.5"
-        />
 
-        {/* Interactive points - dots only shown at key intervals for large datasets */}
         {points.map((p, pointIdx) => {
-          // Smart tooltip positioning - detect if we're on right side of chart
           const tooltipWidth = 200;
-          const tooltipHeight = 100;
+          const tooltipHeight = 96;
           let tooltipX = p.x - tooltipWidth / 2;
-          let tooltipY = p.yMarketValue - tooltipHeight - 10;
+          let tooltipY = p.yCurrentValue - tooltipHeight - 10;
 
-          // Adjust horizontal position if near edges
           if (tooltipX < padding.left) tooltipX = padding.left + 5;
           if (tooltipX + tooltipWidth > chartWidth - padding.right)
             tooltipX = chartWidth - padding.right - tooltipWidth - 5;
 
-          // Adjust vertical position if above chart
-          if (tooltipY < padding.top) tooltipY = p.yMarketValue + 10;
+          if (tooltipY < padding.top) tooltipY = p.yCurrentValue + 10;
 
-          // Only show dots for selected points
           const shouldShowDot = showDots[pointIdx];
 
           return (
-            <g key={`point-${p.idx}`}>
+            <g key={`point-${pointIdx}`}>
               {shouldShowDot && (
                 <>
-                  {/* Dots for all three lines */}
-                  {/* Market Value (Blue) */}
                   <circle
                     cx={p.x}
-                    cy={p.yMarketValue}
-                    r={hoveredIndex === p.idx ? 5 : 3}
+                    cy={p.yCurrentValue}
+                    r={hoveredIndex === pointIdx ? 5 : 3}
                     fill="#3b82f6"
-                    opacity={hoveredIndex === p.idx ? 1 : 0.7}
+                    opacity={hoveredIndex === pointIdx ? 1 : 0.7}
                     style={{ cursor: "pointer", transition: "all 0.15s" }}
-                    onMouseEnter={() => setHoveredIndex(p.idx)}
+                    onMouseEnter={() => setHoveredIndex(pointIdx)}
                     onMouseLeave={() => setHoveredIndex(null)}
                   />
 
-                  {/* Return (Green) */}
                   <circle
                     cx={p.x}
-                    cy={p.yReturn}
-                    r={hoveredIndex === p.idx ? 4.5 : 2.5}
-                    fill="#10b981"
-                    opacity={hoveredIndex === p.idx ? 1 : 0.7}
+                    cy={p.yInvestedValue}
+                    r={hoveredIndex === pointIdx ? 4.5 : 2.5}
+                    fill="#f59e0b"
+                    opacity={hoveredIndex === pointIdx ? 1 : 0.6}
                     style={{ cursor: "pointer", transition: "all 0.15s" }}
-                    onMouseEnter={() => setHoveredIndex(p.idx)}
-                    onMouseLeave={() => setHoveredIndex(null)}
-                  />
-
-                  {/* Contribution (Gray) */}
-                  <circle
-                    cx={p.x}
-                    cy={p.yContribution}
-                    r={hoveredIndex === p.idx ? 4.5 : 2.5}
-                    fill="#94a3b8"
-                    opacity={hoveredIndex === p.idx ? 1 : 0.6}
-                    style={{ cursor: "pointer", transition: "all 0.15s" }}
-                    onMouseEnter={() => setHoveredIndex(p.idx)}
+                    onMouseEnter={() => setHoveredIndex(pointIdx)}
                     onMouseLeave={() => setHoveredIndex(null)}
                   />
                 </>
               )}
 
-              {/* Tooltip always shows on hover, even for non-dot points */}
-              {hoveredIndex === p.idx && (
+              {hoveredIndex === pointIdx && (
                 <g>
                   <rect
                     x={tooltipX}
@@ -390,7 +319,7 @@ function InvestmentPerformanceChart({ investment, formatValue }) {
                     y={tooltipY + 42}
                     style={{ fontSize: 11, fill: "#e5e7eb" }}
                   >
-                    <tspan fontWeight="600">Market Value:</tspan>
+                    <tspan fontWeight="600">Current Value:</tspan>
                   </text>
                   <text
                     x={tooltipX + tooltipWidth - 8}
@@ -398,29 +327,29 @@ function InvestmentPerformanceChart({ investment, formatValue }) {
                     textAnchor="end"
                     style={{ fontSize: 11, fill: "#3b82f6", fontWeight: 700 }}
                   >
-                    {formatValue(p.marketValue)}
+                    {formatValue(p.currentValue)}
                   </text>
                   <text
                     x={tooltipX + 8}
                     y={tooltipY + 56}
                     style={{ fontSize: 11, fill: "#e5e7eb" }}
                   >
-                    <tspan fontWeight="600">Contributed:</tspan>
+                    <tspan fontWeight="600">Invested:</tspan>
                   </text>
                   <text
                     x={tooltipX + tooltipWidth - 8}
                     y={tooltipY + 56}
                     textAnchor="end"
-                    style={{ fontSize: 11, fill: "#94a3b8", fontWeight: 700 }}
+                    style={{ fontSize: 11, fill: "#f59e0b", fontWeight: 700 }}
                   >
-                    {formatValue(p.contribution)}
+                    {formatValue(p.investedValue)}
                   </text>
                   <text
                     x={tooltipX + 8}
                     y={tooltipY + 70}
                     style={{ fontSize: 11, fill: "#e5e7eb" }}
                   >
-                    <tspan fontWeight="600">Return:</tspan>
+                    <tspan fontWeight="600">Gain / Loss:</tspan>
                   </text>
                   <text
                     x={tooltipX + tooltipWidth - 8}
@@ -428,27 +357,23 @@ function InvestmentPerformanceChart({ investment, formatValue }) {
                     textAnchor="end"
                     style={{
                       fontSize: 11,
-                      fill: p.return >= 0 ? "#10b981" : "#ef4444",
+                      fill: p.gainLossValue >= 0 ? "#10b981" : "#ef4444",
                       fontWeight: 700,
                     }}
                   >
-                    {p.return >= 0 ? "+" : ""}
-                    {formatValue(p.return)}
+                    {p.gainLossValue >= 0 ? "+" : ""}
+                    {formatValue(p.gainLossValue)}
                   </text>
                   <text
                     x={tooltipX + 8}
                     y={tooltipY + 84}
                     style={{
                       fontSize: 10,
-                      fill: "#9ca3af",
-                      fontStyle: "italic",
+                      fill: p.gainLossValue >= 0 ? "#10b981" : "#ef4444",
                     }}
                   >
-                    Return %:{" "}
-                    {p.contribution > 0
-                      ? ((p.return / p.contribution) * 100).toFixed(2)
-                      : 0}
-                    %
+                    {p.gainLossPercentage >= 0 ? "+" : ""}
+                    {p.gainLossPercentage.toFixed(2)}%
                   </text>
                 </g>
               )}
@@ -470,13 +395,7 @@ function InvestmentPerformanceChart({ investment, formatValue }) {
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Box sx={{ width: 20, height: 2, backgroundColor: "#3b82f6" }} />
           <Typography variant="caption" sx={{ fontWeight: 600 }}>
-            Market Value (Current)
-          </Typography>
-        </Box>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Box sx={{ width: 20, height: 2, backgroundColor: "#10b981" }} />
-          <Typography variant="caption" sx={{ fontWeight: 600 }}>
-            Return/Gain
+            Current Value
           </Typography>
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -484,13 +403,11 @@ function InvestmentPerformanceChart({ investment, formatValue }) {
             sx={{
               width: 20,
               height: 2,
-              backgroundColor: "#94a3b8",
-              backgroundImage:
-                "repeating-linear-gradient(90deg, #94a3b8 0px, #94a3b8 4px, transparent 4px, transparent 8px)",
+              backgroundColor: "#f59e0b",
             }}
           />
           <Typography variant="caption" sx={{ fontWeight: 600 }}>
-            Total Invested (Cumulative)
+            Invested Amount
           </Typography>
         </Box>
       </Box>
@@ -525,6 +442,9 @@ export function InvestmentViewDrawer({
   onPlanUpdated,
 }) {
   const [recordValuationOpen, setRecordValuationOpen] = React.useState(false);
+  const [selectedSnapshot, setSelectedSnapshot] = React.useState(null);
+  const [deleteSnapshotTarget, setDeleteSnapshotTarget] = React.useState(null);
+  const [snapshotActionLoading, setSnapshotActionLoading] = React.useState(false);
   const [planActionLoading, setPlanActionLoading] = React.useState(false);
   const [planActionError, setPlanActionError] = React.useState("");
   const [planEndDateDraft, setPlanEndDateDraft] = React.useState("");
@@ -543,18 +463,22 @@ export function InvestmentViewDrawer({
   }, [open, investment?.activeContributionPlan?.endDate]);
 
   const handleSnapshotAdded = async () => {
-    // Refetch the investment data to get updated snapshots
-    if (investment?.id) {
-      try {
-        const response = await fetch(`/api/investments/${investment.id}`);
-        if (response.ok) {
-          // The parent component will need to handle refresh
-          // For now, just close the modal
-        }
-      } catch (error) {
-        console.error("Failed to refresh investment data:", error);
-      }
-    }
+    await onPlanUpdated?.();
+  };
+
+  const handleOpenCreateSnapshot = () => {
+    setSelectedSnapshot(null);
+    setRecordValuationOpen(true);
+  };
+
+  const handleOpenEditSnapshot = (snapshot) => {
+    setSelectedSnapshot(snapshot);
+    setRecordValuationOpen(true);
+  };
+
+  const handleCloseSnapshotModal = () => {
+    setRecordValuationOpen(false);
+    setSelectedSnapshot(null);
   };
 
   const footer = (
@@ -613,6 +537,57 @@ export function InvestmentViewDrawer({
       },
       "Recurring plan end date updated",
     );
+
+  const hasValuationSnapshots =
+    Array.isArray(investment?.valuationSnapshots) &&
+    investment.valuationSnapshots.length > 0;
+  const valuationSnapshots = React.useMemo(() => {
+    if (!Array.isArray(investment?.valuationSnapshots)) {
+      return [];
+    }
+
+    return [...investment.valuationSnapshots].sort(
+      (left, right) =>
+        new Date(right.snapshotDate).getTime() -
+        new Date(left.snapshotDate).getTime(),
+    );
+  }, [investment?.valuationSnapshots]);
+  const latestSnapshot = valuationSnapshots[0] ?? null;
+  const effectiveCurrentValue = Number(
+    investment?.currentValue ?? investment?.totalInvested ?? 0,
+  );
+  const effectiveTotalInvested = Number(investment?.totalInvested ?? 0);
+  const totalReturnValue = effectiveCurrentValue - effectiveTotalInvested;
+  const totalReturnPercentage =
+    effectiveTotalInvested > 0
+      ? (totalReturnValue / effectiveTotalInvested) * 100
+      : 0;
+  const totalReturnColor = totalReturnValue >= 0 ? "#10b981" : "#ef4444";
+
+  const handleDeleteSnapshot = async () => {
+    if (!deleteSnapshotTarget?.id) return;
+
+    setSnapshotActionLoading(true);
+    try {
+      await deleteValuationSnapshot(deleteSnapshotTarget.id);
+      await onPlanUpdated?.();
+      pushNotification({
+        type: "success",
+        message: `Deleted valuation snapshot for ${formatInvestmentDate(deleteSnapshotTarget.snapshotDate)}`,
+      });
+      setDeleteSnapshotTarget(null);
+    } catch (error) {
+      pushNotification({
+        type: "error",
+        message: getRuntimeErrorMessage(
+          error,
+          "Failed to delete valuation snapshot",
+        ),
+      });
+    } finally {
+      setSnapshotActionLoading(false);
+    }
+  };
 
   return (
     <AppDrawer
@@ -684,92 +659,89 @@ export function InvestmentViewDrawer({
                     Current Value
                   </Typography>
                   <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {formatInvestmentCurrency(
-                      investment.currentValue || investment.totalInvested,
-                    )}
+                      {formatInvestmentCurrency(effectiveCurrentValue)}
                   </Typography>
                 </Box>
-                {investment.currentValue && (
-                  <>
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      gap: 1,
+                      pt: 0.5,
+                    }}
+                  >
                     <Box
                       sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        py: 0.5,
-                        borderBottom: "1px solid",
+                        p: 1.25,
+                        borderRadius: 1,
+                        bgcolor: "#f8fafc",
+                        border: "1px solid",
                         borderColor: "divider",
                       }}
                     >
                       <Typography
                         variant="caption"
                         color="text.secondary"
-                        sx={{ fontWeight: 600 }}
+                        sx={{ fontWeight: 600, display: "block", mb: 0.5 }}
                       >
-                        Total Return
+                        Invested Amount
                       </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          fontWeight: 700,
-                          color:
-                            investment.currentValue -
-                              investment.totalInvested >=
-                            0
-                              ? "#10b981"
-                              : "#ef4444",
-                        }}
-                      >
-                        {investment.currentValue - investment.totalInvested >= 0
-                          ? "+"
-                          : ""}
-                        {formatInvestmentCurrency(
-                          investment.currentValue - investment.totalInvested,
-                        )}
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        {formatInvestmentCurrency(effectiveTotalInvested)}
                       </Typography>
                     </Box>
                     <Box
                       sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        py: 0.5,
+                        p: 1.25,
+                        borderRadius: 1,
+                        bgcolor: totalReturnValue >= 0 ? "#ecfdf5" : "#fef2f2",
+                        border: "1px solid",
+                        borderColor: totalReturnValue >= 0 ? "#a7f3d0" : "#fecaca",
                       }}
                     >
                       <Typography
                         variant="caption"
                         color="text.secondary"
-                        sx={{ fontWeight: 600 }}
+                        sx={{ fontWeight: 600, display: "block", mb: 0.5 }}
                       >
-                        Return %
+                        Profit / Loss
                       </Typography>
                       <Typography
                         variant="body2"
-                        sx={{
-                          fontWeight: 700,
-                          color:
-                            investment.totalInvested > 0 &&
-                            ((investment.currentValue -
-                              investment.totalInvested) /
-                              investment.totalInvested) *
-                              100 >=
-                              0
-                              ? "#10b981"
-                              : "#ef4444",
-                        }}
+                        sx={{ fontWeight: 700, color: totalReturnColor }}
                       >
-                        {investment.totalInvested > 0
-                          ? (
-                              ((investment.currentValue -
-                                investment.totalInvested) /
-                                investment.totalInvested) *
-                              100
-                            ).toFixed(2) + "%"
-                          : "N/A"}
+                        {totalReturnValue >= 0 ? "+" : ""}
+                        {formatInvestmentCurrency(totalReturnValue)}
                       </Typography>
                     </Box>
-                  </>
-                )}
+                  </Box>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      py: 0.5,
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ fontWeight: 600 }}
+                    >
+                      Return %
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: 700,
+                        color: totalReturnColor,
+                      }}
+                    >
+                      {effectiveTotalInvested > 0
+                        ? `${totalReturnPercentage.toFixed(2)}%`
+                        : "N/A"}
+                    </Typography>
+                  </Box>
               </Stack>
             </SectionCard>
 
@@ -885,55 +857,190 @@ export function InvestmentViewDrawer({
           </Box>
 
           {/* Row 2: Performance History (Full Width) */}
-          {investment.valuationSnapshots &&
-            investment.valuationSnapshots.length > 0 && (
+          <Box>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                mb: 2,
+              }}
+            >
               <Box>
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    mb: 2,
-                  }}
-                >
-                  <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                      Performance History
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Account value growth, contributions, and returns over
-                      time.
-                    </Typography>
-                  </Box>
-                  <IconButton
-                    size="small"
-                    variant="contained"
-                    onClick={() => setRecordValuationOpen(true)}
+                <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                  Performance History
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Account value growth, contributions, and returns over time.
+                </Typography>
+                {latestSnapshot ? (
+                  <Box
                     sx={{
-                      bgcolor: "#f3f4f6",
-                      "&:hover": { bgcolor: "#e5e7eb" },
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                      flexWrap: "wrap",
+                      mt: 1,
                     }}
-                    title="Record new valuation snapshot"
                   >
-                    <Icon path={mdiPlus} size={1} />
-                  </IconButton>
-                </Box>
-                <Box
-                  sx={{
-                    p: 2,
-                    bgcolor: "background.paper",
-                    borderRadius: 1,
-                    border: "1px solid",
-                    borderColor: "divider",
-                  }}
-                >
+                    <Chip
+                      size="small"
+                      label={`${valuationSnapshots.length} snapshots`}
+                      sx={{ fontWeight: 600 }}
+                    />
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={`Latest ${formatInvestmentDate(latestSnapshot.snapshotDate)}`}
+                    />
+                  </Box>
+                ) : null}
+              </Box>
+              <IconButton
+                size="small"
+                variant="contained"
+                onClick={handleOpenCreateSnapshot}
+                sx={{
+                  bgcolor: "#f3f4f6",
+                  "&:hover": { bgcolor: "#e5e7eb" },
+                }}
+                title="Record new valuation snapshot"
+              >
+                <Icon path={mdiPlus} size={1} />
+              </IconButton>
+            </Box>
+            <Box
+              sx={{
+                p: 2,
+                bgcolor: "background.paper",
+                borderRadius: 1,
+                border: "1px solid",
+                borderColor: "divider",
+              }}
+            >
+              {hasValuationSnapshots ? (
+                <Stack spacing={2.5}>
                   <InvestmentPerformanceChart
                     investment={investment}
                     formatValue={formatInvestmentCurrency}
                   />
-                </Box>
-              </Box>
-            )}
+
+                  <Box>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 1,
+                        mb: 1.5,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <Box>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                          Snapshot History
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Maintain historical valuations without leaving the drawer.
+                        </Typography>
+                      </Box>
+                    </Box>
+
+                    <TableContainer
+                      sx={{
+                        border: "1px solid",
+                        borderColor: "divider",
+                        borderRadius: 1,
+                        overflowX: "auto",
+                      }}
+                    >
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
+                            <TableCell sx={{ fontWeight: 700 }}>Market Value</TableCell>
+                            <TableCell sx={{ fontWeight: 700 }}>Units</TableCell>
+                            <TableCell sx={{ fontWeight: 700 }}>Price</TableCell>
+                            <TableCell sx={{ fontWeight: 700 }}>Source</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700 }}>
+                              Actions
+                            </TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {valuationSnapshots.map((snapshot) => (
+                            <TableRow key={snapshot.id} hover>
+                              <TableCell>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                  {formatInvestmentDate(snapshot.snapshotDate)}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {dayjs(snapshot.snapshotDate).format("ddd")}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                  {formatInvestmentCurrency(snapshot.marketValue)}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                {snapshot.units ?? "-"}
+                              </TableCell>
+                              <TableCell>
+                                {snapshot.price != null
+                                  ? formatInvestmentCurrency(snapshot.price)
+                                  : "-"}
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  size="small"
+                                  variant="outlined"
+                                  label={snapshot.source || "manual"}
+                                  sx={{ textTransform: "capitalize" }}
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                <Box
+                                  sx={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 0.5,
+                                  }}
+                                >
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleOpenEditSnapshot(snapshot)}
+                                    aria-label={`Edit valuation on ${formatInvestmentDate(snapshot.snapshotDate)}`}
+                                  >
+                                    <Icon path={mdiPencilOutline} size={0.8} />
+                                  </IconButton>
+                                  <IconButton
+                                    size="small"
+                                    color="error"
+                                    onClick={() => setDeleteSnapshotTarget(snapshot)}
+                                    aria-label={`Delete valuation on ${formatInvestmentDate(snapshot.snapshotDate)}`}
+                                  >
+                                    <Icon path={mdiDeleteOutline} size={0.8} />
+                                  </IconButton>
+                                </Box>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Box>
+                </Stack>
+              ) : (
+                <EmptyState
+                  text="No valuation history yet"
+                  subText="Record the first valuation snapshot to start tracking current value, profit, and growth over time."
+                  actionLabel="Record Valuation"
+                  onAction={handleOpenCreateSnapshot}
+                />
+              )}
+            </Box>
+          </Box>
 
           {/* Row 3: Common Information & Investment Details */}
           <Box
@@ -1247,10 +1354,26 @@ export function InvestmentViewDrawer({
       {/* Record Valuation Modal */}
       <RecordValuationModal
         open={recordValuationOpen}
-        onClose={() => setRecordValuationOpen(false)}
+        onClose={handleCloseSnapshotModal}
         investmentId={investment?.id}
         investmentName={investment?.name}
-        onSnapshotAdded={handleSnapshotAdded}
+        snapshot={selectedSnapshot}
+        onSnapshotSaved={handleSnapshotAdded}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteSnapshotTarget)}
+        title="Delete valuation snapshot"
+        description={
+          deleteSnapshotTarget
+            ? `Remove the snapshot from ${formatInvestmentDate(deleteSnapshotTarget.snapshotDate)}? The investment current value will be recalculated from the latest remaining snapshot.`
+            : ""
+        }
+        confirmLabel="Delete"
+        confirmColor="error"
+        loading={snapshotActionLoading}
+        onCancel={() => setDeleteSnapshotTarget(null)}
+        onConfirm={handleDeleteSnapshot}
       />
     </AppDrawer>
   );

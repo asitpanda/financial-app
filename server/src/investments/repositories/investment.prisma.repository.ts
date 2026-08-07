@@ -37,6 +37,12 @@ export class InvestmentPrismaRepository implements IInvestmentDataSourcePort {
     });
   }
 
+  async findById(id: number): Promise<any> {
+    return this.prisma.investment.findUnique({
+      where: { id },
+    });
+  }
+
   async update(id: number, data: any, userId: number): Promise<any> {
     const existing = await this.prisma.investment.findFirst({
       where: { id, userId },

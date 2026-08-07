@@ -152,8 +152,6 @@ export type InvestmentContributionPlanRecord = {
   cadenceUnit: string;
   cadenceInterval: number;
   historicalImportMode:
-    | 'GENERATE_ALL'
-    | 'MANUAL_REVIEW'
     | 'OPENING_BALANCE'
     | 'TRACK_FROM_TODAY';
   anchorDate: Date;

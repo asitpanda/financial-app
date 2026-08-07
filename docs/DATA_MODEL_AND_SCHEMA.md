@@ -40,7 +40,7 @@ Current core models:
 - Asset taxonomy is hierarchical (`parentId` self-reference) and tenant-scoped by user.
 - Transaction and investment event have optional bi-directional linkage fields.
 - Investment events support recurring orchestration fields (`recurringPlanId`, `dueDate`, `status`, `eventSource`, `sequenceNumber`).
-- Investment contribution plans support recurring history mode and scheduler metadata (`historicalImportMode`, `lastGeneratedDueDate`).
+- Investment contribution plans support recurring history mode and scheduler metadata (`historicalImportMode`, `lastGeneratedDueDate`); supported modes are `OPENING_BALANCE` and `TRACK_FROM_TODAY`.
 
 ## Referential Integrity
 

@@ -36,9 +36,9 @@ export class PreviewRecurringContributionPlanDto {
   @IsDateString()
   endDate?: string;
 
-  @ApiProperty({ enum: ['GENERATE_ALL', 'MANUAL_REVIEW', 'OPENING_BALANCE', 'TRACK_FROM_TODAY'] })
+  @ApiProperty({ enum: ['OPENING_BALANCE', 'TRACK_FROM_TODAY'] })
   @IsString()
-  @IsIn(['GENERATE_ALL', 'MANUAL_REVIEW', 'OPENING_BALANCE', 'TRACK_FROM_TODAY'])
+  @IsIn(['OPENING_BALANCE', 'TRACK_FROM_TODAY'])
   historicalImportMode: string;
 
   @ApiProperty({ required: false, default: false })

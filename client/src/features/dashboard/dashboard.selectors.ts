@@ -6,6 +6,7 @@ import type { TransactionRecord } from '../transactions/transaction.types';
 import type {
   DashboardAccountOverviewRow,
   DashboardCategoryPieItem,
+  DashboardInvestmentActionItem,
   DashboardInvestmentSummary,
   DashboardMonthlySummary,
   DashboardPageData,
@@ -226,7 +227,7 @@ export const getDashboardInvestmentSummary = (
   const allActiveInvestments = investments.filter((investment) => investment.status === 'active');
   const periodInvestments = allActiveInvestments.filter((investment) => {
     const startDate = investment.startDate ? new Date(investment.startDate) : null;
-    return startDate && startDate >= periodStart && startDate <= periodEnd;
+    return !startDate || startDate <= periodEnd;
   });
 
   const periodTotalInvested = periodInvestments.reduce(
@@ -304,12 +305,46 @@ export const getDashboardInvestmentSummary = (
     })
     .sort((left, right) => new Date(left.maturityDate!).valueOf() - new Date(right.maturityDate!).valueOf());
 
-  const allContribDue = [
-    ...overdueContributions,
-    ...upcomingContributions.filter(
-      (investment) => !overdueContributions.find((overdue) => overdue.id === investment.id),
-    ),
-  ].slice(0, 3);
+  const ninetyDaysAgo = new Date(today);
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+  const staleValuationCount = allActiveInvestments.filter((investment) => {
+    const startDate = investment.startDate ? new Date(investment.startDate) : null;
+    const isEstablished = !startDate || startDate < ninetyDaysAgo;
+    if (!isEstablished) return false;
+    if (!investment.lastValuationAt) return true;
+    return new Date(investment.lastValuationAt) < ninetyDaysAgo;
+  }).length;
+
+  const actionItemsAll: DashboardInvestmentActionItem[] = [
+    ...overdueContributions.map((investment) => ({
+      id: investment.id,
+      name: investment.name,
+      kind: 'overdue' as const,
+      date: investment.activeContributionPlan!.nextDueDate!,
+      amount: Number(investment.activeContributionPlan!.amount) || 0,
+    })),
+    ...upcomingContributions
+      .filter((investment) => !overdueContributions.find((overdue) => overdue.id === investment.id))
+      .map((investment) => ({
+        id: investment.id,
+        name: investment.name,
+        kind: 'due' as const,
+        date: investment.activeContributionPlan!.nextDueDate!,
+        amount: Number(investment.activeContributionPlan!.amount) || 0,
+      })),
+    ...upcomingMaturities.map((investment) => ({
+      id: investment.id,
+      name: investment.name,
+      kind: 'maturing' as const,
+      date: investment.maturityDate!,
+      amount: Number(investment.currentValue || investment.totalInvested) || 0,
+    })),
+  ].sort((left, right) => {
+    if (left.kind === 'overdue' && right.kind !== 'overdue') return -1;
+    if (right.kind === 'overdue' && left.kind !== 'overdue') return 1;
+    return new Date(left.date).valueOf() - new Date(right.date).valueOf();
+  });
 
   return {
     activeCount: allActiveInvestments.length,
@@ -330,13 +365,13 @@ export const getDashboardInvestmentSummary = (
       (sum, investment) => sum + (Number(investment.activeContributionPlan!.amount) || 0),
       0,
     ),
-    upcomingMaturities: upcomingMaturities.slice(0, 3),
     upcomingMaturityAmount: upcomingMaturities.reduce(
       (sum, investment) => sum + (Number(investment.currentValue || investment.totalInvested) || 0),
       0,
     ),
-    allContribDue,
-    overdueCount: overdueContributions.length,
+    actionItems: actionItemsAll.slice(0, 4),
+    actionItemsTotalCount: actionItemsAll.length,
+    staleValuationCount,
   };
 };
 

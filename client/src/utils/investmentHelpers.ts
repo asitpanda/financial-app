@@ -259,7 +259,6 @@ export const buildInvestmentFromForm = (form, existingId, taxonomyNodes = []) =>
   const parsedAccountId = form.accountId !== '' && form.accountId != null ? Number(form.accountId) : null;
 
   return {
-    ...(existingId ? { id: existingId } : {}),
     accountId: Number.isFinite(parsedAccountId) ? parsedAccountId : null,
     assetTaxonomyId: form.assetTaxonomyId || typeMeta.id || null,
     name: form.name.trim(),

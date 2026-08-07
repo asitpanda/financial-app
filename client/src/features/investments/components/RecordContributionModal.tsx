@@ -1,12 +1,12 @@
 // @ts-nocheck
 import React, { useState } from 'react';
-import { Box, Modal, Stack, TextField, Typography, CircularProgress, FormControl, InputLabel, Select, MenuItem, FormHelperText } from '@mui/material';
-import { getFinancialAccounts } from '../../accounts/financialAccounts.api';
+import { Alert, Box, Modal, Stack, TextField, Typography, CircularProgress } from '@mui/material';
 import dayjs from 'dayjs';
 import AppButton from '../../../components/common/AppButton';
 import { useNotificationStore } from '../../../store/notificationStore';
 import apiClient from '../../../api/client';
 import { validateRecordContributionForm } from '../investment.schema';
+import { skipCurrentContributionPlan } from '../api/contributionPlans.api';
 
 const modalStyle = {
   position: 'absolute',
@@ -27,10 +27,10 @@ export default function RecordContributionModal({
   onClose,
   investment,
   contributionPlan,
+  accounts = [],
   onContributionRecorded,
 }) {
-  const [loading, setLoading] = useState(false);
-  const [accounts, setAccounts] = useState([]);
+  const [loadingAction, setLoadingAction] = useState(null);
   const [formData, setFormData] = useState({
     contributionDate: dayjs().format('YYYY-MM-DD'),
     amount: contributionPlan?.amount || '',
@@ -39,22 +39,32 @@ export default function RecordContributionModal({
   });
   const [errors, setErrors] = useState({});
   const { pushNotification } = useNotificationStore();
-  
-  // Load accounts on mount
-  React.useEffect(() => {
-    const loadAccounts = async () => {
-      try {
-        const response = await getFinancialAccounts();
-        setAccounts(Array.isArray(response) ? response : []);
-      } catch (error) {
-        console.error('Failed to load accounts:', error);
-      }
-    };
-    
-    if (open) {
-      loadAccounts();
-    }
-  }, [open]);
+  const loading = Boolean(loadingAction);
+
+  const resolvedSourceAccountId =
+    investment?.accountId != null && investment?.accountId !== ''
+      ? String(investment.accountId)
+      : contributionPlan?.sourceAccountId != null &&
+          contributionPlan?.sourceAccountId !== ''
+        ? String(contributionPlan.sourceAccountId)
+        : '';
+
+  const sourceAccountLabel =
+    accounts.find(
+      (account) => String(account.id) === String(resolvedSourceAccountId),
+    )?.displayName ||
+    accounts.find(
+      (account) => String(account.id) === String(resolvedSourceAccountId),
+    )?.name ||
+    accounts.find(
+      (account) => String(account.id) === String(resolvedSourceAccountId),
+    )?.institutionName ||
+    (resolvedSourceAccountId
+      ? `Account ${resolvedSourceAccountId}`
+      : 'No linked funding account');
+  const currentDueDateLabel = contributionPlan?.nextDueDate
+    ? dayjs(contributionPlan.nextDueDate).format('DD MMM YYYY')
+    : 'No due contribution date';
 
   React.useEffect(() => {
     if (!open) return;
@@ -62,11 +72,11 @@ export default function RecordContributionModal({
     setFormData({
       contributionDate: dayjs().format('YYYY-MM-DD'),
       amount: contributionPlan?.amount || '',
-      sourceAccountId: '',
+      sourceAccountId: resolvedSourceAccountId,
       notes: '',
     });
     setErrors({});
-  }, [open, contributionPlan?.amount]);
+  }, [open, contributionPlan?.amount, resolvedSourceAccountId]);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
@@ -91,7 +101,7 @@ export default function RecordContributionModal({
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
-    setLoading(true);
+    setLoadingAction('record');
     try {
       const payload = {
         investmentId: String(investment.id),
@@ -124,7 +134,38 @@ export default function RecordContributionModal({
       const message = error.response?.data?.message || error.message || 'Failed to record contribution';
       pushNotification({ message, type: 'error' });
     } finally {
-      setLoading(false);
+      setLoadingAction(null);
+    }
+  };
+
+  const handleSkipCurrentContribution = async () => {
+    if (!investment?.id || !contributionPlan?.id) return;
+
+    setLoadingAction('skip');
+    try {
+      const response = await skipCurrentContributionPlan(
+        investment.id,
+        contributionPlan.id,
+        {
+          notes: formData.notes || undefined,
+        },
+      );
+
+      pushNotification({
+        message: `Skipped the due contribution for ${currentDueDateLabel}`,
+        type: 'success',
+      });
+
+      onContributionRecorded?.(response);
+      onClose();
+    } catch (error) {
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to skip the current contribution';
+      pushNotification({ message, type: 'error' });
+    } finally {
+      setLoadingAction(null);
     }
   };
 
@@ -153,6 +194,25 @@ export default function RecordContributionModal({
 
         {/* Form */}
         <Stack spacing={2.5} sx={{ mb: 3 }}>
+          <Alert severity="info">
+            Record this contribution if it was paid. If the user wants to miss
+            only this cycle, use Skip This Month and the recurring plan will
+            continue from the next due date.
+          </Alert>
+
+          <Box>
+            <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+              Current Due Contribution
+            </Typography>
+            <TextField
+              fullWidth
+              size="small"
+              value={currentDueDateLabel}
+              helperText="Skip applies to this scheduled due occurrence only."
+              InputProps={{ readOnly: true }}
+            />
+          </Box>
+
           <Box>
             <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
               Contribution Date
@@ -186,22 +246,22 @@ export default function RecordContributionModal({
             />
           </Box>
 
-          <FormControl fullWidth size="small" error={Boolean(errors.sourceAccountId)}>
-            <InputLabel>Source Account</InputLabel>
-            <Select
-              value={formData.sourceAccountId}
-              label="Source Account"
-              onChange={(e) => handleInputChange('sourceAccountId', e.target.value)}
-            >
-              <MenuItem value="">Select account...</MenuItem>
-              {accounts.map((account) => (
-                <MenuItem key={account.id} value={account.id}>
-                  {account.displayName || account.name}
-                </MenuItem>
-              ))}
-            </Select>
-            <FormHelperText>{errors.sourceAccountId || ''}</FormHelperText>
-          </FormControl>
+          <Box>
+            <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+              Source Account
+            </Typography>
+            <TextField
+              fullWidth
+              size="small"
+              value={sourceAccountLabel}
+              error={Boolean(errors.sourceAccountId)}
+              helperText={
+                errors.sourceAccountId ||
+                'This contribution will be recorded against the linked investment account.'
+              }
+              InputProps={{ readOnly: true }}
+            />
+          </Box>
 
           <Box>
             <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
@@ -220,24 +280,38 @@ export default function RecordContributionModal({
         </Stack>
 
         {/* Footer */}
-        <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'space-between' }}>
-          <AppButton 
-            variant="outlined" 
+        <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <AppButton
+            variant="outlined"
             onClick={handleClose}
             disabled={loading}
             sx={{ minWidth: 120 }}
           >
             Cancel
           </AppButton>
-          <AppButton
-            variant="contained"
-            onClick={handleSubmit}
-            disabled={loading}
-            sx={{ minWidth: 160 }}
-          >
-            {loading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
-            Record Contribution
-          </AppButton>
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', marginLeft: 'auto' }}>
+            <AppButton
+              variant="outlined"
+              color="warning"
+              onClick={handleSkipCurrentContribution}
+              disabled={loading || !contributionPlan?.nextDueDate}
+              sx={{ minWidth: 160 }}
+            >
+              {loadingAction === 'skip' ? (
+                <CircularProgress size={20} sx={{ mr: 1 }} />
+              ) : null}
+              Skip This Month
+            </AppButton>
+            <AppButton
+              variant="contained"
+              onClick={handleSubmit}
+              disabled={loading}
+              sx={{ minWidth: 180 }}
+            >
+              {loadingAction === 'record' ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
+              Record Contribution
+            </AppButton>
+          </Box>
         </Box>
       </Box>
     </Modal>

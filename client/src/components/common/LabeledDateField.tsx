@@ -24,8 +24,8 @@ export default function LabeledDateField({
       className="drawer-form-field"
       sx={{
         display: 'grid',
-        gridTemplateRows: '20px 43px 20px',
-        height: 83,
+        gridTemplateRows: '20px 43px auto',
+        minHeight: 83,
         alignItems: 'stretch',
         alignContent: 'start',
       }}
@@ -61,11 +61,13 @@ export default function LabeledDateField({
               slotProps: {
                 formHelperText: {
                   sx: {
-                    height: 20,
+                    minHeight: 20,
                     lineHeight: '20px',
                     margin: 0,
                     display: 'flex',
-                    alignItems: 'center',
+                    alignItems: 'flex-start',
+                    pt: 0.5,
+                    whiteSpace: 'normal',
                   },
                 },
               },

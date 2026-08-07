@@ -22,6 +22,13 @@ const mapPlanOutput = (plan: any) => ({
   amount: toNumber(plan.amount),
 });
 
+const mapEventOutput = (event: any) => ({
+  ...event,
+  amount: toNumber(event.amount),
+  pricePerUnit: toNumber(event.pricePerUnit),
+  netAmount: toNumber(event.netAmount),
+});
+
 @Injectable()
 export class ContributionPlanPrismaRepository
   implements IContributionPlanDataSourcePort
@@ -153,7 +160,7 @@ export class ContributionPlanPrismaRepository
           amount: planPayload.amount as unknown as number,
           cadenceUnit: String(planPayload.cadenceUnit),
           cadenceInterval: Number(planPayload.cadenceInterval),
-          historicalImportMode: planPayload.historicalImportMode || 'MANUAL_REVIEW',
+          historicalImportMode: planPayload.historicalImportMode || 'TRACK_FROM_TODAY',
           anchorDate: new Date(planPayload.anchorDate),
           lastGeneratedDueDate: normalizeDate(planPayload.lastGeneratedDueDate),
           nextDueDate: normalizeDate(planPayload.nextDueDate),
@@ -257,6 +264,96 @@ export class ContributionPlanPrismaRepository
       return {
         plan: mapPlanOutput(createdPlan),
         historicalEvents: persistedEvents,
+      };
+    });
+  }
+
+  async skipCurrentContribution(data: {
+    investmentId: string;
+    planId: string;
+    userId: number;
+    dueDate: string;
+    nextDueDate: string | null;
+    notes?: string;
+  }): Promise<any> {
+    const investmentIdNum = Number(data.investmentId);
+    const planIdNum = Number(data.planId);
+    const dueDate = normalizeDate(data.dueDate);
+
+    return this.prisma.$transaction(async (tx) => {
+      const plan = await tx.investmentContributionPlan.findUnique({
+        where: { id: planIdNum },
+      });
+
+      if (!plan || plan.investmentId !== investmentIdNum) {
+        throw new Error('Recurring plan not found');
+      }
+
+      const investment = await tx.investment.findFirst({
+        where: { id: investmentIdNum, userId: data.userId },
+      });
+
+      if (!investment) {
+        throw new Error('Investment not found');
+      }
+
+      if (!dueDate) {
+        throw new Error('Current due contribution date is invalid');
+      }
+
+      const existingEvent = await tx.investmentEvent.findFirst({
+        where: {
+          recurringPlanId: planIdNum,
+          dueDate,
+          eventType: 'CONTRIBUTION',
+        },
+      });
+
+      if (existingEvent?.status === 'CONFIRMED') {
+        throw new Error('This due contribution is already recorded as paid');
+      }
+
+      if (existingEvent?.status === 'SKIPPED') {
+        throw new Error('This due contribution was already skipped');
+      }
+
+      const notes = data.notes?.trim() || 'Skipped scheduled contribution';
+
+      const skippedEvent = existingEvent
+        ? await tx.investmentEvent.update({
+            where: { id: existingEvent.id },
+            data: {
+              status: 'SKIPPED',
+              notes,
+            },
+          })
+        : await tx.investmentEvent.create({
+            data: {
+              investmentId: investmentIdNum,
+              recurringPlanId: planIdNum,
+              sourceAccountId: plan.sourceAccountId,
+              linkedTransactionId: null,
+              eventType: 'CONTRIBUTION',
+              dueDate,
+              status: 'SKIPPED',
+              eventSource: 'RECURRING_PLAN',
+              sequenceNumber: null,
+              eventDate: dueDate,
+              amount: plan.amount,
+              notes,
+            },
+          });
+
+      const updatedPlan = await tx.investmentContributionPlan.update({
+        where: { id: planIdNum },
+        data: {
+          nextDueDate: normalizeDate(data.nextDueDate),
+        },
+      });
+
+      return {
+        plan: mapPlanOutput(updatedPlan),
+        skippedEvent: mapEventOutput(skippedEvent),
       };
     });
   }

@@ -11,8 +11,6 @@ datasource db {
 }
 
 enum HistoricalImportMode {
-  GENERATE_ALL
-  MANUAL_REVIEW
   OPENING_BALANCE
   TRACK_FROM_TODAY
 }
@@ -265,7 +263,7 @@ model InvestmentContributionPlan {
   amount             Decimal @db.Decimal(18, 2)
   cadenceUnit        String
   cadenceInterval    Int
-  historicalImportMode HistoricalImportMode @default(MANUAL_REVIEW)
+  historicalImportMode HistoricalImportMode @default(TRACK_FROM_TODAY)
   anchorDate         DateTime
   lastGeneratedDueDate DateTime?
   nextDueDate        DateTime?

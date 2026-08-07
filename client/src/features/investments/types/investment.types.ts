@@ -17,6 +17,40 @@ export interface InvestmentContributionPlan {
 	isActive?: boolean;
 }
 
+export interface InvestmentValuationSnapshot {
+	id: string | number;
+	userId?: string | number;
+	investmentId: string | number;
+	snapshotDate: string;
+	marketValue: number;
+	units?: number | null;
+	price?: number | null;
+	source?: string | null;
+	createdAt?: string;
+}
+
+export interface InvestmentEvent {
+	id: string | number;
+	investmentId: string | number;
+	recurringPlanId?: string | number | null;
+	sourceAccountId?: string | number | null;
+	linkedTransactionId?: string | number | null;
+	eventType: string;
+	dueDate?: string | null;
+	status?: string;
+	eventSource?: string;
+	sequenceNumber?: number | null;
+	eventDate: string;
+	amount?: number | null;
+	units?: number | null;
+	pricePerUnit?: number | null;
+	netAmount?: number | null;
+	notes?: string | null;
+	meta?: Record<string, unknown> | null;
+	createdAt?: string;
+	updatedAt?: string;
+}
+
 export interface Investment {
 	id: string | number;
 	accountId?: number | null;
@@ -43,6 +77,7 @@ export interface Investment {
 	documents?: string;
 	notes?: string | null;
 	activeContributionPlan?: InvestmentContributionPlan | null;
+	valuationSnapshots?: InvestmentValuationSnapshot[];
 	createdAt?: string;
 	updatedAt?: string;
 }

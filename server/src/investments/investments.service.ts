@@ -17,6 +17,34 @@ export class InvestmentsService {
     return this.repository.create(createInvestmentDto, userId);
   }
 
+  private getLatestSnapshot(snapshots: any[] = []) {
+    return snapshots
+      .filter((snapshot) => snapshot?.snapshotDate)
+      .sort(
+        (left, right) =>
+          new Date(right.snapshotDate).getTime() -
+          new Date(left.snapshotDate).getTime(),
+      )[0] ?? null;
+  }
+
+  private mergeDerivedValuation(investment: any, snapshots: any[] = []) {
+    const latestSnapshot = this.getLatestSnapshot(snapshots);
+    if (!latestSnapshot) {
+      return {
+        ...investment,
+        valuationSnapshots: snapshots,
+      };
+    }
+
+    return {
+      ...investment,
+      currentValue: Number(latestSnapshot.marketValue ?? investment.currentValue ?? 0),
+      lastValuationAt: latestSnapshot.snapshotDate ?? investment.lastValuationAt,
+      currentValueSource: 'valuation_snapshot',
+      valuationSnapshots: snapshots,
+    };
+  }
+
   async findAll(userId: number) {
     const investments = await this.repository.findAll(userId);
     const allPlans = await Promise.all(
@@ -27,7 +55,7 @@ export class InvestmentsService {
     );
     return investments.map((inv, i) => {
       const activePlan = allPlans[i].find((p) => p.status === 'active') ?? null;
-      return {
+      return this.mergeDerivedValuation({
         ...inv,
         activeContributionPlan: activePlan
           ? {
@@ -42,8 +70,7 @@ export class InvestmentsService {
               status: activePlan.status,
             }
           : null,
-        valuationSnapshots: allSnapshots[i],
-      };
+      }, allSnapshots[i]);
     });
   }
 
@@ -55,7 +82,7 @@ export class InvestmentsService {
       .find((p) => p.status === 'active') ?? null;
     const valuationSnapshots = await this.valuationSnapshotsService.findAllByInvestment(String(investment.id));
 
-    return {
+    return this.mergeDerivedValuation({
       ...investment,
       activeContributionPlan: activePlan
         ? {
@@ -70,8 +97,7 @@ export class InvestmentsService {
             status: activePlan.status,
           }
         : null,
-      valuationSnapshots,
-    };
+    }, valuationSnapshots);
   }
 
   async update(id: number, updateInvestmentDto: UpdateInvestmentDto, userId: number) {

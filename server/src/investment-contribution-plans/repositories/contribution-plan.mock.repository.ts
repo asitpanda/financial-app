@@ -121,7 +121,7 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
       amount: Number(planPayload.amount),
       cadenceUnit: String(planPayload.cadenceUnit),
       cadenceInterval: Number(planPayload.cadenceInterval),
-      historicalImportMode: planPayload.historicalImportMode || 'MANUAL_REVIEW',
+      historicalImportMode: planPayload.historicalImportMode || 'TRACK_FROM_TODAY',
       anchorDate: new Date(planPayload.anchorDate),
       lastGeneratedDueDate: normalizeDate(planPayload.lastGeneratedDueDate),
       nextDueDate: normalizeDate(planPayload.nextDueDate),
@@ -208,6 +208,94 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
     return {
       plan: newPlan,
       historicalEvents,
+    };
+  }
+
+  async skipCurrentContribution(data: {
+    investmentId: string;
+    planId: string;
+    userId: number;
+    dueDate: string;
+    nextDueDate: string | null;
+    notes?: string;
+  }): Promise<any> {
+    const investmentIdNum = Number(data.investmentId);
+    const planIdNum = Number(data.planId);
+    const dueDate = normalizeDate(data.dueDate);
+
+    const plan = mockInvestmentContributionPlans.find(
+      (item) => item.id === planIdNum && item.investmentId === investmentIdNum,
+    );
+    if (!plan) {
+      throw new Error('Recurring plan not found');
+    }
+
+    const investment = mockInvestmentsData.find(
+      (item) => item.id === investmentIdNum && item.userId === data.userId,
+    );
+    if (!investment) {
+      throw new Error('Investment not found');
+    }
+
+    if (!dueDate) {
+      throw new Error('Current due contribution date is invalid');
+    }
+
+    const existingEventIndex = mockInvestmentEvents.findIndex(
+      (event) =>
+        event.recurringPlanId === planIdNum &&
+        event.eventType === 'CONTRIBUTION' &&
+        event.dueDate &&
+        new Date(event.dueDate).toISOString() === dueDate.toISOString(),
+    );
+
+    if (existingEventIndex >= 0) {
+      if (mockInvestmentEvents[existingEventIndex].status === 'CONFIRMED') {
+        throw new Error('This due contribution is already recorded as paid');
+      }
+      if (mockInvestmentEvents[existingEventIndex].status === 'SKIPPED') {
+        throw new Error('This due contribution was already skipped');
+      }
+
+      mockInvestmentEvents[existingEventIndex] = {
+        ...mockInvestmentEvents[existingEventIndex],
+        status: 'SKIPPED',
+        notes: data.notes?.trim() || 'Skipped scheduled contribution',
+        updatedAt: new Date(),
+      };
+    } else {
+      mockInvestmentEvents.push({
+        id: mockInvestmentEvents.length ? Math.max(...mockInvestmentEvents.map((event) => event.id)) + 1 : 1,
+        investmentId: investmentIdNum,
+        recurringPlanId: planIdNum,
+        sourceAccountId: plan.sourceAccountId,
+        linkedTransactionId: null,
+        eventType: 'CONTRIBUTION',
+        dueDate,
+        status: 'SKIPPED',
+        eventSource: 'RECURRING_PLAN',
+        sequenceNumber: null,
+        eventDate: dueDate,
+        amount: Number(plan.amount),
+        units: null,
+        pricePerUnit: null,
+        netAmount: null,
+        notes: data.notes?.trim() || 'Skipped scheduled contribution',
+        meta: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+
+    plan.nextDueDate = normalizeDate(data.nextDueDate);
+    plan.updatedAt = new Date();
+
+    return {
+      plan,
+      skippedEvent:
+        existingEventIndex >= 0
+          ? mockInvestmentEvents[existingEventIndex]
+          : mockInvestmentEvents[mockInvestmentEvents.length - 1],
     };
   }
 

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
+import dayjs from "dayjs";
 import {
   Alert,
   alpha,
@@ -32,6 +33,12 @@ import {
   STATUS_OPTIONS,
 } from "../../../utils/investmentHelpers";
 import { validateInvestmentForm } from "../investment.schema";
+
+const toDayjsOrNull = (value) => {
+  if (!value) return null;
+  const parsed = dayjs(value);
+  return parsed.isValid() ? parsed : null;
+};
 
 export default function InvestmentFormDrawer({
   open,
@@ -66,6 +73,19 @@ export default function InvestmentFormDrawer({
 
   useEffect(() => {
     if (!open) return;
+    const existingPlan = initialValues?.activeContributionPlan;
+    const defaultHistoricalMode =
+      existingPlan?.historicalImportMode || "TRACK_FROM_TODAY";
+    const seededOpeningPrincipalAmount =
+      existingPlan?.openingPrincipalAmount !== undefined &&
+      existingPlan?.openingPrincipalAmount !== null &&
+      existingPlan?.openingPrincipalAmount !== ""
+        ? String(existingPlan.openingPrincipalAmount)
+        : defaultHistoricalMode === "OPENING_BALANCE" &&
+            Number(initialValues?.totalInvested || 0) > 0
+          ? String(initialValues?.totalInvested)
+          : "";
+
     setForm(
       initialValues
         ? buildFormFromInvestment(initialValues, taxonomyNodes)
@@ -74,9 +94,6 @@ export default function InvestmentFormDrawer({
     setErrors({});
     setRecurringErrors({});
     setLocalSubmitError("");
-    const existingPlan = initialValues?.activeContributionPlan;
-    const defaultHistoricalMode =
-      existingPlan?.historicalImportMode || "TRACK_FROM_TODAY";
     setContributionType(existingPlan ? "recurring" : "one-time");
     setRecurringPlan({
       frequency:
@@ -88,17 +105,48 @@ export default function InvestmentFormDrawer({
               ? "yearly"
               : "monthly",
       amount: existingPlan?.amount ? String(existingPlan.amount) : "",
-      anchorDate: existingPlan?.anchorDate || initialValues?.startDate || null,
-      nextContributionDate: existingPlan?.nextDueDate || null,
-      endDate: existingPlan?.endDate || null,
+      anchorDate: toDayjsOrNull(
+        existingPlan?.anchorDate || initialValues?.startDate,
+      ),
+      nextContributionDate: toDayjsOrNull(existingPlan?.nextDueDate),
+      endDate: toDayjsOrNull(existingPlan?.endDate),
       historicalImportMode: defaultHistoricalMode,
-      openingPrincipalAmount: "",
+      openingPrincipalAmount: seededOpeningPrincipalAmount,
       openingIncomeAmount: "",
     });
     setPastInvestmentChoice(
       defaultHistoricalMode === "TRACK_FROM_TODAY" ? "no" : "yes",
     );
   }, [initialValues, open, taxonomyNodes]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (recurringPlan.historicalImportMode !== "OPENING_BALANCE") return;
+    if (recurringPlan.openingPrincipalAmount) return;
+
+    const seededOpeningPrincipalAmount = Number(form.totalInvested || 0);
+    if (seededOpeningPrincipalAmount <= 0) return;
+
+    setRecurringPlan((current) => {
+      if (
+        current.historicalImportMode !== "OPENING_BALANCE" ||
+        current.openingPrincipalAmount
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        openingPrincipalAmount: String(seededOpeningPrincipalAmount),
+      };
+    });
+  }, [
+    form.totalInvested,
+    initialValues?.activeContributionPlan,
+    open,
+    recurringPlan.historicalImportMode,
+    recurringPlan.openingPrincipalAmount,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -177,6 +225,10 @@ export default function InvestmentFormDrawer({
 
   const handleSubmit = async () => {
     const validationErrors = validateInvestmentForm(form);
+    if (!isRecurring && Number(form.totalInvested || 0) <= 0) {
+      validationErrors.totalInvested =
+        "Investment amount must be greater than 0";
+    }
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       return;
@@ -265,7 +317,15 @@ export default function InvestmentFormDrawer({
     const selectedNode = taxonomyNodes.find(
       (node) => String(node.id) === String(nextItemId),
     );
-    if (!selectedNode || Number(selectedNode.level) === 1) return;
+    if (!selectedNode) return;
+
+    const isLevelOneNode = Number(selectedNode.level) === 1;
+    const hasActiveChildren = taxonomyNodes.some(
+      (node) =>
+        node?.isActive !== false &&
+        String(node.parentId ?? "") === String(selectedNode.id),
+    );
+    if (isLevelOneNode && hasActiveChildren) return;
 
     setPendingTypeNodeId(String(nextItemId));
   };
@@ -330,14 +390,16 @@ export default function InvestmentFormDrawer({
   ];
 
   const isRecurring = contributionType === "recurring";
+  const hasExistingActiveRecurringPlan = Boolean(
+    initialValues?.activeContributionPlan,
+  );
+  const isHistoricalImportLocked =
+    isRecurring && hasExistingActiveRecurringPlan;
   const isOpeningBalanceMode =
     recurringPlan.historicalImportMode === "OPENING_BALANCE";
   const showHistoricalModeSelector =
     isRecurring && pastInvestmentChoice === "yes";
-  const showHistoricalExplanation =
-    showHistoricalModeSelector &&
-    (recurringPlan.historicalImportMode === "GENERATE_ALL" ||
-      recurringPlan.historicalImportMode === "MANUAL_REVIEW");
+  const showHistoricalExplanation = false;
   const showOpeningInputs = showHistoricalModeSelector && isOpeningBalanceMode;
   const seedPrincipalAmount = Number(form.totalInvested || 0);
   const openingPrincipalAmount = Number(
@@ -346,6 +408,16 @@ export default function InvestmentFormDrawer({
   const openingIncomeAmount = Number(recurringPlan.openingIncomeAmount || 0);
   const shouldShowOpeningSeedGuardrail =
     showOpeningInputs && seedPrincipalAmount > 0 && openingPrincipalAmount > 0;
+  const isHistoricalOneTimeInvestment =
+    !isRecurring &&
+    Boolean(form.startDate) &&
+    dayjs(form.startDate).isValid() &&
+    dayjs(form.startDate).isBefore(dayjs(), "day");
+  const oneTimeAmountHelperText = isHistoricalOneTimeInvestment
+    ? "Enter the historical one-time amount invested on the selected start date."
+    : "Enter the one-time amount invested for this asset.";
+  const historicalImportLockedMessage =
+    "You can’t change historical import for an active recurring plan from this edit flow. Historical setup is only available when creating a new plan.";
 
   const impactSummary = useMemo(() => {
     if (!isRecurring) return [];
@@ -361,23 +433,6 @@ export default function InvestmentFormDrawer({
 
     if (recurringPlan.historicalImportMode === "TRACK_FROM_TODAY") {
       summary.push("Will not backfill past history.");
-      return summary;
-    }
-
-    if (recurringPlan.historicalImportMode === "GENERATE_ALL") {
-      summary.push(
-        "Will auto-create past installments up to today based on cadence.",
-      );
-      summary.push(
-        "Server remains source-of-truth even if reviewed list is empty at confirm.",
-      );
-      return summary;
-    }
-
-    if (recurringPlan.historicalImportMode === "MANUAL_REVIEW") {
-      summary.push(
-        "Will generate past installments for review; only selected rows are confirmed.",
-      );
       return summary;
     }
 
@@ -404,6 +459,12 @@ export default function InvestmentFormDrawer({
     pastInvestmentChoice,
     recurringPlan.historicalImportMode,
   ]);
+
+  // Display helpers: clear valuation inputs when historical import is enabled
+  const displayTotalInvested =
+    isRecurring && pastInvestmentChoice === 'yes' ? '' : form.totalInvested;
+  const displayCurrentValue =
+    isRecurring && pastInvestmentChoice === 'yes' ? '' : form.currentValue;
 
   const footer = (
     <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1.5 }}>
@@ -569,7 +630,10 @@ export default function InvestmentFormDrawer({
           </Stack>
         </SectionCard>
 
-        <SectionCard title="Basic Information">
+        <SectionCard
+          title="Investment Details"
+          subtitle="These fields belong to the investment record itself."
+        >
           <Box
             sx={{
               display: "grid",
@@ -636,7 +700,7 @@ export default function InvestmentFormDrawer({
 
         <SectionCard
           title="Investment Valuation"
-          subtitle="Valuation fields describe portfolio value; they do not create historical contribution events."
+          subtitle="These fields belong to the investment record and describe value only; they do not create recurring-plan history."
         >
           <Box
             sx={{
@@ -650,28 +714,24 @@ export default function InvestmentFormDrawer({
           >
             <LabelCurrencyField
               labelText={
-                isRecurring
-                  ? "Initial Principal (Seed Value)"
-                  : "Total Invested"
+                isRecurring ? "Initial Principal (Seed Value)" : "Investment Amount"
               }
-              value={form.totalInvested}
-              onValueChange={(value) =>
-                handleFormChange("totalInvested", value)
-              }
+              value={displayTotalInvested}
+              onValueChange={(value) => handleFormChange("totalInvested", value)}
               errorMessage={errors.totalInvested}
               helperText={
                 isRecurring
-                  ? recurringPlan.historicalImportMode === "OPENING_BALANCE"
-                    ? "Used as starting value; Opening Principal event becomes the tracked invested principal after confirm."
-                    : "Starting invested principal before recurring event history is confirmed."
-                  : "Total principal invested to date."
+                  ? "System-calculated from confirmed historical events."
+                  : oneTimeAmountHelperText
               }
+              disabled={isRecurring}
             />
             <LabelCurrencyField
               labelText="Current Value (Optional)"
-              value={form.currentValue}
+              value={displayCurrentValue}
               onValueChange={(value) => handleFormChange("currentValue", value)}
-              helperText="Optional market valuation for returns; does not create contribution events."
+              helperText="System-calculated from valuation import/history."
+              disabled
             />
             <LabeledDateField
               labelText="Maturity Date (Optional)"
@@ -699,14 +759,23 @@ export default function InvestmentFormDrawer({
 
         {isRecurring ? (
           <SectionCard
-            title="Historical Import Setup"
-            subtitle="Configure cadence and choose how past contribution history should be created."
+            title="Recurring Plan"
+            subtitle="These fields update the recurring contribution plan attached to this investment."
           >
             <Stack spacing={1.5}>
               <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 1 }}>
                 <Typography variant="caption" color="text.secondary">
                   Are you already invested in this asset?
                 </Typography>
+                {isHistoricalImportLocked ? (
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mt: 0.75 }}
+                  >
+                    {historicalImportLockedMessage}
+                  </Typography>
+                ) : null}
                 <Box
                   sx={{
                     display: "grid",
@@ -730,18 +799,24 @@ export default function InvestmentFormDrawer({
                       <Paper
                         key={option.value}
                         variant="outlined"
-                        onClick={() =>
-                          handlePastInvestmentChoiceChange(option.value)
+                        onClick={
+                          isHistoricalImportLocked
+                            ? undefined
+                            : () =>
+                                handlePastInvestmentChoiceChange(option.value)
                         }
                         sx={{
                           p: 1.25,
                           borderRadius: 1,
-                          cursor: "pointer",
+                          cursor: isHistoricalImportLocked
+                            ? "not-allowed"
+                            : "pointer",
                           borderColor: selected ? "primary.main" : "divider",
                           backgroundColor: (theme) =>
                             selected
                               ? alpha(theme.palette.primary.main, 0.06)
                               : theme.palette.background.paper,
+                          opacity: isHistoricalImportLocked ? 0.72 : 1,
                         }}
                       >
                         <Typography sx={{ fontWeight: 600 }}>
@@ -825,20 +900,17 @@ export default function InvestmentFormDrawer({
                       label: "Start from Today (No Backfill)",
                     },
                     {
-                      value: "GENERATE_ALL",
-                      label: "Auto-create All Past Installments",
-                    },
-                    {
-                      value: "MANUAL_REVIEW",
-                      label: "Review and Select Past Installments",
-                    },
-                    {
                       value: "OPENING_BALANCE",
                       label: "Import Opening Balance (Principal/Income)",
                     },
                   ]}
                   errorMessage={recurringErrors.historicalImportMode}
-                  helperText="Controls how historical contribution events are created during recurring plan confirm."
+                  helperText={
+                    isHistoricalImportLocked
+                      ? historicalImportLockedMessage
+                      : "Controls how historical contribution events are created during recurring plan confirm."
+                  }
+                  disabled={isHistoricalImportLocked}
                 />
               ) : (
                 <Alert severity="info">
@@ -847,13 +919,7 @@ export default function InvestmentFormDrawer({
                 </Alert>
               )}
 
-              {showHistoricalExplanation ? (
-                <Alert severity="info">
-                  {recurringPlan.historicalImportMode === "GENERATE_ALL"
-                    ? "Past installments will be auto-generated up to today based on frequency and anchor date."
-                    : "Past installments will be generated for review. You can edit and select which ones to confirm."}
-                </Alert>
-              ) : null}
+              {/* Historical generation/review modes removed — only TRACK_FROM_TODAY and OPENING_BALANCE supported */}
 
               {showOpeningInputs ? (
                 <>
@@ -882,6 +948,7 @@ export default function InvestmentFormDrawer({
                       }
                       errorMessage={recurringErrors.openingPrincipalAmount}
                       helperText="Creates OPENING_BALANCE historical event and contributes to invested principal."
+                      disabled={isHistoricalImportLocked}
                     />
                     <LabelCurrencyField
                       labelText="Opening Income/Profit Amount"
@@ -890,6 +957,7 @@ export default function InvestmentFormDrawer({
                         handleRecurringPlanChange("openingIncomeAmount", value)
                       }
                       helperText="Creates OPENING_INCOME_CREDIT historical event for return history (not principal)."
+                      disabled={isHistoricalImportLocked}
                     />
                   </Box>
                 </>

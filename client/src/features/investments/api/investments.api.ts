@@ -28,7 +28,10 @@ export const updateInvestment = async (
   id: string | number,
   data: UpdateInvestmentDto,
 ): Promise<Investment> => {
-  const response = await apiClient.patch(`/investments/${id}`, data);
+  const { id: _ignoredId, ...payload } = (data || {}) as UpdateInvestmentDto & {
+    id?: string | number;
+  };
+  const response = await apiClient.patch(`/investments/${id}`, payload);
   return response.data;
 };
 

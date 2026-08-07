@@ -11,6 +11,14 @@ export interface IContributionPlanDataSourcePort {
     planPayload: any;
     selectedHistoricalItems: any[];
   }): Promise<any>;
+  skipCurrentContribution(data: {
+    investmentId: string;
+    planId: string;
+    userId: number;
+    dueDate: string;
+    nextDueDate: string | null;
+    notes?: string;
+  }): Promise<any>;
   generateDueRecurringInvestmentEvents(data: {
     cutoffDate: Date;
     limit?: number;

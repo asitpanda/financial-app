@@ -1,32 +1,21 @@
 // @ts-nocheck
 import React from "react";
 import {
+  Alert,
   Box,
-  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  MenuItem,
   Stack,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
-  TextField,
   Typography,
 } from "@mui/material";
 import AppButton from "../../../components/common/AppButton";
-
-const STATUS_OPTIONS = [
-  { value: "EXPECTED", label: "Expected" },
-  { value: "PENDING", label: "Pending" },
-  { value: "CONFIRMED", label: "Confirmed" },
-  { value: "SKIPPED", label: "Skipped" },
-  { value: "FAILED", label: "Failed" },
-  { value: "CANCELLED", label: "Cancelled" },
-];
 
 export default function RecurringOccurrencesReviewDialog({
   open,
@@ -34,17 +23,15 @@ export default function RecurringOccurrencesReviewDialog({
   items,
   investmentName,
   historicalImportMode,
+  reviewSummary,
+  dialogTitle = "Review Investment Setup",
   onCancel,
   onConfirm,
-  onChangeItem,
+  confirmLabel = "Confirm",
 }) {
-  const selectedCount = Array.isArray(items)
-    ? items.filter((item) => item.selected).length
-    : 0;
-
-  const selectedItems = Array.isArray(items)
-    ? items.filter((item) => item.selected)
-    : [];
+  const reviewItems = Array.isArray(items) ? items : [];
+  const selectedItems = reviewItems.filter((item) => item.selected !== false);
+  const selectedCount = selectedItems.length;
 
   const isIncomeEvent = (eventType) =>
     String(eventType || "")
@@ -67,6 +54,21 @@ export default function RecurringOccurrencesReviewDialog({
     0,
   );
 
+  const summarySections = [
+    {
+      title: "Investment Details",
+      items: reviewSummary?.investment || [],
+    },
+    {
+      title: "Valuation Handling",
+      items: reviewSummary?.valuation || [],
+    },
+    {
+      title: "Recurring Plan",
+      items: reviewSummary?.recurring || [],
+    },
+  ].filter((section) => section.items.length > 0);
+
   return (
     <Dialog
       open={open}
@@ -74,17 +76,61 @@ export default function RecurringOccurrencesReviewDialog({
       maxWidth="lg"
       fullWidth
     >
-      <DialogTitle>Review Historical Occurrences</DialogTitle>
+      <DialogTitle>{dialogTitle}</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={1.5}>
           <Typography variant="body2" color="text.secondary">
             {investmentName
               ? `Investment: ${investmentName}`
-              : "Review generated occurrences before confirming recurring plan."}
+              : "Review the investment summary before confirming creation."}
+          </Typography>
+
+          <Alert severity="info">
+            Review the investment summary below. If anything looks wrong, go
+            back to the form and update it before confirming.
+          </Alert>
+
+          {summarySections.length ? (
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" },
+                gap: 1,
+              }}
+            >
+              {summarySections.map((section) => (
+                <Box
+                  key={section.title}
+                  sx={{
+                    border: "1px solid",
+                    borderColor: "divider",
+                    borderRadius: 1,
+                    p: 1.25,
+                  }}
+                >
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                    {section.title}
+                  </Typography>
+                  <Stack spacing={0.75}>
+                    {section.items.map((item) => (
+                      <Box key={item.label}>
+                        <Typography variant="caption" color="text.secondary">
+                          {item.label}
+                        </Typography>
+                        <Typography variant="body2">{item.value}</Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                </Box>
+              ))}
+            </Box>
+          ) : null}
+
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+            Historical Import Summary
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            Mode: {historicalImportMode || "TRACK_FROM_TODAY"} • Selected:{" "}
-            {selectedCount}
+            Mode: {historicalImportMode || "TRACK_FROM_TODAY"} • Selected events: {selectedCount}
           </Typography>
 
           <Box
@@ -132,7 +178,7 @@ export default function RecurringOccurrencesReviewDialog({
             </Box>
           </Box>
 
-          {!items.length ? (
+          {!selectedItems.length ? (
             <Typography variant="body2" color="text.secondary">
               No historical occurrences generated for this plan.
             </Typography>
@@ -148,7 +194,6 @@ export default function RecurringOccurrencesReviewDialog({
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Select</TableCell>
                     <TableCell>Due Date</TableCell>
                     <TableCell>Amount</TableCell>
                     <TableCell>Status</TableCell>
@@ -157,64 +202,13 @@ export default function RecurringOccurrencesReviewDialog({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {items.map((item, index) => (
-                    <TableRow
-                      key={`${item.dueDate}-${item.sequenceNumber || index}`}
-                    >
-                      <TableCell>
-                        <Checkbox
-                          checked={Boolean(item.selected)}
-                          onChange={(event) =>
-                            onChangeItem(index, {
-                              selected: event.target.checked,
-                            })
-                          }
-                        />
-                      </TableCell>
+                  {selectedItems.map((item, index) => (
+                    <TableRow key={`${item.dueDate}-${item.sequenceNumber || index}`}>
                       <TableCell>{item.dueDate || "-"}</TableCell>
-                      <TableCell>
-                        <TextField
-                          type="number"
-                          size="small"
-                          value={item.amount ?? ""}
-                          inputProps={{ min: 0, step: "0.01" }}
-                          onChange={(event) =>
-                            onChangeItem(index, {
-                              amount: Number(event.target.value || 0),
-                            })
-                          }
-                          sx={{ width: 120 }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <TextField
-                          select
-                          size="small"
-                          value={item.status || "PENDING"}
-                          onChange={(event) =>
-                            onChangeItem(index, { status: event.target.value })
-                          }
-                          sx={{ width: 140 }}
-                        >
-                          {STATUS_OPTIONS.map((status) => (
-                            <MenuItem key={status.value} value={status.value}>
-                              {status.label}
-                            </MenuItem>
-                          ))}
-                        </TextField>
-                      </TableCell>
+                      <TableCell>{Number(item.amount || 0).toFixed(2)}</TableCell>
+                      <TableCell>{item.status || "PENDING"}</TableCell>
                       <TableCell>{item.eventType || "CONTRIBUTION"}</TableCell>
-                      <TableCell>
-                        <TextField
-                          size="small"
-                          value={item.notes || ""}
-                          onChange={(event) =>
-                            onChangeItem(index, { notes: event.target.value })
-                          }
-                          placeholder="Optional note"
-                          sx={{ minWidth: 200 }}
-                        />
-                      </TableCell>
+                      <TableCell>{item.notes || "-"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -225,10 +219,10 @@ export default function RecurringOccurrencesReviewDialog({
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}>
         <AppButton variant="outlined" onClick={onCancel} disabled={loading}>
-          Cancel
+          Back
         </AppButton>
         <AppButton variant="contained" onClick={onConfirm} disabled={loading}>
-          {loading ? "Confirming..." : "Confirm Recurring Plan"}
+          {loading ? "Confirming..." : confirmLabel}
         </AppButton>
       </DialogActions>
     </Dialog>

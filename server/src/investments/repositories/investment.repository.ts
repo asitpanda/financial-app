@@ -20,6 +20,10 @@ export class InvestmentRepository {
     return this.dataSource.findOne(id, userId);
   }
 
+  async findById(id: number): Promise<any> {
+    return this.dataSource.findById(id);
+  }
+
   async update(id: number, data: any, userId: number): Promise<any> {
     return this.dataSource.update(id, data, userId);
   }

@@ -38,6 +38,10 @@ export class InvestmentMockRepository implements IInvestmentDataSourcePort {
     return mockInvestments.find((investment) => investment.id === id && investment.userId === userId);
   }
 
+  async findById(id: number): Promise<any> {
+    return mockInvestments.find((investment) => investment.id === id);
+  }
+
   async update(id: number, data: any, userId: number): Promise<any> {
     const index = mockInvestments.findIndex((investment) => investment.id === id && investment.userId === userId);
     if (index === -1) return null;

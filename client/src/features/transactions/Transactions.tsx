@@ -31,6 +31,7 @@ import { useDialogStore } from "../../store/dialogStore";
 import { useNotificationStore } from "../../store/notificationStore";
 import {
   matchesPageDateFilter,
+  resolveFiscalMonthYear,
   usePageDateFilterStore,
 } from "../../store/pageDateFilterStore";
 import {
@@ -76,6 +77,12 @@ interface DateFilterState {
   dateRangeShortcut: DateRangeShortcut;
 }
 
+type PrefillFilter = {
+  mode?: "monthly" | "yearly";
+  fiscalYearStart?: number;
+  month?: number;
+};
+
 interface TransactionTableRow {
   id: string;
   tx: TransactionRecord;
@@ -89,7 +96,23 @@ interface TransactionTableRow {
 }
 
 const getInitialDateFilter = (prefillFilter: unknown): DateFilterState => {
-  void prefillFilter;
+  if (prefillFilter && typeof prefillFilter === "object") {
+    const { mode, fiscalYearStart, month } = prefillFilter as PrefillFilter;
+
+    if (mode === "monthly" && Number.isInteger(fiscalYearStart) && Number.isInteger(month)) {
+      const resolved = resolveFiscalMonthYear(Number(fiscalYearStart), Number(month));
+      const start = dayjs(new Date(resolved.year, resolved.month, 1)).startOf("month");
+      const end = start.endOf("month");
+      return { dateRange: [start, end], dateRangeShortcut: "custom" };
+    }
+
+    if (mode === "yearly" && Number.isInteger(fiscalYearStart)) {
+      const start = dayjs(new Date(Number(fiscalYearStart), 3, 1)).startOf("day");
+      const end = start.add(1, "year").subtract(1, "day").endOf("day");
+      return { dateRange: [start, end], dateRangeShortcut: "custom" };
+    }
+  }
+
   return { dateRange: [null, null], dateRangeShortcut: "all" };
 };
 

@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getFinancialAccounts } from '../../accounts/financialAccounts.api';
-import investmentApi from '../api/investments.api';
 import investmentEventsApi from '../api/investmentEvents.api';
+import investmentApi from '../api/investments.api';
 import investmentAssetTaxonomyApi from '../api/investmentAssetTaxonomy.api';
+import valuationSnapshotsApi from '../api/valuationSnapshots.api';
 import { useNotificationStore } from '../../../store/notificationStore';
 import { removeInvestment, saveInvestment } from '../service/investments.service';
 import type {
@@ -49,6 +50,7 @@ export const useCreateInvestment = () => {
   return useMutation({
     mutationFn: (data: CreateInvestmentDto) => investmentApi.create(data),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investment'] });
       queryClient.invalidateQueries({ queryKey: ['investments'] });
       queryClient.invalidateQueries({ queryKey: ['investments', 'page-data'] });
     },
@@ -67,6 +69,7 @@ export const useUpdateInvestment = () => {
       data: UpdateInvestmentDto;
     }) => investmentApi.update(id, data),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investment'] });
       queryClient.invalidateQueries({ queryKey: ['investments'] });
       queryClient.invalidateQueries({ queryKey: ['investments', 'page-data'] });
     },
@@ -79,6 +82,7 @@ export const useDeleteInvestment = () => {
   return useMutation({
     mutationFn: (id: string | number) => investmentApi.delete(id),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investment'] });
       queryClient.invalidateQueries({ queryKey: ['investments'] });
       queryClient.invalidateQueries({ queryKey: ['investments', 'page-data'] });
     },
@@ -97,6 +101,7 @@ export const useSaveInvestment = () => {
       selectedInvestmentId?: string | number | null;
     }) => saveInvestment({ payload, selectedInvestmentId }),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investment'] });
       queryClient.invalidateQueries({ queryKey: ['investments'] });
       queryClient.invalidateQueries({ queryKey: ['investments', 'page-data'] });
     },
@@ -109,6 +114,7 @@ export const useRemoveInvestment = () => {
   return useMutation({
     mutationFn: (id: string | number) => removeInvestment(id),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investment'] });
       queryClient.invalidateQueries({ queryKey: ['investments'] });
       queryClient.invalidateQueries({ queryKey: ['investments', 'page-data'] });
     },
@@ -121,24 +127,36 @@ export const useInvestmentPageData = () => {
   const query = useQuery<InvestmentPageData>({
     queryKey: ['investments', 'page-data'],
     queryFn: async () => {
-      const [investments, taxonomyNodes, accounts] = await Promise.all([
+      const [investments, taxonomyNodes, accounts, investmentEvents, valuationSnapshots] = await Promise.all([
         investmentApi.getAll(),
         investmentAssetTaxonomyApi.getAll(),
         getFinancialAccounts(),
+        investmentEventsApi.getAll(),
+        valuationSnapshotsApi.getAll(),
       ]);
 
       const normalizedInvestments = Array.isArray(investments) ? investments : [];
-      const eventGroups = await Promise.all(
-        normalizedInvestments.map((investment) =>
-          investmentEventsApi
-            .getByInvestmentId(investment.id)
-            .catch(() => [] as InvestmentEvent[]),
-        ),
-      );
+      const normalizedEvents = Array.isArray(investmentEvents) ? investmentEvents : [];
+      const normalizedSnapshots = Array.isArray(valuationSnapshots)
+        ? valuationSnapshots
+        : [];
+      const snapshotsByInvestmentId = normalizedSnapshots.reduce<
+        Record<string, Investment['valuationSnapshots']>
+      >((acc, snapshot) => {
+        const key = String(snapshot.investmentId);
+        if (!acc[key]) {
+          acc[key] = [];
+        }
+        acc[key].push(snapshot);
+        return acc;
+      }, {});
 
       return {
-        investments: normalizedInvestments,
-        investmentEvents: eventGroups.flat(),
+        investments: normalizedInvestments.map((investment) => ({
+          ...investment,
+          valuationSnapshots: snapshotsByInvestmentId[String(investment.id)] || [],
+        })),
+        investmentEvents: normalizedEvents,
         taxonomyNodes: Array.isArray(taxonomyNodes) ? taxonomyNodes : [],
         accounts: Array.isArray(accounts) ? accounts : [],
       };

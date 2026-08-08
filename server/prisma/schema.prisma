@@ -33,6 +33,13 @@ enum InvestmentEventSource {
   SYSTEM_GENERATED
 }
 
+enum InvestmentEventType {
+  CONTRIBUTION
+  OPENING_BALANCE
+  OPENING_INCOME_CREDIT
+  WITHDRAWAL_PRINCIPAL
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   userId    String?  @unique @db.VarChar(30)
@@ -225,7 +232,7 @@ model InvestmentEvent {
   recurringPlanId       Int?
   sourceAccountId       Int?
   linkedTransactionId   Int?
-  eventType             String
+  eventType             InvestmentEventType
   dueDate               DateTime?
   status                InvestmentEventStatus @default(PENDING)
   eventSource           InvestmentEventSource @default(MANUAL)

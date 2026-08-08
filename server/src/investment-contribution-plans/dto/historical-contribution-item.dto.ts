@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsIn, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { InvestmentEventType } from '@prisma/client';
+import { IsBoolean, IsDateString, IsEnum, IsIn, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class HistoricalContributionItemDto {
   @ApiProperty()
@@ -25,10 +26,11 @@ export class HistoricalContributionItemDto {
   @IsDateString()
   eventDate?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, enum: InvestmentEventType })
   @IsOptional()
   @IsString()
-  eventType?: string;
+  @IsEnum(InvestmentEventType)
+  eventType?: InvestmentEventType;
 
   @ApiProperty({ required: false, minimum: 1 })
   @IsOptional()

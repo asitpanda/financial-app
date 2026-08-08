@@ -249,6 +249,20 @@ BEGIN
       'SYSTEM_GENERATED'
     );
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE t.typname = 'InvestmentEventType' AND n.nspname = 'public'
+  ) THEN
+    CREATE TYPE public."InvestmentEventType" AS ENUM (
+      'CONTRIBUTION',
+      'OPENING_BALANCE',
+      'OPENING_INCOME_CREDIT',
+      'WITHDRAWAL_PRINCIPAL'
+    );
+  END IF;
 END $$;
 
 -- 3.1) Recurring investment schema extensions.
@@ -258,6 +272,22 @@ ALTER TABLE IF EXISTS public.investment_events
   ADD COLUMN IF NOT EXISTS "status" public."InvestmentEventStatus",
   ADD COLUMN IF NOT EXISTS "eventSource" public."InvestmentEventSource",
   ADD COLUMN IF NOT EXISTS "sequenceNumber" INTEGER NULL;
+
+UPDATE public.investment_events
+SET "eventType" = 'CONTRIBUTION'
+WHERE UPPER(COALESCE("eventType", '')) IN ('CONTRIBUTION', 'DEPOSIT', 'PREMIUM');
+
+UPDATE public.investment_events
+SET "eventType" = UPPER("eventType")
+WHERE UPPER(COALESCE("eventType", '')) IN (
+  'OPENING_BALANCE',
+  'OPENING_INCOME_CREDIT',
+  'WITHDRAWAL_PRINCIPAL'
+);
+
+ALTER TABLE IF EXISTS public.investment_events
+  ALTER COLUMN "eventType" TYPE public."InvestmentEventType"
+  USING "eventType"::public."InvestmentEventType";
 
 UPDATE public.investment_events
 SET "status" = 'PENDING'

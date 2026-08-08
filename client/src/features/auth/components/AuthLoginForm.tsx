@@ -79,7 +79,7 @@ export default function AuthLoginForm({
         color="text.secondary"
         sx={{ textAlign: "center" }}
       >
-        Try: demo@example.com / demo123 / +1234567890 with password123
+        Use your registered email, user ID, or mobile number to sign in.
       </Typography>
     </Box>
   );

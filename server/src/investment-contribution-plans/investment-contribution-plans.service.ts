@@ -5,6 +5,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+import { InvestmentEventType } from '@prisma/client';
 import { CreateInvestmentContributionPlanDto } from './dto/create-investment-contribution-plan.dto';
 import { UpdateInvestmentContributionPlanDto } from './dto/update-investment-contribution-plan.dto';
 import { ConfirmRecurringContributionPlanDto } from './dto/confirm-recurring-contribution-plan.dto';
@@ -12,22 +13,40 @@ import { PreviewRecurringContributionPlanDto } from './dto/preview-recurring-con
 import { SkipCurrentContributionDto } from './dto/skip-current-contribution.dto';
 import { ContributionPlanRepository } from './repositories/contribution-plan.repository';
 import { RecurringScheduleCalculator } from './recurring-schedule-calculator.service';
+import { InvestmentRepository } from '../investments/repositories/investment.repository';
+import { FinancialAccountsService } from '../financial-accounts/financial-accounts.service';
 
 @Injectable()
 export class InvestmentContributionPlansService {
   constructor(
     private readonly repository: ContributionPlanRepository,
     private readonly scheduleCalculator: RecurringScheduleCalculator,
+    private readonly investmentRepository: InvestmentRepository,
+    private readonly financialAccountsService: FinancialAccountsService,
   ) {}
 
-  async create(createDto: CreateInvestmentContributionPlanDto) {
+  async create(createDto: CreateInvestmentContributionPlanDto, userId?: number) {
+    if (userId !== undefined) {
+      await this.assertOwnedInvestment(createDto.investmentId, userId);
+      await this.assertOwnedSourceAccount(createDto.sourceAccountId, userId);
+    }
+
     return this.repository.create(createDto);
+  }
+
+  async findAllActiveByUser(userId: number) {
+    return this.repository.findAllActiveByUser(userId);
   }
 
   async previewRecurringPlan(
     investmentId: string,
     dto: PreviewRecurringContributionPlanDto,
+    userId?: number,
   ) {
+    if (userId !== undefined) {
+      await this.assertOwnedInvestment(investmentId, userId);
+    }
+
     this.validatePlanDates(dto.anchorDate, dto.endDate);
 
     const today = this.toUtcDateOnly(new Date());
@@ -73,7 +92,7 @@ export class InvestmentContributionPlansService {
           selected: true,
           suggestedStatus: 'CONFIRMED',
           source: 'OPENING_BALANCE',
-          eventType: 'OPENING_BALANCE',
+          eventType: InvestmentEventType.OPENING_BALANCE,
         });
       }
 
@@ -85,7 +104,7 @@ export class InvestmentContributionPlansService {
           selected: true,
           suggestedStatus: 'CONFIRMED',
           source: 'OPENING_BALANCE',
-          eventType: 'OPENING_INCOME_CREDIT',
+          eventType: InvestmentEventType.OPENING_INCOME_CREDIT,
         });
       }
 
@@ -113,6 +132,8 @@ export class InvestmentContributionPlansService {
     dto: ConfirmRecurringContributionPlanDto,
     userId: number,
   ) {
+    await this.assertOwnedInvestment(investmentId, userId);
+    await this.assertOwnedSourceAccount(dto.sourceAccountId, userId);
     this.validatePlanDates(dto.anchorDate, dto.endDate);
 
     const today = this.toUtcDateOnly(new Date());
@@ -176,7 +197,7 @@ export class InvestmentContributionPlansService {
           amount: principalAmount,
           selected: true,
           status: 'CONFIRMED',
-          eventType: 'OPENING_BALANCE',
+          eventType: InvestmentEventType.OPENING_BALANCE,
           notes: 'Opening principal import',
         });
       }
@@ -187,7 +208,7 @@ export class InvestmentContributionPlansService {
           amount: incomeAmount,
           selected: true,
           status: 'CONFIRMED',
-          eventType: 'OPENING_INCOME_CREDIT',
+          eventType: InvestmentEventType.OPENING_INCOME_CREDIT,
           notes: 'Opening historical income import',
         });
       }
@@ -221,19 +242,44 @@ export class InvestmentContributionPlansService {
     };
   }
 
-  async findAllByInvestment(investmentId: string) {
+  async findAllByInvestment(investmentId: string, userId?: number) {
+    if (userId !== undefined) {
+      await this.assertOwnedInvestment(investmentId, userId);
+    }
+
     return this.repository.findAllByInvestment(investmentId);
   }
 
-  async findOne(id: string) {
-    return this.repository.findOne(id);
+  async findOne(id: string, userId?: number) {
+    const plan = await this.repository.findOne(id);
+    if (!plan) return null;
+
+    if (userId !== undefined) {
+      await this.assertOwnedInvestment(String(plan.investmentId), userId);
+    }
+
+    return plan;
   }
 
-  async update(id: string, updateDto: UpdateInvestmentContributionPlanDto) {
+  async update(id: string, updateDto: UpdateInvestmentContributionPlanDto, userId?: number) {
+    if (userId !== undefined) {
+      const plan = await this.findOne(id, userId);
+      if (!plan) return null;
+
+      const investmentId = String(updateDto.investmentId ?? plan.investmentId);
+      await this.assertOwnedInvestment(investmentId, userId);
+      await this.assertOwnedSourceAccount(updateDto.sourceAccountId, userId);
+    }
+
     return this.repository.update(id, updateDto);
   }
 
-  async remove(id: string) {
+  async remove(id: string, userId?: number) {
+    if (userId !== undefined) {
+      const plan = await this.findOne(id, userId);
+      if (!plan) return;
+    }
+
     return this.repository.delete(id);
   }
 
@@ -243,10 +289,14 @@ export class InvestmentContributionPlansService {
     userId: number,
     dto: SkipCurrentContributionDto,
   ) {
+    await this.assertOwnedInvestment(investmentId, userId);
+
     const plan = await this.repository.findOne(planId);
     if (!plan || String(plan.investmentId) !== String(investmentId)) {
       throw new NotFoundException('Recurring plan not found');
     }
+
+    await this.assertOwnedSourceAccount(plan.sourceAccountId, userId);
 
     if (!plan.nextDueDate) {
       throw new BadRequestException('Recurring plan does not have a due contribution to skip');
@@ -315,6 +365,31 @@ export class InvestmentContributionPlansService {
 
   private toDateOnlyString(value: Date): string {
     return value.toISOString().split('T')[0];
+  }
+
+  private async assertOwnedInvestment(investmentId: string, userId: number) {
+    const investment = await this.investmentRepository.findOne(Number(investmentId), userId);
+    if (!investment) {
+      throw new NotFoundException(`Investment ${investmentId} not found`);
+    }
+
+    return investment;
+  }
+
+  private async assertOwnedSourceAccount(
+    sourceAccountId: string | number | null | undefined,
+    userId: number,
+  ) {
+    if (sourceAccountId === undefined || sourceAccountId === null || sourceAccountId === '') {
+      return null;
+    }
+
+    const account = await this.financialAccountsService.findOne(Number(sourceAccountId), userId);
+    if (!account) {
+      throw new NotFoundException(`Financial account ${sourceAccountId} not found`);
+    }
+
+    return account;
   }
 
   private calculateNextDueDate(plan: {

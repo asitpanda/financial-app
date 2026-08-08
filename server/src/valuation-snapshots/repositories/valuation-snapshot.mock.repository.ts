@@ -11,6 +11,12 @@ const normalizeNullableNumber = (value?: string | number | null) =>
 
 @Injectable()
 export class ValuationSnapshotMockRepository implements IValuationSnapshotDataSourcePort {
+  async findAll(userId: number): Promise<any[]> {
+    return mockValuationSnapshots.filter(
+      (snapshot) => snapshot.userId === userId,
+    );
+  }
+
   async create(data: any): Promise<any> {
     const timestamp = new Date();
     const newSnapshot = {

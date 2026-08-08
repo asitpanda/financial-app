@@ -4,14 +4,19 @@ import { ConfigService } from '@nestjs/config';
 export type DbProvider = 'mock' | 'supabase' | 'postgres';
 
 export const DB_PROVIDER_ENV_KEY = 'DB_PROVIDER';
-export const DEFAULT_DB_PROVIDER: DbProvider = 'mock';
 
 type ProviderConfigReader = {
   get<T = string>(propertyPath: string): T | undefined;
 };
 
 export function resolveDbProvider(rawProvider?: string): DbProvider {
-  const normalized = String(rawProvider ?? DEFAULT_DB_PROVIDER).trim().toLowerCase();
+  const normalized = String(rawProvider ?? '').trim().toLowerCase();
+
+  if (!normalized) {
+    throw new Error(
+      `${DB_PROVIDER_ENV_KEY} is required. Set it explicitly to one of: mock, postgres, supabase.`,
+    );
+  }
 
   switch (normalized) {
     case 'mock':
@@ -23,7 +28,9 @@ export function resolveDbProvider(rawProvider?: string): DbProvider {
     case 'postgress':
       return 'postgres';
     default:
-      return DEFAULT_DB_PROVIDER;
+      throw new Error(
+        `Invalid ${DB_PROVIDER_ENV_KEY} value "${rawProvider}". Use one of: mock, postgres, supabase.`,
+      );
   }
 }
 

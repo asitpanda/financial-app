@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { IGoalDataSourcePort } from './goal.datasource.port';
+import { parseOptionalDateInput } from '../../common/utils/date-input';
 
 @Injectable()
 export class GoalPrismaRepository implements IGoalDataSourcePort {
@@ -15,7 +16,7 @@ export class GoalPrismaRepository implements IGoalDataSourcePort {
       icon: data?.icon,
       targetAmount: data?.targetAmount,
       currentAmount: data?.currentAmount,
-      deadline: data?.deadline,
+      deadline: parseOptionalDateInput(data?.deadline, 'deadline'),
     };
   }
 
@@ -47,7 +48,12 @@ export class GoalPrismaRepository implements IGoalDataSourcePort {
   }
 
   async update(id: number, data: any, userId: number): Promise<any> {
-    void userId;
+    const existing = await this.prisma.goal.findFirst({
+      where: { id: id as any, userId: userId as any },
+    });
+
+    if (!existing) return null;
+
     const sanitized = this.sanitizeGoalData(data);
     const updateData: any = sanitized;
 
@@ -58,7 +64,12 @@ export class GoalPrismaRepository implements IGoalDataSourcePort {
   }
 
   async delete(id: number, userId: number): Promise<void> {
-    void userId;
+    const existing = await this.prisma.goal.findFirst({
+      where: { id: id as any, userId: userId as any },
+    });
+
+    if (!existing) return;
+
     await this.prisma.goal.delete({
       where: { id: id as any },
     });

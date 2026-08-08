@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
+import { INVESTMENT_EVENT_TYPES, OPENING_INVESTMENT_EVENT_TYPES } from "../../../types/investmentEventTypes";
 import {
   Alert,
   alpha,
@@ -40,6 +41,40 @@ const toDayjsOrNull = (value) => {
   return parsed.isValid() ? parsed : null;
 };
 
+const getOpeningEventAmounts = (investment) => {
+  const activePlanId = investment?.activeContributionPlan?.id;
+  const confirmedOpeningEvents = (Array.isArray(investment?.investmentEvents)
+    ? investment.investmentEvents
+    : []
+  ).filter((event) => {
+    const status = String(event?.status || '').toUpperCase();
+    if (status !== 'CONFIRMED') return false;
+    if (activePlanId != null && String(event?.recurringPlanId ?? '') !== String(activePlanId)) {
+      return false;
+    }
+
+    return OPENING_INVESTMENT_EVENT_TYPES.includes(event?.eventType);
+  });
+
+  return confirmedOpeningEvents.reduce(
+    (acc, event) => {
+      const amount = Number(event?.amount || 0);
+      const eventType = event?.eventType;
+
+      if (eventType === INVESTMENT_EVENT_TYPES.OPENING_BALANCE) {
+        acc.openingPrincipalAmount += amount;
+      }
+
+      if (eventType === INVESTMENT_EVENT_TYPES.OPENING_INCOME_CREDIT) {
+        acc.openingIncomeAmount += amount;
+      }
+
+      return acc;
+    },
+    { openingPrincipalAmount: 0, openingIncomeAmount: 0 },
+  );
+};
+
 export default function InvestmentFormDrawer({
   open,
   onClose,
@@ -76,11 +111,14 @@ export default function InvestmentFormDrawer({
     const existingPlan = initialValues?.activeContributionPlan;
     const defaultHistoricalMode =
       existingPlan?.historicalImportMode || "TRACK_FROM_TODAY";
+    const openingEventAmounts = getOpeningEventAmounts(initialValues);
     const seededOpeningPrincipalAmount =
       existingPlan?.openingPrincipalAmount !== undefined &&
       existingPlan?.openingPrincipalAmount !== null &&
       existingPlan?.openingPrincipalAmount !== ""
         ? String(existingPlan.openingPrincipalAmount)
+        : openingEventAmounts.openingPrincipalAmount > 0
+          ? String(openingEventAmounts.openingPrincipalAmount)
         : defaultHistoricalMode === "OPENING_BALANCE" &&
             Number(initialValues?.totalInvested || 0) > 0
           ? String(initialValues?.totalInvested)
@@ -112,7 +150,14 @@ export default function InvestmentFormDrawer({
       endDate: toDayjsOrNull(existingPlan?.endDate),
       historicalImportMode: defaultHistoricalMode,
       openingPrincipalAmount: seededOpeningPrincipalAmount,
-      openingIncomeAmount: "",
+      openingIncomeAmount:
+        openingEventAmounts.openingIncomeAmount > 0
+          ? String(openingEventAmounts.openingIncomeAmount)
+          : existingPlan?.openingIncomeAmount !== undefined &&
+              existingPlan?.openingIncomeAmount !== null &&
+              existingPlan?.openingIncomeAmount !== ""
+            ? String(existingPlan.openingIncomeAmount)
+            : "",
     });
     setPastInvestmentChoice(
       defaultHistoricalMode === "TRACK_FROM_TODAY" ? "no" : "yes",

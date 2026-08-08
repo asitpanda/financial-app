@@ -29,7 +29,12 @@ export class CategoryPrismaRepository implements ICategoryDataSourcePort {
   }
 
   async update(id: number, data: any, userId: number): Promise<any> {
-    void userId;
+    const existing = await this.prisma.category.findFirst({
+      where: { id: id as any, userId: userId as any },
+    });
+
+    if (!existing) return null;
+
     return this.prisma.category.update({
       where: { id: id as any },
       data,
@@ -37,7 +42,12 @@ export class CategoryPrismaRepository implements ICategoryDataSourcePort {
   }
 
   async delete(id: number, userId: number): Promise<void> {
-    void userId;
+    const existing = await this.prisma.category.findFirst({
+      where: { id: id as any, userId: userId as any },
+    });
+
+    if (!existing) return;
+
     await this.prisma.category.delete({
       where: { id: id as any },
     });

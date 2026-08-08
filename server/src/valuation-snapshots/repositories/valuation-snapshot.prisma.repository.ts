@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { IValuationSnapshotDataSourcePort } from './valuation-snapshot.datasource.port';
+import { parseRequiredDateInput } from '../../common/utils/date-input';
 
 const normalizeNullableNumber = (value?: string | number | null) =>
   value === undefined || value === null || value === '' ? null : Number(value);
@@ -11,13 +12,20 @@ export class ValuationSnapshotPrismaRepository
 {
   constructor(private prisma: PrismaService) {}
 
+  async findAll(userId: number): Promise<any[]> {
+    return this.prisma.valuationSnapshot.findMany({
+      where: { userId },
+      orderBy: [{ snapshotDate: 'desc' }, { id: 'desc' }],
+    });
+  }
+
   async create(data: any): Promise<any> {
     return this.prisma.valuationSnapshot.create({
       data: {
         ...data,
         userId: Number(data.userId),
         investmentId: Number(data.investmentId),
-        snapshotDate: new Date(data.snapshotDate),
+        snapshotDate: parseRequiredDateInput(data.snapshotDate, 'snapshotDate'),
         units: normalizeNullableNumber(data.units),
         price: normalizeNullableNumber(data.price),
       },
@@ -44,7 +52,7 @@ export class ValuationSnapshotPrismaRepository
         ...data,
         userId: data.userId !== undefined ? Number(data.userId) : undefined,
         investmentId: data.investmentId !== undefined ? Number(data.investmentId) : undefined,
-        snapshotDate: data.snapshotDate !== undefined ? new Date(data.snapshotDate) : undefined,
+        snapshotDate: data.snapshotDate !== undefined ? parseRequiredDateInput(data.snapshotDate, 'snapshotDate') : undefined,
         units: data.units !== undefined ? normalizeNullableNumber(data.units) : undefined,
         price: data.price !== undefined ? normalizeNullableNumber(data.price) : undefined,
       },

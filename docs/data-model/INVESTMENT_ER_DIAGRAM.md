@@ -1,6 +1,6 @@
 # Investment ER Diagram
 
-This document is synced to canonical data structures in server/src/domain/types.ts and current mock fixtures in server/src/mockdata/\*.ts.
+This document is synced to the canonical SQL schema in server/prisma/sql/core_schema.sql.
 
 ## Core ERD
 
@@ -17,22 +17,24 @@ erDiagram
     CATEGORY ||--o{ TRANSACTION : classifies
     CATEGORY ||--o{ GOAL : classifies
 
-    GOAL ||--o{ TRANSACTION : linked_to
+    GOAL o|--o{ TRANSACTION : linked_to
 
     FINANCIAL_ACCOUNT ||--o{ TRANSACTION : source_account
     FINANCIAL_ACCOUNT ||--o{ TRANSACTION : destination_account
-    FINANCIAL_ACCOUNT ||--o{ INVESTMENT : primary_account
-    FINANCIAL_ACCOUNT ||--o{ INVESTMENT_EVENT : funds_event
-    FINANCIAL_ACCOUNT ||--o{ INVESTMENT_CONTRIBUTION_PLAN : funds_plan
+    FINANCIAL_ACCOUNT o|--o{ INVESTMENT : primary_account
+    FINANCIAL_ACCOUNT o|--o{ INVESTMENT_EVENT : funds_event
+    FINANCIAL_ACCOUNT o|--o{ INVESTMENT_CONTRIBUTION_PLAN : funds_plan
 
     INVESTMENT_ASSET_TAXONOMY ||--o{ INVESTMENT_ASSET_TAXONOMY : parent_child
-    INVESTMENT_ASSET_TAXONOMY ||--o{ INVESTMENT : categorizes
+    INVESTMENT_ASSET_TAXONOMY o|--o{ INVESTMENT : categorizes
 
     INVESTMENT ||--o{ INVESTMENT_EVENT : has
     INVESTMENT ||--o{ INVESTMENT_CONTRIBUTION_PLAN : scheduled_by
     INVESTMENT ||--o{ VALUATION_SNAPSHOT : has
+    INVESTMENT_CONTRIBUTION_PLAN o|--o{ INVESTMENT_EVENT : schedules
 
-    TRANSACTION o|--o| INVESTMENT_EVENT : linked_event
+    TRANSACTION o|--o{ INVESTMENT_EVENT : linkedTransactionId
+    INVESTMENT_EVENT o|--o{ TRANSACTION : linkedInvestmentEventId
 
     USER {
         int id PK
@@ -202,7 +204,7 @@ erDiagram
 
 ## Sync Notes
 
-- This ERD reflects the canonical key set in server/src/domain/types.ts and is validated against current fixtures.
-- Transaction and investment-event link ids are int in the current model (not bigint).
+- This ERD reflects the current table and foreign-key structure in [server/prisma/sql/core_schema.sql](/Users/asitpanda/asitprojects/mine/my-financial/server/prisma/sql/core_schema.sql).
+- Child-side optionality in the relationships above follows nullable foreign keys in the SQL schema.
+- The transaction and investment-event cross-link is shown as two nullable references because `core_schema.sql` defines both foreign keys independently and does not add a uniqueness constraint.
 - Recurring scheduler uniqueness is enforced at DB level on `(recurringPlanId, dueDate, eventType)`.
-- Nullability is defined by TypeScript unions in [server/src/domain/types.ts](server/src/domain/types.ts), because Mermaid ER attribute syntax does not support a nullable marker.

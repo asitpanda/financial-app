@@ -3,6 +3,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { ITransactionDataSourcePort } from './transaction.datasource.port';
 import { CreateTransactionDto } from '../dto/create-transaction.dto';
 import { UpdateTransactionDto } from '../dto/update-transaction.dto';
+import { parseRequiredDateInput } from '../../common/utils/date-input';
 
 @Injectable()
 export class TransactionPrismaRepository implements ITransactionDataSourcePort {
@@ -120,6 +121,7 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
       const createData: any = {
         ...data,
         userId,
+        date: parseRequiredDateInput(data.date, 'date'),
         goalId: this.normalizeOptionalInt(data.goalId, 'goalId'),
         sourceAccountId: this.normalizeOptionalInt(data.sourceAccountId, 'sourceAccountId'),
         destinationAccountId: this.normalizeOptionalInt(data.destinationAccountId, 'destinationAccountId'),
@@ -158,6 +160,7 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
 
       const updateData: any = {
         ...data,
+        date: data.date !== undefined ? parseRequiredDateInput(data.date, 'date') : undefined,
         goalId: data.goalId !== undefined ? this.normalizeOptionalInt(data.goalId, 'goalId') : undefined,
         sourceAccountId:
           data.sourceAccountId !== undefined

@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { IInvestmentDataSourcePort } from './investment.datasource.port';
+import { parseOptionalDateInput } from '../../common/utils/date-input';
 
-const normalizeDate = (value?: string | Date | null) => (value ? new Date(value) : null);
 const normalizeNullableNumber = (value?: string | number | null) =>
   value === undefined || value === null || value === '' ? null : Number(value);
 
@@ -17,9 +17,9 @@ export class InvestmentPrismaRepository implements IInvestmentDataSourcePort {
         userId,
         accountId: normalizeNullableNumber(data.accountId),
         assetTaxonomyId: normalizeNullableNumber(data.assetTaxonomyId),
-        startDate: normalizeDate(data.startDate),
-        maturityDate: normalizeDate(data.maturityDate),
-        lastValuationAt: normalizeDate(data.lastValuationAt),
+        startDate: parseOptionalDateInput(data.startDate, 'startDate'),
+        maturityDate: parseOptionalDateInput(data.maturityDate, 'maturityDate'),
+        lastValuationAt: parseOptionalDateInput(data.lastValuationAt, 'lastValuationAt'),
       },
     });
   }
@@ -56,9 +56,9 @@ export class InvestmentPrismaRepository implements IInvestmentDataSourcePort {
         ...data,
         accountId: data.accountId !== undefined ? normalizeNullableNumber(data.accountId) : undefined,
         assetTaxonomyId: data.assetTaxonomyId !== undefined ? normalizeNullableNumber(data.assetTaxonomyId) : undefined,
-        startDate: data.startDate !== undefined ? normalizeDate(data.startDate) : undefined,
-        maturityDate: data.maturityDate !== undefined ? normalizeDate(data.maturityDate) : undefined,
-        lastValuationAt: data.lastValuationAt !== undefined ? normalizeDate(data.lastValuationAt) : undefined,
+        startDate: data.startDate !== undefined ? parseOptionalDateInput(data.startDate, 'startDate') : undefined,
+        maturityDate: data.maturityDate !== undefined ? parseOptionalDateInput(data.maturityDate, 'maturityDate') : undefined,
+        lastValuationAt: data.lastValuationAt !== undefined ? parseOptionalDateInput(data.lastValuationAt, 'lastValuationAt') : undefined,
       },
     });
   }

@@ -4,6 +4,16 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from '../auth.service';
 
+function requireJwtSecret(configService: ConfigService): string {
+  const jwtSecret = String(configService.get('JWT_SECRET') ?? '').trim();
+
+  if (!jwtSecret) {
+    throw new Error('JWT_SECRET is required. Refusing to start without a signing secret.');
+  }
+
+  return jwtSecret;
+}
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
@@ -13,7 +23,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get('JWT_SECRET', 'your-secret-key'),
+      secretOrKey: requireJwtSecret(configService),
     });
   }
 

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { InvestmentEventType } from '@prisma/client';
 import { mockInvestmentContributionPlansData } from '../../mockdata';
 import { mockInvestmentEventsData } from '../../mockdata/investmentEvents';
 import { mockInvestmentsData } from '../../mockdata/investments';
@@ -14,6 +15,55 @@ const normalizeNullableNumber = (value?: string | number | null) =>
   value === undefined || value === null || value === '' ? null : Number(value);
 const nextPlanId = () =>
   mockInvestmentContributionPlans.length ? Math.max(...mockInvestmentContributionPlans.map((plan) => plan.id)) + 1 : 1;
+
+const syncInvestmentDerivedValues = (investmentId: number) => {
+  const principalIn = mockInvestmentEvents
+    .filter(
+      (event) =>
+        event.investmentId === investmentId &&
+        event.status === 'CONFIRMED' &&
+        (event.eventType === InvestmentEventType.CONTRIBUTION || event.eventType === InvestmentEventType.OPENING_BALANCE),
+    )
+    .reduce((sum, event) => sum + Number(event.amount || 0), 0);
+
+  const principalOut = mockInvestmentEvents
+    .filter(
+      (event) =>
+        event.investmentId === investmentId &&
+        event.status === 'CONFIRMED' &&
+        event.eventType === InvestmentEventType.WITHDRAWAL_PRINCIPAL,
+    )
+    .reduce((sum, event) => sum + Number(event.amount || 0), 0);
+
+  const historicalIncome = mockInvestmentEvents
+    .filter(
+      (event) =>
+        event.investmentId === investmentId &&
+        event.status === 'CONFIRMED' &&
+        event.eventType === InvestmentEventType.OPENING_INCOME_CREDIT,
+    )
+    .reduce((sum, event) => sum + Number(event.amount || 0), 0);
+
+  const latestConfirmedEvent = mockInvestmentEvents
+    .filter(
+      (event) => event.investmentId === investmentId && event.status === 'CONFIRMED',
+    )
+    .sort(
+      (left, right) =>
+        new Date(right.eventDate).getTime() - new Date(left.eventDate).getTime(),
+    )[0];
+
+  const investmentIndex = mockInvestmentsData.findIndex((inv) => inv.id === investmentId);
+  if (investmentIndex < 0) return;
+
+  const principalTotal = principalIn - principalOut;
+  mockInvestmentsData[investmentIndex].totalInvested = principalTotal;
+  mockInvestmentsData[investmentIndex].currentValue = principalTotal + historicalIncome;
+  mockInvestmentsData[investmentIndex].lastValuationAt = latestConfirmedEvent
+    ? new Date(latestConfirmedEvent.eventDate)
+    : null;
+  mockInvestmentsData[investmentIndex].currentValueSource = 'manual';
+};
 
 @Injectable()
 export class ContributionPlanMockRepository implements IContributionPlanDataSourcePort {
@@ -39,6 +89,20 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
 
   async findAllByInvestment(investmentId: string): Promise<any[]> {
     return mockInvestmentContributionPlans.filter((plan) => plan.investmentId === Number(investmentId));
+  }
+
+  async findAllActiveByUser(userId: number): Promise<any[]> {
+    const ownedInvestmentIds = new Set(
+      mockInvestmentsData
+        .filter((investment) => investment.userId === userId)
+        .map((investment) => investment.id),
+    );
+
+    return mockInvestmentContributionPlans.filter(
+      (plan) =>
+        ownedInvestmentIds.has(plan.investmentId) &&
+        String(plan.status).toLowerCase() === 'active',
+    );
   }
 
   async findOne(id: string): Promise<any> {
@@ -142,7 +206,7 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
       const dueDate = normalizeDate(item.dueDate);
       if (!dueDate) continue;
 
-      const eventType = String(item.eventType || 'CONTRIBUTION');
+      const eventType = item.eventType || InvestmentEventType.CONTRIBUTION;
       const duplicate = mockInvestmentEvents.find(
         (event) =>
           event.recurringPlanId === newPlan.id &&
@@ -182,28 +246,7 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
       sequenceCounter += 1;
     }
 
-    const principalIn = mockInvestmentEvents
-      .filter(
-        (event) =>
-          event.investmentId === investmentIdNum &&
-          event.status === 'CONFIRMED' &&
-          (event.eventType === 'CONTRIBUTION' || event.eventType === 'OPENING_BALANCE'),
-      )
-      .reduce((sum, event) => sum + Number(event.amount || 0), 0);
-
-    const principalOut = mockInvestmentEvents
-      .filter(
-        (event) =>
-          event.investmentId === investmentIdNum &&
-          event.status === 'CONFIRMED' &&
-          event.eventType === 'WITHDRAWAL_PRINCIPAL',
-      )
-      .reduce((sum, event) => sum + Number(event.amount || 0), 0);
-
-    const investmentIndex = mockInvestmentsData.findIndex((inv) => inv.id === investmentIdNum);
-    if (investmentIndex >= 0) {
-      mockInvestmentsData[investmentIndex].totalInvested = principalIn - principalOut;
-    }
+    syncInvestmentDerivedValues(investmentIdNum);
 
     return {
       plan: newPlan,
@@ -244,7 +287,7 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
     const existingEventIndex = mockInvestmentEvents.findIndex(
       (event) =>
         event.recurringPlanId === planIdNum &&
-        event.eventType === 'CONTRIBUTION' &&
+        event.eventType === InvestmentEventType.CONTRIBUTION &&
         event.dueDate &&
         new Date(event.dueDate).toISOString() === dueDate.toISOString(),
     );
@@ -270,7 +313,7 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
         recurringPlanId: planIdNum,
         sourceAccountId: plan.sourceAccountId,
         linkedTransactionId: null,
-        eventType: 'CONTRIBUTION',
+        eventType: InvestmentEventType.CONTRIBUTION,
         dueDate,
         status: 'SKIPPED',
         eventSource: 'RECURRING_PLAN',
@@ -324,7 +367,7 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
         const duplicate = mockInvestmentEvents.find(
           (event) =>
             event.recurringPlanId === plan.id &&
-            event.eventType === 'CONTRIBUTION' &&
+            event.eventType === InvestmentEventType.CONTRIBUTION &&
             event.dueDate &&
             new Date(event.dueDate).toISOString() === nextDueDate.toISOString(),
         );
@@ -336,7 +379,7 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
             recurringPlanId: plan.id,
             sourceAccountId: plan.sourceAccountId,
             linkedTransactionId: null,
-            eventType: 'CONTRIBUTION',
+            eventType: InvestmentEventType.CONTRIBUTION,
             dueDate: new Date(nextDueDate),
             status: 'EXPECTED',
             eventSource: 'SYSTEM_GENERATED',

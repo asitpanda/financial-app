@@ -106,6 +106,11 @@ Validation errors are flattened to:
 }
 ```
 
+Date input contract:
+
+- API date fields may be sent as full ISO-8601 datetimes or `YYYY-MM-DD` date-only strings.
+- Prisma adapters must normalize inbound date strings before persistence and must reject invalid values with `400` responses rather than relying on Prisma validation failures.
+
 ### Global Exception Contract
 
 Global exception filter (server/src/common/errors/global-exception.filter.ts) normalizes:

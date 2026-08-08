@@ -23,5 +23,6 @@ import { createProviderBackedBinding } from '../database/db-provider';
     CategoryRepository,
     CategoriesService,
   ],
+  exports: [CategoriesService],
 })
 export class CategoriesModule {}

@@ -7,10 +7,22 @@ import { InvestmentEventsController } from './investment-events.controller';
 import { createProviderBackedBinding } from '../database/db-provider';
 import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from '../database/database.module';
+import { InvestmentMockRepository } from '../investments/repositories/investment.mock.repository';
+import { InvestmentPrismaRepository } from '../investments/repositories/investment.prisma.repository';
+import { InvestmentRepository } from '../investments/repositories/investment.repository';
 
 @Module({
   imports: [ConfigModule, DatabaseModule],
   providers: [
+    InvestmentPrismaRepository,
+    InvestmentMockRepository,
+    createProviderBackedBinding({
+      token: 'INVESTMENT_DATA_SOURCE',
+      databaseToken: InvestmentPrismaRepository,
+      mockToken: InvestmentMockRepository,
+      logLabel: '📈 Investments',
+    }),
+    InvestmentRepository,
     EventPrismaRepository,
     EventMockRepository,
     createProviderBackedBinding({

@@ -52,6 +52,20 @@ BEGIN
       'SYSTEM_GENERATED'
     );
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE t.typname = 'InvestmentEventType' AND n.nspname = 'public'
+  ) THEN
+    CREATE TYPE public."InvestmentEventType" AS ENUM (
+      'CONTRIBUTION',
+      'OPENING_BALANCE',
+      'OPENING_INCOME_CREDIT',
+      'WITHDRAWAL_PRINCIPAL'
+    );
+  END IF;
 END $$;
 
 CREATE TABLE IF NOT EXISTS public.users (
@@ -199,7 +213,7 @@ CREATE TABLE IF NOT EXISTS public.investment_events (
   "recurringPlanId" INTEGER NULL,
   "sourceAccountId" INTEGER NULL,
   "linkedTransactionId" INTEGER NULL,
-  "eventType" TEXT NOT NULL,
+  "eventType" public."InvestmentEventType" NOT NULL,
   "dueDate" TIMESTAMPTZ NULL,
   "status" public."InvestmentEventStatus" NOT NULL DEFAULT 'PENDING',
   "eventSource" public."InvestmentEventSource" NOT NULL DEFAULT 'MANUAL',

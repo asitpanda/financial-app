@@ -12,6 +12,10 @@ export class EventRepository {
     return this.dataSource.create(data);
   }
 
+  async findAll(userId: number): Promise<any[]> {
+    return this.dataSource.findAll(userId);
+  }
+
   async findAllByInvestment(investmentId: string): Promise<any[]> {
     return this.dataSource.findAllByInvestment(investmentId);
   }

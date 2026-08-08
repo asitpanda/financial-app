@@ -1,4 +1,5 @@
 import { dateFromBaseDate } from './shared';
+import { InvestmentEventType } from '@prisma/client';
 import type { InvestmentEventRecord } from './types';
 
 const baseDate = new Date();
@@ -10,7 +11,7 @@ export const mockInvestmentEventsData: InvestmentEventRecord[] = [
     recurringPlanId: 1,
     sourceAccountId: 1,
     linkedTransactionId: null,
-    eventType: 'contribution',
+    eventType: InvestmentEventType.CONTRIBUTION,
     dueDate: dateFromBaseDate(baseDate, -35),
     status: 'CONFIRMED',
     eventSource: 'RECURRING_PLAN',
@@ -31,7 +32,7 @@ export const mockInvestmentEventsData: InvestmentEventRecord[] = [
     recurringPlanId: 4,
     sourceAccountId: 2,
     linkedTransactionId: null,
-    eventType: 'deposit',
+    eventType: InvestmentEventType.CONTRIBUTION,
     dueDate: dateFromBaseDate(baseDate, -30),
     status: 'CONFIRMED',
     eventSource: 'RECURRING_PLAN',
@@ -52,7 +53,7 @@ export const mockInvestmentEventsData: InvestmentEventRecord[] = [
     recurringPlanId: 3,
     sourceAccountId: 1,
     linkedTransactionId: null,
-    eventType: 'premium',
+    eventType: InvestmentEventType.CONTRIBUTION,
     dueDate: dateFromBaseDate(baseDate, -15),
     status: 'CONFIRMED',
     eventSource: 'RECURRING_PLAN',

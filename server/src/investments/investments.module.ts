@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { InvestmentContributionPlansModule } from '../investment-contribution-plans/investment-contribution-plans.module';
+import { InvestmentEventsModule } from '../investment-events/investment-events.module';
 import { ValuationSnapshotsModule } from '../valuation-snapshots/valuation-snapshots.module';
 import { DatabaseModule } from '../database/database.module';
 import { InvestmentsController } from './investments.controller';
@@ -11,7 +12,7 @@ import { InvestmentRepository } from './repositories/investment.repository';
 import { createProviderBackedBinding } from '../database/db-provider';
 
 @Module({
-  imports: [ConfigModule, DatabaseModule, InvestmentContributionPlansModule, ValuationSnapshotsModule],
+  imports: [ConfigModule, DatabaseModule, InvestmentContributionPlansModule, InvestmentEventsModule, ValuationSnapshotsModule],
   controllers: [InvestmentsController],
   providers: [
     InvestmentPrismaRepository,
@@ -25,5 +26,6 @@ import { createProviderBackedBinding } from '../database/db-provider';
     InvestmentRepository,
     InvestmentsService,
   ],
+  exports: [InvestmentRepository],
 })
 export class InvestmentsModule {}

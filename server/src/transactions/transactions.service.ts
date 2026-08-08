@@ -1,18 +1,27 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
+import { InvestmentEventType } from '@prisma/client';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { RecordContributionDto } from './dto/record-contribution.dto';
 import { InvestmentEventsService } from '../investment-events/investment-events.service';
 import { InvestmentContributionPlansService } from '../investment-contribution-plans/investment-contribution-plans.service';
+import { CategoriesService } from '../categories/categories.service';
 import { mockFinancialAccountsData } from '../mockdata';
 import { TransactionRepository } from './repositories/transaction.repository';
+import { InvestmentRepository } from '../investments/repositories/investment.repository';
+import { FinancialAccountsService } from '../financial-accounts/financial-accounts.service';
 
 @Injectable()
 export class TransactionsService {
+  private static readonly CONTRIBUTION_CATEGORY_NAME = 'Investment Contribution';
+
   constructor(
     private readonly repository: TransactionRepository,
     private readonly investmentEventsService: InvestmentEventsService,
     private readonly contributionPlansService: InvestmentContributionPlansService,
+    private readonly categoriesService: CategoriesService,
+    private readonly investmentRepository: InvestmentRepository,
+    private readonly financialAccountsService: FinancialAccountsService,
   ) {}
 
   async findAll(userId: number) {
@@ -60,19 +69,22 @@ export class TransactionsService {
   }
 
   async recordContribution(recordContributionDto: RecordContributionDto, userId: number) {
+    await this.ensureOwnedInvestment(recordContributionDto.investmentId, userId);
     const sourceAccountId = this.resolveSourceAccountId(recordContributionDto.sourceAccountId);
-    const contributionPlanId = await this.resolveContributionPlanId(recordContributionDto);
+    await this.ensureOwnedSourceAccount(sourceAccountId, userId);
+    const contributionPlanId = await this.resolveContributionPlanId(recordContributionDto, userId);
+    const contributionCategoryId = await this.resolveContributionCategoryId(userId);
 
     // 1. Create Transaction
     const transactionDto: CreateTransactionDto = {
       type: 'expense',
       transactionKind: 'investment-contribution',
-      categoryId: 23, // "Investment Contribution" category (we'll add this)
+      categoryId: contributionCategoryId,
       goalId: null,
       sourceAccountId,
       destinationAccountId: null,
       amount: recordContributionDto.amount,
-      categoryLabelSnapshot: 'Investment Contribution',
+      categoryLabelSnapshot: TransactionsService.CONTRIBUTION_CATEGORY_NAME,
       date: recordContributionDto.transactionDate,
       notes: recordContributionDto.notes || `Contribution for investment ${recordContributionDto.investmentId}`,
     };
@@ -86,7 +98,7 @@ export class TransactionsService {
       investmentId: String(recordContributionDto.investmentId),
       sourceAccountId: String(sourceAccountId),
       linkedTransactionId: transaction.id,
-      eventType: 'contribution',
+      eventType: InvestmentEventType.CONTRIBUTION,
       eventDate: recordContributionDto.transactionDate,
       amount: recordContributionDto.amount,
       units: null,
@@ -96,7 +108,7 @@ export class TransactionsService {
       meta: { linkedTransactionId: transaction.id },
     };
 
-    const investmentEvent = await this.investmentEventsService.create(investmentEventDto);
+    const investmentEvent = await this.investmentEventsService.create(investmentEventDto, userId);
 
     // 3. Link them by updating transaction
     await this.repository.update(transaction.id, { linkedInvestmentEventId: investmentEvent.id }, userId);
@@ -135,7 +147,10 @@ export class TransactionsService {
     return matchedAccount.id;
   }
 
-  private async resolveContributionPlanId(recordContributionDto: RecordContributionDto): Promise<number> {
+  private async resolveContributionPlanId(
+    recordContributionDto: RecordContributionDto,
+    userId: number,
+  ): Promise<number> {
     const rawPlanId = String(recordContributionDto.contributionPlanId ?? '').trim();
     const parsedPlanId = Number(rawPlanId);
 
@@ -146,10 +161,20 @@ export class TransactionsService {
       !Number.isNaN(parsedPlanId) &&
       parsedPlanId > 0
     ) {
+      const plan = await this.contributionPlansService.findOne(String(parsedPlanId), userId);
+      if (!plan || String(plan.investmentId) !== String(recordContributionDto.investmentId)) {
+        throw new BadRequestException(
+          `No contribution plan ${parsedPlanId} found for investmentId ${recordContributionDto.investmentId}`,
+        );
+      }
+
       return parsedPlanId;
     }
 
-    const plans = await this.contributionPlansService.findAllByInvestment(recordContributionDto.investmentId);
+    const plans = await this.contributionPlansService.findAllByInvestment(
+      recordContributionDto.investmentId,
+      userId,
+    );
     const activePlan = plans.find((plan) => plan.status === 'active') || plans[0];
 
     if (!activePlan) {
@@ -159,6 +184,48 @@ export class TransactionsService {
     }
 
     return Number(activePlan.id);
+  }
+
+  private async ensureOwnedInvestment(investmentId: string, userId: number): Promise<void> {
+    const investment = await this.investmentRepository.findOne(Number(investmentId), userId);
+    if (!investment) {
+      throw new BadRequestException(
+        `Invalid investmentId ${investmentId}. Investment does not exist for this user.`,
+      );
+    }
+  }
+
+  private async ensureOwnedSourceAccount(sourceAccountId: number, userId: number): Promise<void> {
+    const account = await this.financialAccountsService.findOne(sourceAccountId, userId);
+    if (!account) {
+      throw new BadRequestException(
+        `Invalid sourceAccountId ${sourceAccountId}. Account does not exist for this user.`,
+      );
+    }
+  }
+
+  private async resolveContributionCategoryId(userId: number): Promise<number> {
+    const categories = await this.categoriesService.findAll(userId);
+    const existingCategory = categories.find((category) =>
+      String(category?.name || '').trim().toLowerCase() ===
+      TransactionsService.CONTRIBUTION_CATEGORY_NAME.toLowerCase(),
+    );
+
+    if (existingCategory) {
+      return Number(existingCategory.id);
+    }
+
+    const createdCategory = await this.categoriesService.create(
+      {
+        name: TransactionsService.CONTRIBUTION_CATEGORY_NAME,
+        type: 'expense',
+        icon: 'chart-line',
+        color: '#8B5CF6',
+      },
+      userId,
+    );
+
+    return Number(createdCategory.id);
   }
 
   private async validateExpenseSourceBalance(

@@ -30,6 +30,25 @@ export class ValuationSnapshotsService {
     return Number(investment.userId);
   }
 
+  private async assertOwnedInvestment(investmentId: string | number, userId: number) {
+    const investment = await this.investmentRepository.findOne(Number(investmentId), userId);
+    if (!investment) {
+      throw new NotFoundException(`Investment ${investmentId} not found`);
+    }
+
+    return investment;
+  }
+
+  private async resolveOwnedSnapshot(id: string, userId: number) {
+    const snapshot = await this.repository.findOne(id);
+    if (!snapshot) {
+      return null;
+    }
+
+    await this.assertOwnedInvestment(snapshot.investmentId, userId);
+    return snapshot;
+  }
+
   private async syncInvestmentCurrentValue(investmentId: string | number, userId: number) {
     const investment = await this.investmentRepository.findOne(Number(investmentId), userId);
     if (!investment) return;
@@ -61,10 +80,10 @@ export class ValuationSnapshotsService {
     );
   }
 
-  async create(createValuationSnapshotDto: CreateValuationSnapshotDto) {
-    const resolvedUserId = await this.resolveInvestmentUserId(
-      createValuationSnapshotDto.investmentId,
-    );
+  async create(createValuationSnapshotDto: CreateValuationSnapshotDto, userId?: number) {
+    const resolvedUserId = userId !== undefined
+      ? Number((await this.assertOwnedInvestment(createValuationSnapshotDto.investmentId, userId)).userId)
+      : await this.resolveInvestmentUserId(createValuationSnapshotDto.investmentId);
     const snapshot = await this.repository.create({
       ...createValuationSnapshotDto,
       userId: String(resolvedUserId),
@@ -76,16 +95,39 @@ export class ValuationSnapshotsService {
     return snapshot;
   }
 
-  async findAllByInvestment(investmentId: string) {
+  async findAll(userId: number) {
+    return this.repository.findAll(userId);
+  }
+
+  async findAllByInvestment(investmentId: string, userId?: number) {
+    if (userId !== undefined) {
+      await this.assertOwnedInvestment(investmentId, userId);
+    }
+
     return this.repository.findAllByInvestment(investmentId);
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, userId?: number) {
+    if (userId !== undefined) {
+      return this.resolveOwnedSnapshot(id, userId);
+    }
+
     return this.repository.findOne(id);
   }
 
-  async update(id: string, updateValuationSnapshotDto: UpdateValuationSnapshotDto) {
-    const existingSnapshot = await this.repository.findOne(id);
+  async update(id: string, updateValuationSnapshotDto: UpdateValuationSnapshotDto, userId?: number) {
+    const existingSnapshot = userId !== undefined
+      ? await this.resolveOwnedSnapshot(id, userId)
+      : await this.repository.findOne(id);
+
+    if (!existingSnapshot) {
+      return null;
+    }
+
+    if (userId !== undefined && updateValuationSnapshotDto.investmentId !== undefined) {
+      await this.assertOwnedInvestment(updateValuationSnapshotDto.investmentId, userId);
+    }
+
     const snapshot = await this.repository.update(id, updateValuationSnapshotDto);
     const investmentIds = new Set<string | number>();
 
@@ -98,7 +140,9 @@ export class ValuationSnapshotsService {
 
     await Promise.all(
       Array.from(investmentIds).map(async (investmentId) => {
-        const resolvedUserId = await this.resolveInvestmentUserId(investmentId);
+        const resolvedUserId = userId !== undefined
+          ? Number((await this.assertOwnedInvestment(investmentId, userId)).userId)
+          : await this.resolveInvestmentUserId(investmentId);
         return this.syncInvestmentCurrentValue(investmentId, resolvedUserId);
       }),
     );
@@ -106,14 +150,21 @@ export class ValuationSnapshotsService {
     return snapshot;
   }
 
-  async remove(id: string) {
-    const existingSnapshot = await this.repository.findOne(id);
+  async remove(id: string, userId?: number) {
+    const existingSnapshot = userId !== undefined
+      ? await this.resolveOwnedSnapshot(id, userId)
+      : await this.repository.findOne(id);
+
+    if (!existingSnapshot) {
+      return;
+    }
+
     await this.repository.delete(id);
 
     if (existingSnapshot?.investmentId != null) {
-      const resolvedUserId = await this.resolveInvestmentUserId(
-        existingSnapshot.investmentId,
-      );
+      const resolvedUserId = userId !== undefined
+        ? Number((await this.assertOwnedInvestment(existingSnapshot.investmentId, userId)).userId)
+        : await this.resolveInvestmentUserId(existingSnapshot.investmentId);
       await this.syncInvestmentCurrentValue(
         existingSnapshot.investmentId,
         resolvedUserId,

@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
+import { InvestmentEventType } from '@prisma/client';
+import { IsDateString, IsEnum, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class CreateInvestmentEventDto {
   @ApiProperty()
@@ -22,10 +23,11 @@ export class CreateInvestmentEventDto {
   @IsString()
   linkedTransactionId?: string;
 
-  @ApiProperty()
+  @ApiProperty({ enum: InvestmentEventType })
   @IsNotEmpty()
   @IsString()
-  eventType: string;
+  @IsEnum(InvestmentEventType)
+  eventType: InvestmentEventType;
 
   @ApiProperty({ required: false })
   @IsOptional()

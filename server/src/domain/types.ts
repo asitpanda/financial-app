@@ -109,13 +109,15 @@ export type InvestmentAssetTaxonomyRecord = {
   updatedAt: Date;
 };
 
+import type { InvestmentEventType } from '@prisma/client';
+
 export type InvestmentEventRecord = {
   id: number;
   investmentId: number;
   recurringPlanId: number | null;
   sourceAccountId: number | null;
   linkedTransactionId: number | null;
-  eventType: string;
+  eventType: InvestmentEventType;
   dueDate: Date | null;
   status:
     | 'EXPECTED'

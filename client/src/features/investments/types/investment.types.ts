@@ -1,3 +1,5 @@
+import type { InvestmentEventType } from '../../../types/investmentEventTypes';
+
 export type InvestmentStatus = "active" | "matured" | "closed";
 
 export interface InvestmentDocumentsMeta {
@@ -11,6 +13,8 @@ export interface InvestmentContributionPlan {
 	cadenceInterval: number;
 	amount: number;
 	historicalImportMode?: string;
+	openingPrincipalAmount?: number;
+	openingIncomeAmount?: number;
 	anchorDate?: string | null;
 	endDate?: string | null;
 	nextDueDate?: string | null;
@@ -29,13 +33,23 @@ export interface InvestmentValuationSnapshot {
 	createdAt?: string;
 }
 
+export interface InvestmentPerformanceHistoryPoint {
+	date: string;
+	currentValue: number;
+	investedValue: number;
+	gainLossValue: number;
+	gainLossPercentage: number;
+	source?: string | null;
+	eventType?: InvestmentEventType | null;
+}
+
 export interface InvestmentEvent {
 	id: string | number;
 	investmentId: string | number;
 	recurringPlanId?: string | number | null;
 	sourceAccountId?: string | number | null;
 	linkedTransactionId?: string | number | null;
-	eventType: string;
+	eventType: InvestmentEventType;
 	dueDate?: string | null;
 	status?: string;
 	eventSource?: string;
@@ -77,6 +91,9 @@ export interface Investment {
 	documents?: string;
 	notes?: string | null;
 	activeContributionPlan?: InvestmentContributionPlan | null;
+	investmentEvents?: InvestmentEvent[];
+	performanceHistory?: InvestmentPerformanceHistoryPoint[];
+	performanceHistorySource?: string | null;
 	valuationSnapshots?: InvestmentValuationSnapshot[];
 	createdAt?: string;
 	updatedAt?: string;

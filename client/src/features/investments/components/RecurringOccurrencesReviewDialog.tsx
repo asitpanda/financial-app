@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React from "react";
+import { INCOME_INVESTMENT_EVENT_TYPES, INVESTMENT_EVENT_TYPES } from "../../../types/investmentEventTypes";
 import {
   Alert,
   Box,
@@ -34,9 +35,7 @@ export default function RecurringOccurrencesReviewDialog({
   const selectedCount = selectedItems.length;
 
   const isIncomeEvent = (eventType) =>
-    String(eventType || "")
-      .toUpperCase()
-      .includes("INCOME");
+    INCOME_INVESTMENT_EVENT_TYPES.includes(eventType);
 
   const principalEvents = selectedItems.filter(
     (item) => !isIncomeEvent(item.eventType),
@@ -207,7 +206,7 @@ export default function RecurringOccurrencesReviewDialog({
                       <TableCell>{item.dueDate || "-"}</TableCell>
                       <TableCell>{Number(item.amount || 0).toFixed(2)}</TableCell>
                       <TableCell>{item.status || "PENDING"}</TableCell>
-                      <TableCell>{item.eventType || "CONTRIBUTION"}</TableCell>
+                      <TableCell>{item.eventType || INVESTMENT_EVENT_TYPES.CONTRIBUTION}</TableCell>
                       <TableCell>{item.notes || "-"}</TableCell>
                     </TableRow>
                   ))}

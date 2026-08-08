@@ -7,6 +7,8 @@ import { TransactionRepository } from './repositories/transaction.repository';
 import { InvestmentEventsModule } from '../investment-events/investment-events.module';
 import { InvestmentContributionPlansModule } from '../investment-contribution-plans/investment-contribution-plans.module';
 import { InvestmentsModule } from '../investments/investments.module';
+import { CategoriesModule } from '../categories/categories.module';
+import { FinancialAccountsModule } from '../financial-accounts/financial-accounts.module';
 import { createProviderBackedBinding } from '../database/db-provider';
 
 @Module({
@@ -14,6 +16,8 @@ import { createProviderBackedBinding } from '../database/db-provider';
     InvestmentEventsModule,
     InvestmentContributionPlansModule,
     InvestmentsModule,
+    CategoriesModule,
+    FinancialAccountsModule,
   ],
   controllers: [TransactionsController],
   providers: [

@@ -10,6 +10,13 @@ export interface SaveValuationSnapshotDto {
   source?: string;
 }
 
+export const getValuationSnapshots = async (): Promise<
+  InvestmentValuationSnapshot[]
+> => {
+  const response = await apiClient.get('/valuations/snapshots');
+  return Array.isArray(response.data) ? response.data : [];
+};
+
 export const getValuationSnapshotsByInvestment = async (
   investmentId: string | number,
 ): Promise<InvestmentValuationSnapshot[]> => {
@@ -48,6 +55,7 @@ export const deleteValuationSnapshot = async (
 };
 
 export const valuationSnapshotsApi = {
+  getAll: getValuationSnapshots,
   getByInvestment: getValuationSnapshotsByInvestment,
   getById: getValuationSnapshotById,
   create: createValuationSnapshot,

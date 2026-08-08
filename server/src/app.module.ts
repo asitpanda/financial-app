@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { TransactionsModule } from './transactions/transactions.module';
 import { GoalsModule } from './goals/goals.module';
@@ -11,6 +12,7 @@ import { InvestmentContributionPlansModule } from './investment-contribution-pla
 import { InvestmentEventsModule } from './investment-events/investment-events.module';
 import { ValuationSnapshotsModule } from './valuation-snapshots/valuation-snapshots.module';
 import { FinancialAccountsModule } from './financial-accounts/financial-accounts.module';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 
 @Module({
   imports: [
@@ -29,6 +31,12 @@ import { FinancialAccountsModule } from './financial-accounts/financial-accounts
     InvestmentEventsModule,
     ValuationSnapshotsModule,
     FinancialAccountsModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
   ],
 })
 export class AppModule {}

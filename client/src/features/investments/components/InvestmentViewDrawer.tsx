@@ -42,35 +42,14 @@ function InvestmentPerformanceChart({ investment, formatValue }) {
   const [hoveredIndex, setHoveredIndex] = React.useState(null);
 
   const performanceData = React.useMemo(() => {
-    if (
-      !investment.valuationSnapshots ||
-      investment.valuationSnapshots.length === 0
-    ) {
-      return [];
-    }
-
-    // Sort by date and calculate cumulative contributions
-    const sorted = [...investment.valuationSnapshots].sort(
-      (a, b) => new Date(a.snapshotDate) - new Date(b.snapshotDate),
-    );
-
-    return sorted.map((snapshot) => {
-      const currentValue = Number(snapshot.marketValue ?? 0);
-      const investedValue = Number(investment.totalInvested ?? 0);
-      const gainLossValue = currentValue - investedValue;
-      const gainLossPercentage =
-        investedValue > 0 ? (gainLossValue / investedValue) * 100 : 0;
-
-      return {
-        date: snapshot.snapshotDate,
-        label: dayjs(snapshot.snapshotDate).format("MMM YY"),
-        currentValue,
-        investedValue,
-        gainLossValue,
-        gainLossPercentage,
-      };
-    });
-  }, [investment.valuationSnapshots, investment.totalInvested]);
+    return (Array.isArray(investment?.performanceHistory)
+      ? investment.performanceHistory
+      : []
+    ).map((point) => ({
+      ...point,
+      label: dayjs(point.date).format("MMM YY"),
+    }));
+  }, [investment?.performanceHistory]);
 
   if (performanceData.length === 0) {
     return (
@@ -541,6 +520,14 @@ export function InvestmentViewDrawer({
   const hasValuationSnapshots =
     Array.isArray(investment?.valuationSnapshots) &&
     investment.valuationSnapshots.length > 0;
+  const performanceHistoryData = React.useMemo(
+    () =>
+      Array.isArray(investment?.performanceHistory)
+        ? investment.performanceHistory
+        : [],
+    [investment?.performanceHistory],
+  );
+  const hasPerformanceHistory = performanceHistoryData.length > 0;
   const valuationSnapshots = React.useMemo(() => {
     if (!Array.isArray(investment?.valuationSnapshots)) {
       return [];
@@ -894,6 +881,32 @@ export function InvestmentViewDrawer({
                       label={`Latest ${formatInvestmentDate(latestSnapshot.snapshotDate)}`}
                     />
                   </Box>
+                ) : hasPerformanceHistory ? (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                      flexWrap: "wrap",
+                      mt: 1,
+                    }}
+                  >
+                    <Chip
+                      size="small"
+                      label={`${performanceHistoryData.length} timeline points`}
+                      sx={{ fontWeight: 600 }}
+                    />
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={
+                        investment?.performanceHistorySource ===
+                        "investment_event"
+                          ? "Derived from investment events"
+                          : "Derived from valuation snapshots"
+                      }
+                    />
+                  </Box>
                 ) : null}
               </Box>
               <IconButton
@@ -918,14 +931,15 @@ export function InvestmentViewDrawer({
                 borderColor: "divider",
               }}
             >
-              {hasValuationSnapshots ? (
+              {hasValuationSnapshots || hasPerformanceHistory ? (
                 <Stack spacing={2.5}>
                   <InvestmentPerformanceChart
                     investment={investment}
                     formatValue={formatInvestmentCurrency}
                   />
 
-                  <Box>
+                  {hasValuationSnapshots ? (
+                    <Box>
                     <Box
                       sx={{
                         display: "flex",
@@ -1029,7 +1043,12 @@ export function InvestmentViewDrawer({
                         </TableBody>
                       </Table>
                     </TableContainer>
-                  </Box>
+                    </Box>
+                  ) : (
+                    <Alert severity="info">
+                      No valuation snapshots available. Performance history is derived from confirmed investment events such as opening balance, opening income, contributions, and principal withdrawals.
+                    </Alert>
+                  )}
                 </Stack>
               ) : (
                 <EmptyState

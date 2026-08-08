@@ -35,6 +35,20 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       return;
     }
 
+    if (exception instanceof Prisma.PrismaClientValidationError) {
+      const payload: ApiErrorResponse = {
+        ...base,
+        statusCode: HttpStatus.BAD_REQUEST,
+        code: 'VALIDATION_ERROR',
+        message: 'Request contains invalid data for one or more fields.',
+        details: {
+          error: exception.message,
+        },
+      };
+      res.status(HttpStatus.BAD_REQUEST).json(payload);
+      return;
+    }
+
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
       const body = exception.getResponse();

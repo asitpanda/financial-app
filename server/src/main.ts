@@ -3,8 +3,30 @@ import { BadRequestException, ValidationPipe, ValidationError } from '@nestjs/co
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import type { Request, Response, NextFunction } from 'express';
 import { AppModule } from './app.module';
-import { resolveDbProvider } from './database/db-provider';
+import { isDatabaseBackedProvider, resolveDbProvider } from './database/db-provider';
 import { GlobalExceptionFilter } from './common/errors/global-exception.filter';
+
+function requireEnv(name: string): string {
+  const value = String(process.env[name] ?? '').trim();
+
+  if (!value) {
+    throw new Error(`${name} is required.`);
+  }
+
+  return value;
+}
+
+function validateRuntimeConfig() {
+  const dbProvider = resolveDbProvider(process.env.DB_PROVIDER);
+
+  requireEnv('JWT_SECRET');
+
+  if (isDatabaseBackedProvider(dbProvider)) {
+    requireEnv('DATABASE_URL');
+  }
+
+  return { dbProvider };
+}
 
 function flattenValidationErrors(
   errors: ValidationError[],
@@ -44,13 +66,13 @@ function sanitizeBody(body: unknown): unknown {
 }
 
 async function bootstrap() {
+  const { dbProvider } = validateRuntimeConfig();
   const app = await NestFactory.create(AppModule);
   const isJsonLogFormat = String(process.env.LOG_FORMAT || '').toLowerCase() === 'json';
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     const startedAt = Date.now();
     const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const dbProvider = resolveDbProvider(process.env.DB_PROVIDER);
     const origin = req.get('origin') ?? 'n/a';
     const payloadSummary = ['POST', 'PUT', 'PATCH'].includes(req.method)
       ? JSON.stringify(sanitizeBody(req.body ?? {}))

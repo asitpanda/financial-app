@@ -8,11 +8,24 @@ import { ContributionPlanPrismaRepository } from './repositories/contribution-pl
 import { ContributionPlanRepository } from './repositories/contribution-plan.repository';
 import { createProviderBackedBinding } from '../database/db-provider';
 import { RecurringScheduleCalculator } from './recurring-schedule-calculator.service';
+import { FinancialAccountsModule } from '../financial-accounts/financial-accounts.module';
+import { InvestmentMockRepository } from '../investments/repositories/investment.mock.repository';
+import { InvestmentPrismaRepository } from '../investments/repositories/investment.prisma.repository';
+import { InvestmentRepository } from '../investments/repositories/investment.repository';
 
 @Module({
-  imports: [ConfigModule, DatabaseModule],
+  imports: [ConfigModule, DatabaseModule, FinancialAccountsModule],
   controllers: [InvestmentContributionPlansController],
   providers: [
+    InvestmentPrismaRepository,
+    InvestmentMockRepository,
+    createProviderBackedBinding({
+      token: 'INVESTMENT_DATA_SOURCE',
+      databaseToken: InvestmentPrismaRepository,
+      mockToken: InvestmentMockRepository,
+      logLabel: '📈 Investments',
+    }),
+    InvestmentRepository,
     ContributionPlanPrismaRepository,
     ContributionPlanMockRepository,
     createProviderBackedBinding({

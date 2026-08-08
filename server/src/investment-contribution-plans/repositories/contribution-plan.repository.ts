@@ -16,6 +16,10 @@ export class ContributionPlanRepository {
     return this.dataSource.findAllByInvestment(investmentId);
   }
 
+  async findAllActiveByUser(userId: number): Promise<any[]> {
+    return this.dataSource.findAllActiveByUser(userId);
+  }
+
   async findOne(id: string): Promise<any> {
     return this.dataSource.findOne(id);
   }

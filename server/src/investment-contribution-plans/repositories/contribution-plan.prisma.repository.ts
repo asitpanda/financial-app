@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { InvestmentEventType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { IContributionPlanDataSourcePort } from './contribution-plan.datasource.port';
+import { parseOptionalDateInput, parseRequiredDateInput } from '../../common/utils/date-input';
 
-const normalizeDate = (value?: string | Date | null) => (value ? new Date(value) : null);
 const normalizeNullableNumber = (value?: string | number | null) =>
   value === undefined || value === null || value === '' ? null : Number(value);
 const normalizeDecimal = (value?: string | number | null) =>
@@ -35,6 +35,70 @@ export class ContributionPlanPrismaRepository
 {
   constructor(private prisma: PrismaService) {}
 
+  private async syncInvestmentDerivedValues(
+    tx: Prisma.TransactionClient,
+    investmentId: number,
+  ) {
+    const [contributionAgg, withdrawalAgg, incomeAgg, latestConfirmedEvent, valuationSnapshotCount] =
+      await Promise.all([
+        tx.investmentEvent.aggregate({
+          where: {
+            investmentId,
+            status: 'CONFIRMED',
+            eventType: { in: [InvestmentEventType.CONTRIBUTION, InvestmentEventType.OPENING_BALANCE] },
+          },
+          _sum: { amount: true },
+        }),
+        tx.investmentEvent.aggregate({
+          where: {
+            investmentId,
+            status: 'CONFIRMED',
+            eventType: { in: [InvestmentEventType.WITHDRAWAL_PRINCIPAL] },
+          },
+          _sum: { amount: true },
+        }),
+        tx.investmentEvent.aggregate({
+          where: {
+            investmentId,
+            status: 'CONFIRMED',
+            eventType: { in: [InvestmentEventType.OPENING_INCOME_CREDIT] },
+          },
+          _sum: { amount: true },
+        }),
+        tx.investmentEvent.findFirst({
+          where: {
+            investmentId,
+            status: 'CONFIRMED',
+          },
+          orderBy: [{ eventDate: 'desc' }, { id: 'desc' }],
+        }),
+        tx.valuationSnapshot.count({
+          where: { investmentId },
+        }),
+      ]);
+
+    const contributionTotal = toNumber(contributionAgg._sum.amount) ?? 0;
+    const withdrawalTotal = toNumber(withdrawalAgg._sum.amount) ?? 0;
+    const historicalIncomeTotal = toNumber(incomeAgg._sum.amount) ?? 0;
+    const principalTotal = contributionTotal - withdrawalTotal;
+    const derivedCurrentValue = principalTotal + historicalIncomeTotal;
+
+    await tx.investment.update({
+      where: { id: investmentId },
+      data: {
+        totalInvested: principalTotal,
+        currentValue:
+          valuationSnapshotCount === 0 ? derivedCurrentValue : undefined,
+        lastValuationAt:
+          valuationSnapshotCount === 0
+            ? latestConfirmedEvent?.eventDate ?? null
+            : undefined,
+        currentValueSource:
+          valuationSnapshotCount === 0 ? 'manual' : undefined,
+      },
+    });
+  }
+
   async create(data: any): Promise<any> {
     const created = await this.prisma.investmentContributionPlan.create({
       data: {
@@ -44,10 +108,10 @@ export class ContributionPlanPrismaRepository
         reminderDaysBefore: normalizeNullableNumber(data.reminderDaysBefore),
         amount: normalizeDecimal(data.amount),
         historicalImportMode: data.historicalImportMode,
-        anchorDate: new Date(data.anchorDate),
-        lastGeneratedDueDate: normalizeDate(data.lastGeneratedDueDate),
-        nextDueDate: normalizeDate(data.nextDueDate),
-        endDate: normalizeDate(data.endDate),
+        anchorDate: parseRequiredDateInput(data.anchorDate, 'anchorDate'),
+        lastGeneratedDueDate: parseOptionalDateInput(data.lastGeneratedDueDate, 'lastGeneratedDueDate'),
+        nextDueDate: parseOptionalDateInput(data.nextDueDate, 'nextDueDate'),
+        endDate: parseOptionalDateInput(data.endDate, 'endDate'),
       },
     });
 
@@ -58,6 +122,20 @@ export class ContributionPlanPrismaRepository
     const plans = await this.prisma.investmentContributionPlan.findMany({
       where: { investmentId: Number(investmentId) },
       orderBy: { nextDueDate: 'asc' },
+    });
+
+    return plans.map(mapPlanOutput);
+  }
+
+  async findAllActiveByUser(userId: number): Promise<any[]> {
+    const plans = await this.prisma.investmentContributionPlan.findMany({
+      where: {
+        status: 'active',
+        investment: {
+          userId,
+        },
+      },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
     });
 
     return plans.map(mapPlanOutput);
@@ -82,11 +160,11 @@ export class ContributionPlanPrismaRepository
           data.reminderDaysBefore !== undefined ? normalizeNullableNumber(data.reminderDaysBefore) : undefined,
         amount: data.amount !== undefined ? normalizeDecimal(data.amount) : undefined,
         historicalImportMode: data.historicalImportMode,
-        anchorDate: data.anchorDate !== undefined ? new Date(data.anchorDate) : undefined,
+        anchorDate: data.anchorDate !== undefined ? parseRequiredDateInput(data.anchorDate, 'anchorDate') : undefined,
         lastGeneratedDueDate:
-          data.lastGeneratedDueDate !== undefined ? normalizeDate(data.lastGeneratedDueDate) : undefined,
-        nextDueDate: data.nextDueDate !== undefined ? normalizeDate(data.nextDueDate) : undefined,
-        endDate: data.endDate !== undefined ? normalizeDate(data.endDate) : undefined,
+          data.lastGeneratedDueDate !== undefined ? parseOptionalDateInput(data.lastGeneratedDueDate, 'lastGeneratedDueDate') : undefined,
+        nextDueDate: data.nextDueDate !== undefined ? parseOptionalDateInput(data.nextDueDate, 'nextDueDate') : undefined,
+        endDate: data.endDate !== undefined ? parseOptionalDateInput(data.endDate, 'endDate') : undefined,
       },
     });
 
@@ -161,10 +239,10 @@ export class ContributionPlanPrismaRepository
           cadenceUnit: String(planPayload.cadenceUnit),
           cadenceInterval: Number(planPayload.cadenceInterval),
           historicalImportMode: planPayload.historicalImportMode || 'TRACK_FROM_TODAY',
-          anchorDate: new Date(planPayload.anchorDate),
-          lastGeneratedDueDate: normalizeDate(planPayload.lastGeneratedDueDate),
-          nextDueDate: normalizeDate(planPayload.nextDueDate),
-          endDate: normalizeDate(planPayload.endDate),
+          anchorDate: parseRequiredDateInput(planPayload.anchorDate, 'anchorDate'),
+          lastGeneratedDueDate: parseOptionalDateInput(planPayload.lastGeneratedDueDate, 'lastGeneratedDueDate'),
+          nextDueDate: parseOptionalDateInput(planPayload.nextDueDate, 'nextDueDate'),
+          endDate: parseOptionalDateInput(planPayload.endDate, 'endDate'),
           reminderDaysBefore: normalizeNullableNumber(planPayload.reminderDaysBefore),
           autoCreateEvent: Boolean(planPayload.autoCreateEvent),
           notes: planPayload.notes || null,
@@ -177,8 +255,8 @@ export class ContributionPlanPrismaRepository
       for (const item of selectedHistoricalItems) {
         if (!item?.selected) continue;
 
-        const dueDate = normalizeDate(item.dueDate);
-        const eventType = String(item.eventType || 'CONTRIBUTION');
+        const dueDate = parseOptionalDateInput(item.dueDate, 'dueDate');
+        const eventType = item.eventType || InvestmentEventType.CONTRIBUTION;
 
         if (!dueDate) continue;
 
@@ -207,7 +285,7 @@ export class ContributionPlanPrismaRepository
               ? 'MANUAL'
               : 'HISTORICAL_IMPORT',
             sequenceNumber: Number(item.sequenceNumber || sequenceCounter),
-            eventDate: normalizeDate(item.eventDate) || dueDate,
+            eventDate: parseOptionalDateInput(item.eventDate, 'eventDate') || dueDate,
             amount: (item.amount ?? planPayload.amount) as unknown as number,
             units: item.units !== undefined ? Number(item.units) : null,
             pricePerUnit:
@@ -232,34 +310,7 @@ export class ContributionPlanPrismaRepository
         sequenceCounter += 1;
       }
 
-      const contributionAgg = await tx.investmentEvent.aggregate({
-        where: {
-          investmentId: investmentIdNum,
-          status: 'CONFIRMED',
-          eventType: { in: ['CONTRIBUTION', 'OPENING_BALANCE'] },
-        },
-        _sum: { amount: true },
-      });
-
-      const withdrawalAgg = await tx.investmentEvent.aggregate({
-        where: {
-          investmentId: investmentIdNum,
-          status: 'CONFIRMED',
-          eventType: { in: ['WITHDRAWAL_PRINCIPAL'] },
-        },
-        _sum: { amount: true },
-      });
-
-      const contributionTotal = toNumber(contributionAgg._sum.amount) ?? 0;
-      const withdrawalTotal = toNumber(withdrawalAgg._sum.amount) ?? 0;
-      const principalTotal = contributionTotal - withdrawalTotal;
-
-      await tx.investment.update({
-        where: { id: investmentIdNum },
-        data: {
-          totalInvested: principalTotal,
-        },
-      });
+      await this.syncInvestmentDerivedValues(tx, investmentIdNum);
 
       return {
         plan: mapPlanOutput(createdPlan),
@@ -278,7 +329,7 @@ export class ContributionPlanPrismaRepository
   }): Promise<any> {
     const investmentIdNum = Number(data.investmentId);
     const planIdNum = Number(data.planId);
-    const dueDate = normalizeDate(data.dueDate);
+    const dueDate = parseOptionalDateInput(data.dueDate, 'dueDate');
 
     return this.prisma.$transaction(async (tx) => {
       const plan = await tx.investmentContributionPlan.findUnique({
@@ -305,7 +356,7 @@ export class ContributionPlanPrismaRepository
         where: {
           recurringPlanId: planIdNum,
           dueDate,
-          eventType: 'CONTRIBUTION',
+          eventType: InvestmentEventType.CONTRIBUTION,
         },
       });
 
@@ -333,7 +384,7 @@ export class ContributionPlanPrismaRepository
               recurringPlanId: planIdNum,
               sourceAccountId: plan.sourceAccountId,
               linkedTransactionId: null,
-              eventType: 'CONTRIBUTION',
+              eventType: InvestmentEventType.CONTRIBUTION,
               dueDate,
               status: 'SKIPPED',
               eventSource: 'RECURRING_PLAN',
@@ -347,7 +398,7 @@ export class ContributionPlanPrismaRepository
       const updatedPlan = await tx.investmentContributionPlan.update({
         where: { id: planIdNum },
         data: {
-          nextDueDate: normalizeDate(data.nextDueDate),
+          nextDueDate: parseOptionalDateInput(data.nextDueDate, 'nextDueDate'),
         },
       });
 
@@ -394,7 +445,7 @@ export class ContributionPlanPrismaRepository
           where: {
             recurringPlanId: plan.id,
             dueDate: nextDueDate,
-            eventType: 'CONTRIBUTION',
+            eventType: InvestmentEventType.CONTRIBUTION,
           },
         });
 
@@ -405,7 +456,7 @@ export class ContributionPlanPrismaRepository
               recurringPlanId: plan.id,
               sourceAccountId: plan.sourceAccountId,
               linkedTransactionId: null,
-              eventType: 'CONTRIBUTION',
+              eventType: InvestmentEventType.CONTRIBUTION,
               dueDate: nextDueDate,
               status: 'EXPECTED',
               eventSource: 'SYSTEM_GENERATED',

@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { InvestmentEventType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { IEventDataSourcePort } from './event.datasource.port';
+import { parseOptionalDateInput, parseRequiredDateInput } from '../../common/utils/date-input';
 
-const normalizeDate = (value?: string | Date | null) => (value ? new Date(value) : null);
 const normalizeNullableNumber = (value?: string | number | null) =>
   value === undefined || value === null || value === '' ? null : Number(value);
 const normalizeDecimal = (value?: string | number | null) =>
@@ -13,23 +13,104 @@ const normalizeDecimal = (value?: string | number | null) =>
 export class EventPrismaRepository implements IEventDataSourcePort {
   constructor(private prisma: PrismaService) {}
 
-  async create(data: any): Promise<any> {
-    return this.prisma.investmentEvent.create({
+  private async syncInvestmentDerivedValues(
+    tx: Prisma.TransactionClient,
+    investmentId: number,
+  ) {
+    const [contributionAgg, withdrawalAgg, incomeAgg, latestConfirmedEvent, valuationSnapshotCount] =
+      await Promise.all([
+        tx.investmentEvent.aggregate({
+          where: {
+            investmentId,
+            status: 'CONFIRMED',
+            eventType: { in: [InvestmentEventType.CONTRIBUTION, InvestmentEventType.OPENING_BALANCE] },
+          },
+          _sum: { amount: true },
+        }),
+        tx.investmentEvent.aggregate({
+          where: {
+            investmentId,
+            status: 'CONFIRMED',
+            eventType: { in: [InvestmentEventType.WITHDRAWAL_PRINCIPAL] },
+          },
+          _sum: { amount: true },
+        }),
+        tx.investmentEvent.aggregate({
+          where: {
+            investmentId,
+            status: 'CONFIRMED',
+            eventType: { in: [InvestmentEventType.OPENING_INCOME_CREDIT] },
+          },
+          _sum: { amount: true },
+        }),
+        tx.investmentEvent.findFirst({
+          where: {
+            investmentId,
+            status: 'CONFIRMED',
+          },
+          orderBy: [{ eventDate: 'desc' }, { id: 'desc' }],
+        }),
+        tx.valuationSnapshot.count({
+          where: { investmentId },
+        }),
+      ]);
+
+    const contributionTotal = contributionAgg._sum.amount?.toNumber() ?? 0;
+    const withdrawalTotal = withdrawalAgg._sum.amount?.toNumber() ?? 0;
+    const historicalIncomeTotal = incomeAgg._sum.amount?.toNumber() ?? 0;
+    const principalTotal = contributionTotal - withdrawalTotal;
+    const derivedCurrentValue = principalTotal + historicalIncomeTotal;
+
+    await tx.investment.update({
+      where: { id: investmentId },
       data: {
-        ...data,
-        investmentId: Number(data.investmentId),
-        recurringPlanId: normalizeNullableNumber(data.recurringPlanId),
-        sourceAccountId: normalizeNullableNumber(data.sourceAccountId),
-        linkedTransactionId: normalizeNullableNumber(data.linkedTransactionId),
-        dueDate: normalizeDate(data.dueDate),
-        status: data.status,
-        eventSource: data.eventSource,
-        sequenceNumber: normalizeNullableNumber(data.sequenceNumber),
-        eventDate: new Date(data.eventDate),
-        amount: normalizeDecimal(data.amount),
-        pricePerUnit: normalizeDecimal(data.pricePerUnit),
-        netAmount: normalizeDecimal(data.netAmount),
+        totalInvested: principalTotal,
+        currentValue:
+          valuationSnapshotCount === 0 ? derivedCurrentValue : undefined,
+        lastValuationAt:
+          valuationSnapshotCount === 0
+            ? latestConfirmedEvent?.eventDate ?? null
+            : undefined,
+        currentValueSource:
+          valuationSnapshotCount === 0 ? 'manual' : undefined,
       },
+    });
+  }
+
+  async create(data: any): Promise<any> {
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.investmentEvent.create({
+        data: {
+          ...data,
+          investmentId: Number(data.investmentId),
+          recurringPlanId: normalizeNullableNumber(data.recurringPlanId),
+          sourceAccountId: normalizeNullableNumber(data.sourceAccountId),
+          linkedTransactionId: normalizeNullableNumber(data.linkedTransactionId),
+          eventType: data.eventType,
+          dueDate: parseOptionalDateInput(data.dueDate, 'dueDate'),
+          status: data.status,
+          eventSource: data.eventSource,
+          sequenceNumber: normalizeNullableNumber(data.sequenceNumber),
+          eventDate: parseRequiredDateInput(data.eventDate, 'eventDate'),
+          amount: normalizeDecimal(data.amount),
+          pricePerUnit: normalizeDecimal(data.pricePerUnit),
+          netAmount: normalizeDecimal(data.netAmount),
+        },
+      });
+
+      await this.syncInvestmentDerivedValues(tx, created.investmentId);
+      return created;
+    });
+  }
+
+  async findAll(userId: number): Promise<any[]> {
+    return this.prisma.investmentEvent.findMany({
+      where: {
+        investment: {
+          userId,
+        },
+      },
+      orderBy: [{ eventDate: 'desc' }, { id: 'desc' }],
     });
   }
 
@@ -47,29 +128,56 @@ export class EventPrismaRepository implements IEventDataSourcePort {
   }
 
   async update(id: string, data: any): Promise<any> {
-    return this.prisma.investmentEvent.update({
-      where: { id: Number(id) },
-      data: {
-        ...data,
-        investmentId: data.investmentId !== undefined ? Number(data.investmentId) : undefined,
-        recurringPlanId: data.recurringPlanId !== undefined ? normalizeNullableNumber(data.recurringPlanId) : undefined,
-        sourceAccountId: data.sourceAccountId !== undefined ? normalizeNullableNumber(data.sourceAccountId) : undefined,
-        linkedTransactionId: data.linkedTransactionId !== undefined ? normalizeNullableNumber(data.linkedTransactionId) : undefined,
-        dueDate: data.dueDate !== undefined ? normalizeDate(data.dueDate) : undefined,
-        status: data.status,
-        eventSource: data.eventSource,
-        sequenceNumber: data.sequenceNumber !== undefined ? normalizeNullableNumber(data.sequenceNumber) : undefined,
-        eventDate: data.eventDate !== undefined ? normalizeDate(data.eventDate) : undefined,
-        amount: data.amount !== undefined ? normalizeDecimal(data.amount) : undefined,
-        pricePerUnit: data.pricePerUnit !== undefined ? normalizeDecimal(data.pricePerUnit) : undefined,
-        netAmount: data.netAmount !== undefined ? normalizeDecimal(data.netAmount) : undefined,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.investmentEvent.findUnique({
+        where: { id: Number(id) },
+      });
+
+      const updated = await tx.investmentEvent.update({
+        where: { id: Number(id) },
+        data: {
+          ...data,
+          investmentId: data.investmentId !== undefined ? Number(data.investmentId) : undefined,
+          recurringPlanId: data.recurringPlanId !== undefined ? normalizeNullableNumber(data.recurringPlanId) : undefined,
+          sourceAccountId: data.sourceAccountId !== undefined ? normalizeNullableNumber(data.sourceAccountId) : undefined,
+          linkedTransactionId: data.linkedTransactionId !== undefined ? normalizeNullableNumber(data.linkedTransactionId) : undefined,
+          eventType: data.eventType !== undefined ? data.eventType : undefined,
+          dueDate: data.dueDate !== undefined ? parseOptionalDateInput(data.dueDate, 'dueDate') : undefined,
+          status: data.status,
+          eventSource: data.eventSource,
+          sequenceNumber: data.sequenceNumber !== undefined ? normalizeNullableNumber(data.sequenceNumber) : undefined,
+          eventDate: data.eventDate !== undefined ? parseRequiredDateInput(data.eventDate, 'eventDate') : undefined,
+          amount: data.amount !== undefined ? normalizeDecimal(data.amount) : undefined,
+          pricePerUnit: data.pricePerUnit !== undefined ? normalizeDecimal(data.pricePerUnit) : undefined,
+          netAmount: data.netAmount !== undefined ? normalizeDecimal(data.netAmount) : undefined,
+        },
+      });
+
+      const investmentIds = new Set<number>();
+      if (existing?.investmentId) investmentIds.add(existing.investmentId);
+      if (updated.investmentId) investmentIds.add(updated.investmentId);
+
+      for (const investmentId of investmentIds) {
+        await this.syncInvestmentDerivedValues(tx, investmentId);
+      }
+
+      return updated;
     });
   }
 
   async delete(id: string): Promise<void> {
-    await this.prisma.investmentEvent.delete({
-      where: { id: Number(id) },
+    await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.investmentEvent.findUnique({
+        where: { id: Number(id) },
+      });
+
+      await tx.investmentEvent.delete({
+        where: { id: Number(id) },
+      });
+
+      if (existing?.investmentId) {
+        await this.syncInvestmentDerivedValues(tx, existing.investmentId);
+      }
     });
   }
 }

@@ -1,5 +1,9 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { InvestmentEventType } from '@prisma/client';
+import {
+  InvestmentEventSource,
+  InvestmentEventStatus,
+  InvestmentEventType,
+} from '@prisma/client';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { RecordContributionDto } from './dto/record-contribution.dto';
@@ -97,8 +101,10 @@ export class TransactionsService {
     const investmentEventDto = {
       investmentId: String(recordContributionDto.investmentId),
       sourceAccountId: String(sourceAccountId),
-      linkedTransactionId: transaction.id,
+      linkedTransactionId: String(transaction.id),
       eventType: InvestmentEventType.CONTRIBUTION,
+      status: InvestmentEventStatus.CONFIRMED,
+      eventSource: InvestmentEventSource.MANUAL,
       eventDate: recordContributionDto.transactionDate,
       amount: recordContributionDto.amount,
       units: null,
@@ -168,6 +174,12 @@ export class TransactionsService {
         );
       }
 
+      if (String(plan.status || '').trim().toLowerCase() !== 'active') {
+        throw new BadRequestException(
+          'Recurring plan is paused. Resume the plan before recording a contribution.',
+        );
+      }
+
       return parsedPlanId;
     }
 
@@ -175,11 +187,13 @@ export class TransactionsService {
       recordContributionDto.investmentId,
       userId,
     );
-    const activePlan = plans.find((plan) => plan.status === 'active') || plans[0];
+    const activePlan = plans.find(
+      (plan) => String(plan.status || '').trim().toLowerCase() === 'active',
+    );
 
     if (!activePlan) {
       throw new BadRequestException(
-        `No contribution plan found for investmentId ${recordContributionDto.investmentId}`,
+        `No active contribution plan found for investmentId ${recordContributionDto.investmentId}`,
       );
     }
 

@@ -1,14 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class CreateInvestmentAssetTaxonomyDto {
   @ApiProperty()
   @IsString()
+  @IsNotEmpty()
   label: string;
 
   @ApiProperty()
   @IsString()
+  @IsNotEmpty()
   nodeType: string;
 
   @ApiProperty()
@@ -28,6 +30,7 @@ export class CreateInvestmentAssetTaxonomyDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
+  @Min(0)
   sortOrder?: number;
 
   @ApiProperty({ required: false, default: true })

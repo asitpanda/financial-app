@@ -4,13 +4,23 @@ import { mockInvestmentContributionPlansData } from '../../mockdata';
 import { mockInvestmentEventsData } from '../../mockdata/investmentEvents';
 import { mockInvestmentsData } from '../../mockdata/investments';
 import { mockFinancialAccountsData } from '../../mockdata/financialAccounts';
-import type { InvestmentEventRecord } from '../../domain/types';
-import { IContributionPlanDataSourcePort } from './contribution-plan.datasource.port';
+import type { InvestmentContributionPlanRecord } from '../investment-contribution-plan.types';
+import type { InvestmentEventRecord } from '../../investment-events/investment-event.types';
+import {
+  ContributionPlanUpdateInput,
+  ContributionPlanWriteInput,
+  CreatePlanWithHistoricalEventsInput,
+  CreatePlanWithHistoricalEventsResult,
+  RecurringPlanLike,
+  SkipCurrentContributionInput,
+  SkipCurrentContributionResult,
+} from '../investment-contribution-plan.types';
+import type { IContributionPlanDataSourcePort } from './contribution-plan.datasource.port';
 
 let mockInvestmentContributionPlans = [...mockInvestmentContributionPlansData];
 let mockInvestmentEvents = [...mockInvestmentEventsData];
 
-const normalizeDate = (value?: string | null) => (value ? new Date(value) : null);
+const normalizeDate = (value?: string | Date | null) => (value ? new Date(value) : null);
 const normalizeNullableNumber = (value?: string | number | null) =>
   value === undefined || value === null || value === '' ? null : Number(value);
 const nextPlanId = () =>
@@ -35,49 +45,30 @@ const syncInvestmentDerivedValues = (investmentId: number) => {
     )
     .reduce((sum, event) => sum + Number(event.amount || 0), 0);
 
-  const historicalIncome = mockInvestmentEvents
-    .filter(
-      (event) =>
-        event.investmentId === investmentId &&
-        event.status === 'CONFIRMED' &&
-        event.eventType === InvestmentEventType.OPENING_INCOME_CREDIT,
-    )
-    .reduce((sum, event) => sum + Number(event.amount || 0), 0);
-
-  const latestConfirmedEvent = mockInvestmentEvents
-    .filter(
-      (event) => event.investmentId === investmentId && event.status === 'CONFIRMED',
-    )
-    .sort(
-      (left, right) =>
-        new Date(right.eventDate).getTime() - new Date(left.eventDate).getTime(),
-    )[0];
-
   const investmentIndex = mockInvestmentsData.findIndex((inv) => inv.id === investmentId);
   if (investmentIndex < 0) return;
 
   const principalTotal = principalIn - principalOut;
   mockInvestmentsData[investmentIndex].totalInvested = principalTotal;
-  mockInvestmentsData[investmentIndex].currentValue = principalTotal + historicalIncome;
-  mockInvestmentsData[investmentIndex].lastValuationAt = latestConfirmedEvent
-    ? new Date(latestConfirmedEvent.eventDate)
-    : null;
-  mockInvestmentsData[investmentIndex].currentValueSource = 'manual';
 };
 
 @Injectable()
 export class ContributionPlanMockRepository implements IContributionPlanDataSourcePort {
-  async create(data: any): Promise<any> {
+  async create(data: ContributionPlanWriteInput): Promise<InvestmentContributionPlanRecord> {
     const timestamp = new Date();
-    const newPlan = {
+    const newPlan: InvestmentContributionPlanRecord = {
       id: nextPlanId(),
       ...data,
       investmentId: Number(data.investmentId),
       sourceAccountId: normalizeNullableNumber(data.sourceAccountId),
+      amount: Number(data.amount),
       reminderDaysBefore: normalizeNullableNumber(data.reminderDaysBefore),
       anchorDate: new Date(data.anchorDate),
+      lastGeneratedDueDate: normalizeDate(data.lastGeneratedDueDate),
       nextDueDate: normalizeDate(data.nextDueDate),
       endDate: normalizeDate(data.endDate),
+      historicalImportMode: data.historicalImportMode ?? 'TRACK_FROM_TODAY',
+      notes: data.notes ?? null,
       autoCreateEvent: Boolean(data.autoCreateEvent),
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -87,11 +78,29 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
     return newPlan;
   }
 
-  async findAllByInvestment(investmentId: string): Promise<any[]> {
+  async findAllByInvestment(investmentId: string): Promise<InvestmentContributionPlanRecord[]> {
     return mockInvestmentContributionPlans.filter((plan) => plan.investmentId === Number(investmentId));
   }
 
-  async findAllActiveByUser(userId: number): Promise<any[]> {
+  async findAllByUser(userId: number): Promise<InvestmentContributionPlanRecord[]> {
+    const ownedInvestmentIds = new Set(
+      mockInvestmentsData
+        .filter((investment) => investment.userId === userId)
+        .map((investment) => investment.id),
+    );
+
+    return mockInvestmentContributionPlans
+      .filter((plan) => ownedInvestmentIds.has(plan.investmentId))
+      .sort((left, right) => {
+        if (left.investmentId !== right.investmentId) {
+          return left.investmentId - right.investmentId;
+        }
+
+        return right.updatedAt.getTime() - left.updatedAt.getTime() || right.id - left.id;
+      });
+  }
+
+  async findAllActiveByUser(userId: number): Promise<InvestmentContributionPlanRecord[]> {
     const ownedInvestmentIds = new Set(
       mockInvestmentsData
         .filter((investment) => investment.userId === userId)
@@ -105,11 +114,14 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
     );
   }
 
-  async findOne(id: string): Promise<any> {
+  async findOne(id: string): Promise<InvestmentContributionPlanRecord | null> {
     return mockInvestmentContributionPlans.find((plan) => plan.id === Number(id));
   }
 
-  async update(id: string, data: any): Promise<any> {
+  async update(
+    id: string,
+    data: ContributionPlanUpdateInput,
+  ): Promise<InvestmentContributionPlanRecord | null> {
     const index = mockInvestmentContributionPlans.findIndex((plan) => plan.id === Number(id));
     if (index === -1) return null;
 
@@ -118,11 +130,16 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
       ...data,
       investmentId: data.investmentId !== undefined ? Number(data.investmentId) : mockInvestmentContributionPlans[index].investmentId,
       sourceAccountId: data.sourceAccountId !== undefined ? normalizeNullableNumber(data.sourceAccountId) : mockInvestmentContributionPlans[index].sourceAccountId,
+      amount: data.amount !== undefined ? Number(data.amount) : mockInvestmentContributionPlans[index].amount,
       reminderDaysBefore:
         data.reminderDaysBefore !== undefined
           ? normalizeNullableNumber(data.reminderDaysBefore)
           : mockInvestmentContributionPlans[index].reminderDaysBefore,
       anchorDate: data.anchorDate !== undefined ? new Date(data.anchorDate) : mockInvestmentContributionPlans[index].anchorDate,
+      lastGeneratedDueDate:
+        data.lastGeneratedDueDate !== undefined
+          ? normalizeDate(data.lastGeneratedDueDate)
+          : mockInvestmentContributionPlans[index].lastGeneratedDueDate,
       nextDueDate: data.nextDueDate !== undefined ? normalizeDate(data.nextDueDate) : mockInvestmentContributionPlans[index].nextDueDate,
       endDate: data.endDate !== undefined ? normalizeDate(data.endDate) : mockInvestmentContributionPlans[index].endDate,
       autoCreateEvent:
@@ -137,7 +154,9 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
     mockInvestmentContributionPlans = mockInvestmentContributionPlans.filter((plan) => plan.id !== Number(id));
   }
 
-  async findActiveByInvestment(investmentId: string): Promise<any | null> {
+  async findActiveByInvestment(
+    investmentId: string,
+  ): Promise<InvestmentContributionPlanRecord | null> {
     return (
       mockInvestmentContributionPlans.find(
         (plan) => plan.investmentId === Number(investmentId) && String(plan.status).toLowerCase() === 'active',
@@ -145,12 +164,9 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
     );
   }
 
-  async createPlanWithHistoricalEvents(data: {
-    investmentId: string;
-    userId: number;
-    planPayload: any;
-    selectedHistoricalItems: any[];
-  }): Promise<any> {
+  async createPlanWithHistoricalEvents(
+    data: CreatePlanWithHistoricalEventsInput,
+  ): Promise<CreatePlanWithHistoricalEventsResult> {
     const { investmentId, userId, planPayload, selectedHistoricalItems } = data;
     const investmentIdNum = Number(investmentId);
     const sourceAccountId = normalizeNullableNumber(planPayload.sourceAccountId);
@@ -177,7 +193,7 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
     }
 
     const timestamp = new Date();
-    const newPlan = {
+    const newPlan: InvestmentContributionPlanRecord = {
       id: nextPlanId(),
       investmentId: investmentIdNum,
       sourceAccountId,
@@ -199,7 +215,7 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
 
     mockInvestmentContributionPlans.push(newPlan);
 
-    const historicalEvents: any[] = [];
+    const historicalEvents: InvestmentEventRecord[] = [];
     let sequenceCounter = 1;
     for (const item of selectedHistoricalItems || []) {
       if (!item?.selected) continue;
@@ -227,7 +243,7 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
         linkedTransactionId: null,
         eventType,
         dueDate,
-        status: item.status || 'PENDING',
+        status: (item.status || 'PENDING') as InvestmentEventRecord['status'],
         eventSource: eventType.startsWith('OPENING_') ? 'MANUAL' : 'HISTORICAL_IMPORT',
         sequenceNumber: Number(item.sequenceNumber || sequenceCounter),
         eventDate: normalizeDate(item.eventDate) || dueDate,
@@ -254,14 +270,9 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
     };
   }
 
-  async skipCurrentContribution(data: {
-    investmentId: string;
-    planId: string;
-    userId: number;
-    dueDate: string;
-    nextDueDate: string | null;
-    notes?: string;
-  }): Promise<any> {
+  async skipCurrentContribution(
+    data: SkipCurrentContributionInput,
+  ): Promise<SkipCurrentContributionResult> {
     const investmentIdNum = Number(data.investmentId);
     const planIdNum = Number(data.planId);
     const dueDate = normalizeDate(data.dueDate);

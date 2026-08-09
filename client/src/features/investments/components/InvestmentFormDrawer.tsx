@@ -1,4 +1,5 @@
 // @ts-nocheck
+/** @typedef {import('../types/investment.types').InvestmentDrawerData} InvestmentDrawerData */
 import React, { useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
 import { INVESTMENT_EVENT_TYPES, OPENING_INVESTMENT_EVENT_TYPES } from "../../../types/investmentEventTypes";
@@ -75,6 +76,19 @@ const getOpeningEventAmounts = (investment) => {
   );
 };
 
+/**
+ * @param {{
+ *   open: boolean,
+ *   onClose: () => void,
+ *   onSubmit: (value: unknown) => unknown,
+ *   initialValues?: InvestmentDrawerData | null,
+ *   accounts?: unknown[],
+ *   taxonomyNodes?: unknown[],
+ *   title?: string,
+ *   submitLabel?: string,
+ *   submitError?: string,
+ * }} props
+ */
 export default function InvestmentFormDrawer({
   open,
   onClose,

@@ -3,6 +3,12 @@ import { PrismaClient } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { isDatabaseBackedProvider, resolveDbProviderFromConfig } from './db-provider';
 
+type QueryLogEvent = {
+  query: string;
+  params: string;
+  duration: number;
+};
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor(private configService: ConfigService) {
@@ -31,7 +37,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         String(this.configService.get<string>('LOG_FORMAT', '')).toLowerCase() === 'json';
 
       if (shouldLogQueries) {
-        (this as any).$on('query', (event: any) => {
+        const prismaWithQueryEvents = this as PrismaClient & {
+          $on(event: 'query', callback: (event: QueryLogEvent) => void): void;
+        };
+
+        prismaWithQueryEvents.$on('query', (event: QueryLogEvent) => {
           const compactQuery = String(event.query || '').replace(/\s+/g, ' ').trim();
           const paramsRaw = String(event.params || '');
           const params = paramsRaw.length > maxParamsLength

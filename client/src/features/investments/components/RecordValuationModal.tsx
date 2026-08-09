@@ -7,10 +7,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
 import AppButton from '../../../components/common/AppButton';
 import { useNotificationStore } from '../../../store/notificationStore';
-import {
-  createValuationSnapshot,
-  updateValuationSnapshot,
-} from '../api/valuationSnapshots.api';
+import { useSaveInvestmentSnapshot } from '../hooks/useInvestmentSnapshots';
 import { getRuntimeErrorMessage } from '../../../utils/errorMessage';
 
 const modalStyle = {
@@ -57,7 +54,8 @@ export default function RecordValuationModal({
     }),
     [],
   );
-  const [loading, setLoading] = useState(false);
+  const saveSnapshotMutation = useSaveInvestmentSnapshot();
+  const loading = saveSnapshotMutation.isPending;
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [formData, setFormData] = useState(getInitialFormData(snapshot));
   const { pushNotification } = useNotificationStore();
@@ -102,7 +100,6 @@ export default function RecordValuationModal({
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
-    setLoading(true);
     try {
       const payload = {
         investmentId: String(investmentId),
@@ -113,9 +110,10 @@ export default function RecordValuationModal({
         source: 'manual',
       };
 
-      const savedSnapshot = snapshot?.id
-        ? await updateValuationSnapshot(snapshot.id, payload)
-        : await createValuationSnapshot(payload);
+      const savedSnapshot = await saveSnapshotMutation.mutateAsync({
+        snapshotId: snapshot?.id,
+        payload,
+      });
       
       pushNotification({
         message: snapshot?.id
@@ -139,8 +137,6 @@ export default function RecordValuationModal({
         ),
         type: 'error'
       });
-    } finally {
-      setLoading(false);
     }
   };
 

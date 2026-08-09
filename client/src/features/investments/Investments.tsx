@@ -27,8 +27,14 @@ import {
 } from "../../utils/investmentHelpers";
 import { getRuntimeErrorMessage } from "../../utils/errorMessage";
 import {
+  useInvestmentDashboardAnalytics,
   useInvestment,
-  useInvestmentPageData,
+  useInvestmentEventsData,
+  useInvestmentEventsByInvestment,
+  useInvestmentPerformance,
+  useInvestmentReferenceData,
+  useInvestmentSnapshotsByInvestment,
+  useInvestmentSummaryPageData,
   useRemoveInvestment,
   useSaveInvestment,
 } from "./hooks/useInvestments";
@@ -51,10 +57,11 @@ import {
   getTopInvestmentCurrentValueItems,
   getInvestmentContributionViewItems,
 } from "./investments.selectors";
+import type { InvestmentDrawerData } from "./types/investment.types";
 import {
-  confirmRecurringContributionPlan,
-  updateContributionPlan,
-} from "./api/contributionPlans.api";
+  useConfirmRecurringInvestmentContributionPlan,
+  useUpdateInvestmentContributionPlan,
+} from "./hooks/useContributionPlans";
 
 const VIEW_OPTIONS = [
   { value: "dashboard", label: "Dashboard" },
@@ -400,20 +407,42 @@ export default function Investments() {
   );
   const saveInvestmentMutation = useSaveInvestment();
   const removeInvestmentMutation = useRemoveInvestment();
+  const updateContributionPlanMutation = useUpdateInvestmentContributionPlan();
+  const confirmContributionPlanMutation =
+    useConfirmRecurringInvestmentContributionPlan();
   const saveTaxonomyMutation = useSaveInvestmentAssetTaxonomy();
   const removeTaxonomyMutation = useRemoveInvestmentAssetTaxonomy();
   const {
     investments: rawInvestments,
-    investmentEvents,
+    loading: investmentsLoading,
+    error: pageDataError,
+  } = useInvestmentSummaryPageData();
+  const {
     taxonomyNodes,
     accounts,
-    loading,
-    error: pageDataError,
-    reload,
-  } = useInvestmentPageData();
-  const error = uiError || (pageDataError ? "Failed to load investments" : "");
+    loading: referenceDataLoading,
+    error: referenceDataError,
+    reload: reloadReferenceData,
+  } = useInvestmentReferenceData();
+  const dashboardEnabled = activeView === "dashboard";
+  const investmentEventsQuery = useInvestmentEventsData(activeView === "calendar");
+  const dashboardAnalyticsQuery = useInvestmentDashboardAnalytics(dashboardEnabled);
+  const investmentEvents = investmentEventsQuery.data || [];
+  const loading =
+    investmentsLoading ||
+    referenceDataLoading ||
+    (dashboardEnabled && dashboardAnalyticsQuery.isLoading);
+  const error =
+    uiError ||
+    (pageDataError
+      ? "Failed to load investments"
+      : referenceDataError
+        ? "Failed to load investment reference data"
+        : dashboardEnabled && dashboardAnalyticsQuery.error
+          ? "Failed to load investment dashboard"
+        : "");
 
-  const investments = useMemo(
+  const summaryInvestments = useMemo(
     () =>
       Array.isArray(rawInvestments)
         ? getNormalizedInvestments(rawInvestments, taxonomyNodes)
@@ -422,12 +451,56 @@ export default function Investments() {
   );
 
   const selectedInvestmentSummary = getInvestmentSelectedById(
-    investments,
+    summaryInvestments,
     selectedInvestmentId,
   );
   const selectedInvestmentQuery = useInvestment(selectedInvestmentId);
-  const selectedInvestment =
+  const investmentDetailEnabled =
+    drawerOpen && selectedInvestmentId != null && selectedInvestmentId !== "";
+  const selectedInvestmentPerformanceQuery = useInvestmentPerformance(
+    selectedInvestmentId,
+    investmentDetailEnabled && drawerMode === "view",
+  );
+  const selectedInvestmentEventsQuery = useInvestmentEventsByInvestment(
+    selectedInvestmentId,
+    investmentDetailEnabled,
+  );
+  const selectedInvestmentSnapshotsQuery = useInvestmentSnapshotsByInvestment(
+    selectedInvestmentId,
+    investmentDetailEnabled && drawerMode === "view",
+  );
+  const selectedInvestmentBase =
     selectedInvestmentQuery.data ?? selectedInvestmentSummary;
+  const selectedInvestment = useMemo<InvestmentDrawerData | null>(() => {
+    if (!selectedInvestmentBase) {
+      return null;
+    }
+
+    return {
+      ...selectedInvestmentBase,
+      investmentEvents:
+        selectedInvestmentEventsQuery.data ??
+        selectedInvestmentBase.investmentEvents ??
+        [],
+      valuationSnapshots:
+        selectedInvestmentSnapshotsQuery.data ??
+        selectedInvestmentBase.valuationSnapshots ??
+        [],
+      performanceHistory:
+        selectedInvestmentPerformanceQuery.data?.performanceHistory ??
+        selectedInvestmentBase.performanceHistory ??
+        [],
+      performanceHistorySource:
+        selectedInvestmentPerformanceQuery.data?.performanceHistorySource ??
+        selectedInvestmentBase.performanceHistorySource ??
+        'none',
+    };
+  }, [
+    selectedInvestmentBase,
+    selectedInvestmentEventsQuery.data,
+    selectedInvestmentPerformanceQuery.data,
+    selectedInvestmentSnapshotsQuery.data,
+  ]);
 
   const openCreateDrawer = () => {
     if (accounts.length === 0) {
@@ -459,43 +532,111 @@ export default function Investments() {
     statusFilter !== "all" ||
     categoryFilter !== "all";
   const isFirstInvestmentSetup =
-    investments.length === 0 && !hasInvestmentFilters;
+    summaryInvestments.length === 0 && !hasInvestmentFilters;
 
-  const dashboardKpis = getInvestmentDashboardKpis(investments);
+  const localDashboardKpis = getInvestmentDashboardKpis(summaryInvestments);
 
-  const topCurrentValueItems = getTopInvestmentCurrentValueItems(investments);
-
-  const recentInvestments = getRecentInvestments(investments);
-
-  const upcomingContributions = getInvestmentContributionViewItems(investments);
-
-  const categoryBreakdown = useMemo(
-    () => getInvestmentCategoryBreakdown(investments, taxonomyNodes),
-    [investments, taxonomyNodes],
+  const localCategoryBreakdown = useMemo(
+    () => getInvestmentCategoryBreakdown(summaryInvestments, taxonomyNodes),
+    [summaryInvestments, taxonomyNodes],
   );
 
   const categoryOptions = getInvestmentCategoryOptions(taxonomyNodes);
 
   const categoryLabelMap = getInvestmentCategoryLabelMap(taxonomyNodes);
-  const valueSourceSummary = useMemo(
-    () => getInvestmentValueSourceSummary(investments),
-    [investments],
+  const localValueSourceSummary = useMemo(
+    () => getInvestmentValueSourceSummary(summaryInvestments),
+    [summaryInvestments],
   );
-  const categoryPerformanceRows = useMemo(
-    () => getInvestmentCategoryPerformanceRows(investments, categoryLabelMap, 12),
-    [investments, categoryLabelMap],
-  );
+  const dashboardAnalytics = dashboardAnalyticsQuery.data?.analytics;
+  const categoryPerformanceRows = useMemo(() => {
+    if (Array.isArray(dashboardAnalytics?.categoryPerformanceRows)) {
+      return dashboardAnalytics.categoryPerformanceRows.map((item) => ({
+        ...item,
+        label: categoryLabelMap[item.key] || item.label || item.key,
+        sparkline: Array.isArray(item.sparkline) ? item.sparkline : [],
+        investmentIds: Array.isArray(item.investmentIds) ? item.investmentIds : [],
+      }));
+    }
 
-  const timeSeriesData = getInvestmentTimeSeriesData(
-    investments,
-    selectedYearForDrill,
-  );
+    return getInvestmentCategoryPerformanceRows(
+      summaryInvestments,
+      categoryLabelMap,
+      12,
+    );
+  }, [dashboardAnalytics, summaryInvestments, categoryLabelMap]);
+
+  const timeSeriesData = useMemo(() => {
+    const timeSeries = dashboardAnalytics?.timeSeries;
+
+    if (selectedYearForDrill) {
+      return (
+        timeSeries?.monthlyByYear?.[selectedYearForDrill] ||
+        getInvestmentTimeSeriesData(summaryInvestments, selectedYearForDrill)
+      );
+    }
+
+    return timeSeries?.yearly || getInvestmentTimeSeriesData(summaryInvestments, null);
+  }, [dashboardAnalytics, summaryInvestments, selectedYearForDrill]);
+
   const portfolioGrowthData = useMemo(
-    () => getInvestmentPortfolioGrowthData(investments),
-    [investments],
+    () =>
+      dashboardAnalytics?.portfolioGrowthData ||
+      getInvestmentPortfolioGrowthData(summaryInvestments),
+    [dashboardAnalytics, summaryInvestments],
   );
 
-  const calendarGroups = getInvestmentCalendarGroups(investments);
+  const dashboardKpis = dashboardAnalyticsQuery.data?.summary
+    ? {
+        totalInvestments: Number(
+          dashboardAnalyticsQuery.data.summary.totalInvestments ?? localDashboardKpis.totalInvestments,
+        ),
+        totalInvested: Number(
+          dashboardAnalyticsQuery.data.summary.totalInvested ?? localDashboardKpis.totalInvested,
+        ),
+        totalCurrentValue: Number(
+          dashboardAnalyticsQuery.data.summary.totalCurrentValue ?? localDashboardKpis.totalCurrentValue,
+        ),
+        totalReturn: Number(
+          dashboardAnalyticsQuery.data.summary.totalReturn ?? localDashboardKpis.totalReturn,
+        ),
+        returnPercentage: Number(
+          dashboardAnalyticsQuery.data.summary.returnPercentage ?? localDashboardKpis.returnPercentage,
+        ),
+        upcomingMaturity: Number(
+          dashboardAnalyticsQuery.data.summary.upcomingMaturity ?? localDashboardKpis.upcomingMaturity,
+        ),
+        insuranceCover: Number(
+          dashboardAnalyticsQuery.data.summary.insuranceCover ?? localDashboardKpis.insuranceCover,
+        ),
+      }
+    : localDashboardKpis;
+
+  const valueSourceSummary =
+    dashboardAnalyticsQuery.data?.summary?.valueSourceSummary || localValueSourceSummary;
+
+  const categoryBreakdown = Array.isArray(dashboardAnalyticsQuery.data?.categoryBreakdown)
+    ? dashboardAnalyticsQuery.data.categoryBreakdown.map((item) => ({
+        key: item.key,
+        label: categoryLabelMap[item.key] || item.key,
+        value: Number(item.invested || 0),
+        investmentIds: Array.isArray(item.investmentIds) ? item.investmentIds : [],
+      }))
+    : localCategoryBreakdown;
+
+  const topCurrentValueItems =
+    dashboardAnalyticsQuery.data?.upcoming?.topCurrentValueItems ||
+    getTopInvestmentCurrentValueItems(summaryInvestments);
+
+  const recentInvestments =
+    dashboardAnalyticsQuery.data?.upcoming?.recentInvestments ||
+    getRecentInvestments(summaryInvestments);
+
+  const upcomingContributions = dashboardAnalyticsQuery.data?.upcoming?.upcomingContributions
+    ? getInvestmentContributionViewItems(dashboardAnalyticsQuery.data.upcoming.upcomingContributions)
+    : getInvestmentContributionViewItems(summaryInvestments);
+
+  const calendarGroups = getInvestmentCalendarGroups(summaryInvestments);
 
   const openEditDrawer = (investment) => {
     setDrawerMode("edit");
@@ -517,30 +658,6 @@ export default function Investments() {
   const closeRecordContributionModal = () => {
     setRecordContributionModalOpen(false);
     setSelectedContributionForRecording(null);
-  };
-
-  const handleContributionRecorded = async (response) => {
-    // Refresh the investment data
-    try {
-      await reload();
-      pushNotification({
-        type: "success",
-        message: "Contribution recorded and investment data updated",
-      });
-    } catch (error) {
-      pushNotification({
-        type: "error",
-        message: "Contribution recorded but failed to refresh data",
-      });
-    }
-  };
-
-  const handleRefreshInvestmentData = async () => {
-    await reload();
-
-    if (selectedInvestmentId != null) {
-      await selectedInvestmentQuery.refetch();
-    }
   };
 
   const closeInvestmentDrawer = () => {
@@ -594,8 +711,6 @@ export default function Investments() {
         selectedInvestmentId:
           drawerMode === "edit" ? selectedInvestmentId : null,
       });
-
-      await handleRefreshInvestmentData();
 
       pushNotification({
         type: "success",
@@ -674,25 +789,24 @@ export default function Investments() {
           throw new Error("Recurring plan ID was not available in the save response.");
         }
 
-        await updateContributionPlan(
-          targetInvestmentId,
+        await updateContributionPlanMutation.mutateAsync({
+          investmentId: targetInvestmentId,
           planId,
-          buildRecurringPlanUpdatePayloadFromFormValues(
+          payload: buildRecurringPlanUpdatePayloadFromFormValues(
             pendingRecurringReview.formValues,
             selectedInvestment?.activeContributionPlan,
           ),
-        );
+        });
       } else {
-        await confirmRecurringContributionPlan(
-          targetInvestmentId,
-          buildRecurringConfirmPayload(
+        await confirmContributionPlanMutation.mutateAsync({
+          investmentId: targetInvestmentId,
+          payload: buildRecurringConfirmPayload(
             pendingRecurringReview.recurringPayload,
             pendingRecurringReview.reviewedHistoricalItems,
           ),
-        );
+        });
       }
 
-      await handleRefreshInvestmentData();
       setReviewDialogOpen(false);
       setPendingRecurringReview(null);
       setUiError("");
@@ -733,7 +847,6 @@ export default function Investments() {
     const removeInvestment = async () => {
       try {
         await removeInvestmentMutation.mutateAsync(deleteTarget.id);
-        await handleRefreshInvestmentData();
         setDeleteTarget(null);
         setUiError("");
         pushNotification({ type: "success", message: "Investment removed" });
@@ -755,7 +868,7 @@ export default function Investments() {
       setTaxonomyFormError("");
       try {
         const savedNode = await saveTaxonomyMutation.mutateAsync(formValues);
-        await reload();
+        await reloadReferenceData();
         pushNotification({
           type: "success",
           message: formValues.id
@@ -784,7 +897,7 @@ export default function Investments() {
     const removeAssetTaxonomy = async () => {
       try {
         await removeTaxonomyMutation.mutateAsync(targetNode.id);
-        await reload();
+        await reloadReferenceData();
         pushNotification({
           type: "success",
           message: "Asset taxonomy removed",
@@ -1044,7 +1157,7 @@ export default function Investments() {
 
   const renderDashboardView = () => (
     <InvestmentsDashboardView
-      investments={investments}
+      investments={summaryInvestments}
       portfolioGrowthData={portfolioGrowthData}
       timeSeriesData={timeSeriesData}
       isDrillMode={Boolean(selectedYearForDrill)}
@@ -1078,7 +1191,7 @@ export default function Investments() {
     <InvestmentsCalendarView
       calendarGroups={calendarGroups}
       investmentEvents={investmentEvents}
-      investments={investments}
+      investments={summaryInvestments}
       categoryLabelMap={categoryLabelMap}
     />
   );
@@ -1215,7 +1328,6 @@ export default function Investments() {
         investment={selectedInvestment}
         taxonomyNodes={taxonomyNodes}
         onEdit={openEditDrawer}
-        onPlanUpdated={handleRefreshInvestmentData}
       />
 
       <InvestmentAssetTaxonomyFormDrawer
@@ -1247,7 +1359,6 @@ export default function Investments() {
         investment={selectedContributionForRecording?.investment}
         contributionPlan={selectedContributionForRecording?.contributionPlan}
         accounts={accounts}
-        onContributionRecorded={handleContributionRecorded}
       />
 
       <RecurringOccurrencesReviewDialog

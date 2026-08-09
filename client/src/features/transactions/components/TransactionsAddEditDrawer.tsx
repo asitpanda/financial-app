@@ -18,6 +18,7 @@ import {
   createDefaultTransactionForm,
   toTransactionFormState,
 } from "../transactions.schema";
+import type { FinancialAccountRecord as AccountRecord } from "../../accounts/types/account.types";
 import type { Goal } from "../../../types";
 import type {
   TransactionRecord,
@@ -58,13 +59,6 @@ interface TransactionsAddEditDrawerProps {
 }
 
 type SelectChangeLikeEvent = { target: { value: string } };
-
-interface AccountRecord {
-  id: string | number;
-  name?: string;
-  displayName?: string;
-  institutionName?: string;
-}
 
 export default function TransactionsAddEditDrawer({
   open,
@@ -175,7 +169,7 @@ export default function TransactionsAddEditDrawer({
 
     const loadAccounts = async () => {
       try {
-        const accounts = (await getFinancialAccounts()) as AccountRecord[];
+        const accounts = await getFinancialAccounts();
         if (active) {
           setSourceOptions(
             (accounts || []).map((account: AccountRecord) => ({

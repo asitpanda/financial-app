@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getFinancialAccounts } from '../../accounts/financialAccounts.api';
+import type { FinancialAccountRecord } from '../../accounts/types/account.types';
 import investmentEventsApi from '../api/investmentEvents.api';
 import investmentApi from '../api/investments.api';
 import investmentAssetTaxonomyApi from '../api/investmentAssetTaxonomy.api';
@@ -9,32 +10,37 @@ import { useNotificationStore } from '../../../store/notificationStore';
 import { removeInvestment, saveInvestment } from '../service/investments.service';
 import type {
   CreateInvestmentDto,
-  Investment,
-  InvestmentEvent,
+  InvestmentDashboardAnalyticsResponse,
   UpdateInvestmentDto,
 } from '../types/investment.types';
 import type { InvestmentAssetTaxonomyNode } from '../types/investmentAssetTaxonomy.types';
 
-interface FinancialAccountRecord {
-  id: number | string;
-  name?: string;
-  displayName?: string;
-  institutionName?: string;
-}
-
-interface InvestmentPageData {
-  investments: Investment[];
-  investmentEvents: InvestmentEvent[];
+interface InvestmentReferenceData {
   taxonomyNodes: InvestmentAssetTaxonomyNode[];
   accounts: FinancialAccountRecord[];
 }
 
-export const useInvestments = () => {
+const invalidateInvestmentSummaryQueries = (queryClient: ReturnType<typeof useQueryClient>) => {
+  queryClient.invalidateQueries({ queryKey: ['investments'] });
+  queryClient.invalidateQueries({ queryKey: ['investments', 'dashboard'] });
+};
+
+const invalidateInvestmentDetailQuery = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  id?: string | number | null,
+) => {
+  if (id == null || id === '') return;
+  queryClient.invalidateQueries({ queryKey: ['investment', id] });
+};
+
+export const useInvestmentSummaryData = () => {
   return useQuery({
     queryKey: ['investments'],
     queryFn: () => investmentApi.getAll(),
   });
 };
+
+export const useInvestments = () => useInvestmentSummaryData();
 
 export const useInvestment = (id: string | number) => {
   return useQuery({
@@ -44,15 +50,92 @@ export const useInvestment = (id: string | number) => {
   });
 };
 
+export const useInvestmentPerformance = (id: string | number, enabled = true) => {
+  return useQuery({
+    queryKey: ['investment', id, 'performance'],
+    queryFn: () => investmentApi.getPerformanceById(id),
+    enabled: Boolean(id) && enabled,
+  });
+};
+
+export const useInvestmentEventsData = (enabled = true) => {
+  return useQuery({
+    queryKey: ['investment-events'],
+    queryFn: () => investmentEventsApi.getAll(),
+    enabled,
+  });
+};
+
+export const useInvestmentEventsByInvestment = (
+  investmentId: string | number,
+  enabled = true,
+) => {
+  return useQuery({
+    queryKey: ['investment-events', investmentId],
+    queryFn: () => investmentEventsApi.getByInvestmentId(investmentId),
+    enabled: Boolean(investmentId) && enabled,
+  });
+};
+
+export const useInvestmentSnapshotsByInvestment = (
+  investmentId: string | number,
+  enabled = true,
+) => {
+  return useQuery({
+    queryKey: ['investment-snapshots', investmentId],
+    queryFn: () => valuationSnapshotsApi.getByInvestment(investmentId),
+    enabled: Boolean(investmentId) && enabled,
+  });
+};
+
+export const useInvestmentDashboardAnalytics = (enabled = true) => {
+  return useQuery<InvestmentDashboardAnalyticsResponse>({
+    queryKey: ['investments', 'dashboard'],
+    queryFn: () => investmentApi.getDashboardAnalytics(),
+    enabled,
+  });
+};
+
+export const useInvestmentReferenceData = () => {
+  const pushNotification = useNotificationStore((state) => state.pushNotification);
+
+  const query = useQuery<InvestmentReferenceData>({
+    queryKey: ['investments', 'reference-data'],
+    queryFn: async () => {
+      const [taxonomyNodes, accounts] = await Promise.all([
+        investmentAssetTaxonomyApi.getAll(),
+        getFinancialAccounts(),
+      ]);
+
+      return {
+        taxonomyNodes: Array.isArray(taxonomyNodes) ? taxonomyNodes : [],
+        accounts: Array.isArray(accounts) ? accounts : [],
+      };
+    },
+  });
+
+  useEffect(() => {
+    if (!query.error) return;
+    pushNotification({ type: 'error', message: 'Failed to load investment reference data' });
+  }, [query.error, pushNotification]);
+
+  return {
+    taxonomyNodes: query.data?.taxonomyNodes || [],
+    accounts: query.data?.accounts || [],
+    loading: query.isLoading,
+    error: query.error,
+    reload: query.refetch,
+  };
+};
+
 export const useCreateInvestment = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (data: CreateInvestmentDto) => investmentApi.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['investment'] });
-      queryClient.invalidateQueries({ queryKey: ['investments'] });
-      queryClient.invalidateQueries({ queryKey: ['investments', 'page-data'] });
+    onSuccess: (savedInvestment) => {
+      invalidateInvestmentSummaryQueries(queryClient);
+      invalidateInvestmentDetailQuery(queryClient, savedInvestment?.id);
     },
   });
 };
@@ -68,10 +151,9 @@ export const useUpdateInvestment = () => {
       id: string | number;
       data: UpdateInvestmentDto;
     }) => investmentApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['investment'] });
-      queryClient.invalidateQueries({ queryKey: ['investments'] });
-      queryClient.invalidateQueries({ queryKey: ['investments', 'page-data'] });
+    onSuccess: (_savedInvestment, variables) => {
+      invalidateInvestmentSummaryQueries(queryClient);
+      invalidateInvestmentDetailQuery(queryClient, variables.id);
     },
   });
 };
@@ -81,10 +163,9 @@ export const useDeleteInvestment = () => {
 
   return useMutation({
     mutationFn: (id: string | number) => investmentApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['investment'] });
-      queryClient.invalidateQueries({ queryKey: ['investments'] });
-      queryClient.invalidateQueries({ queryKey: ['investments', 'page-data'] });
+    onSuccess: (_result, id) => {
+      invalidateInvestmentSummaryQueries(queryClient);
+      queryClient.removeQueries({ queryKey: ['investment', id], exact: true });
     },
   });
 };
@@ -100,10 +181,12 @@ export const useSaveInvestment = () => {
       payload: CreateInvestmentDto;
       selectedInvestmentId?: string | number | null;
     }) => saveInvestment({ payload, selectedInvestmentId }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['investment'] });
-      queryClient.invalidateQueries({ queryKey: ['investments'] });
-      queryClient.invalidateQueries({ queryKey: ['investments', 'page-data'] });
+    onSuccess: (savedInvestment, variables) => {
+      invalidateInvestmentSummaryQueries(queryClient);
+      invalidateInvestmentDetailQuery(
+        queryClient,
+        variables.selectedInvestmentId ?? savedInvestment?.id,
+      );
     },
   });
 };
@@ -113,55 +196,17 @@ export const useRemoveInvestment = () => {
 
   return useMutation({
     mutationFn: (id: string | number) => removeInvestment(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['investment'] });
-      queryClient.invalidateQueries({ queryKey: ['investments'] });
-      queryClient.invalidateQueries({ queryKey: ['investments', 'page-data'] });
+    onSuccess: (_result, id) => {
+      invalidateInvestmentSummaryQueries(queryClient);
+      queryClient.removeQueries({ queryKey: ['investment', id], exact: true });
     },
   });
 };
 
-export const useInvestmentPageData = () => {
+export const useInvestmentSummaryPageData = () => {
   const pushNotification = useNotificationStore((state) => state.pushNotification);
 
-  const query = useQuery<InvestmentPageData>({
-    queryKey: ['investments', 'page-data'],
-    queryFn: async () => {
-      const [investments, taxonomyNodes, accounts, investmentEvents, valuationSnapshots] = await Promise.all([
-        investmentApi.getAll(),
-        investmentAssetTaxonomyApi.getAll(),
-        getFinancialAccounts(),
-        investmentEventsApi.getAll(),
-        valuationSnapshotsApi.getAll(),
-      ]);
-
-      const normalizedInvestments = Array.isArray(investments) ? investments : [];
-      const normalizedEvents = Array.isArray(investmentEvents) ? investmentEvents : [];
-      const normalizedSnapshots = Array.isArray(valuationSnapshots)
-        ? valuationSnapshots
-        : [];
-      const snapshotsByInvestmentId = normalizedSnapshots.reduce<
-        Record<string, Investment['valuationSnapshots']>
-      >((acc, snapshot) => {
-        const key = String(snapshot.investmentId);
-        if (!acc[key]) {
-          acc[key] = [];
-        }
-        acc[key].push(snapshot);
-        return acc;
-      }, {});
-
-      return {
-        investments: normalizedInvestments.map((investment) => ({
-          ...investment,
-          valuationSnapshots: snapshotsByInvestmentId[String(investment.id)] || [],
-        })),
-        investmentEvents: normalizedEvents,
-        taxonomyNodes: Array.isArray(taxonomyNodes) ? taxonomyNodes : [],
-        accounts: Array.isArray(accounts) ? accounts : [],
-      };
-    },
-  });
+  const query = useInvestmentSummaryData();
 
   useEffect(() => {
     if (!query.error) return;
@@ -169,12 +214,11 @@ export const useInvestmentPageData = () => {
   }, [query.error, pushNotification]);
 
   return {
-    investments: query.data?.investments || [],
-    investmentEvents: query.data?.investmentEvents || [],
-    taxonomyNodes: query.data?.taxonomyNodes || [],
-    accounts: query.data?.accounts || [],
+    investments: Array.isArray(query.data) ? query.data : [],
     loading: query.isLoading,
     error: query.error,
     reload: query.refetch,
   };
 };
+
+export const useInvestmentPageData = () => useInvestmentSummaryPageData();

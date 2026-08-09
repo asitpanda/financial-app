@@ -1,25 +1,28 @@
+import type { InvestmentContributionPlanRecord } from '../investment-contribution-plan.types';
+import type {
+  ContributionPlanUpdateInput,
+  ContributionPlanWriteInput,
+  CreatePlanWithHistoricalEventsInput,
+  CreatePlanWithHistoricalEventsResult,
+  SkipCurrentContributionInput,
+  SkipCurrentContributionResult,
+} from '../investment-contribution-plan.types';
+
 export interface IContributionPlanDataSourcePort {
-  create(data: any): Promise<any>;
-  findAllByInvestment(investmentId: string): Promise<any[]>;
-  findAllActiveByUser(userId: number): Promise<any[]>;
-  findOne(id: string): Promise<any>;
-  update(id: string, data: any): Promise<any>;
+  create(data: ContributionPlanWriteInput): Promise<InvestmentContributionPlanRecord>;
+  findAllByInvestment(investmentId: string): Promise<InvestmentContributionPlanRecord[]>;
+  findAllByUser(userId: number): Promise<InvestmentContributionPlanRecord[]>;
+  findAllActiveByUser(userId: number): Promise<InvestmentContributionPlanRecord[]>;
+  findOne(id: string): Promise<InvestmentContributionPlanRecord | null>;
+  update(id: string, data: ContributionPlanUpdateInput): Promise<InvestmentContributionPlanRecord | null>;
   delete(id: string): Promise<void>;
-  findActiveByInvestment(investmentId: string): Promise<any | null>;
-  createPlanWithHistoricalEvents(data: {
-    investmentId: string;
-    userId: number;
-    planPayload: any;
-    selectedHistoricalItems: any[];
-  }): Promise<any>;
-  skipCurrentContribution(data: {
-    investmentId: string;
-    planId: string;
-    userId: number;
-    dueDate: string;
-    nextDueDate: string | null;
-    notes?: string;
-  }): Promise<any>;
+  findActiveByInvestment(investmentId: string): Promise<InvestmentContributionPlanRecord | null>;
+  createPlanWithHistoricalEvents(
+    data: CreatePlanWithHistoricalEventsInput,
+  ): Promise<CreatePlanWithHistoricalEventsResult>;
+  skipCurrentContribution(
+    data: SkipCurrentContributionInput,
+  ): Promise<SkipCurrentContributionResult>;
   generateDueRecurringInvestmentEvents(data: {
     cutoffDate: Date;
     limit?: number;

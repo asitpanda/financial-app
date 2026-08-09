@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InvestmentEventType } from '@prisma/client';
+import type { InvestmentEventRecord } from '../investment-event.types';
+import { CreateInvestmentEventDto } from '../dto/create-investment-event.dto';
+import { UpdateInvestmentEventDto } from '../dto/update-investment-event.dto';
 import { IEventDataSourcePort } from './event.datasource.port';
 import { mockInvestmentEventsData } from '../../mockdata';
 import { mockInvestmentsData } from '../../mockdata/investments';
@@ -30,41 +33,18 @@ const syncInvestmentDerivedValues = (investmentId: number) => {
     )
     .reduce((sum, event) => sum + Number(event.amount || 0), 0);
 
-  const historicalIncome = mockInvestmentEvents
-    .filter(
-      (event) =>
-        event.investmentId === investmentId &&
-        event.status === 'CONFIRMED' &&
-        event.eventType === InvestmentEventType.OPENING_INCOME_CREDIT,
-    )
-    .reduce((sum, event) => sum + Number(event.amount || 0), 0);
-
-  const latestConfirmedEvent = mockInvestmentEvents
-    .filter(
-      (event) => event.investmentId === investmentId && event.status === 'CONFIRMED',
-    )
-    .sort(
-      (left, right) =>
-        new Date(right.eventDate).getTime() - new Date(left.eventDate).getTime(),
-    )[0];
-
   const investmentIndex = mockInvestmentsData.findIndex((investment) => investment.id === investmentId);
   if (investmentIndex < 0) return;
 
   const principalTotal = principalIn - principalOut;
   mockInvestmentsData[investmentIndex].totalInvested = principalTotal;
-  mockInvestmentsData[investmentIndex].currentValue = principalTotal + historicalIncome;
-  mockInvestmentsData[investmentIndex].lastValuationAt = latestConfirmedEvent
-    ? new Date(latestConfirmedEvent.eventDate)
-    : null;
-  mockInvestmentsData[investmentIndex].currentValueSource = 'manual';
 };
 
 @Injectable()
 export class EventMockRepository implements IEventDataSourcePort {
-  async create(data: any): Promise<any> {
+  async create(data: CreateInvestmentEventDto): Promise<InvestmentEventRecord> {
     const timestamp = new Date();
-    const newEvent = {
+    const newEvent: InvestmentEventRecord = {
       id: nextInvestmentEventId(),
       ...data,
       investmentId: Number(data.investmentId),
@@ -73,10 +53,16 @@ export class EventMockRepository implements IEventDataSourcePort {
       linkedTransactionId: normalizeNullableNumber(data.linkedTransactionId),
       eventType: data.eventType,
       dueDate: normalizeDate(data.dueDate),
-      status: data.status || 'PENDING',
-      eventSource: data.eventSource || 'MANUAL',
+      status: (data.status || 'PENDING') as InvestmentEventRecord['status'],
+      eventSource: (data.eventSource || 'MANUAL') as InvestmentEventRecord['eventSource'],
       sequenceNumber: normalizeNullableNumber(data.sequenceNumber),
       eventDate: new Date(data.eventDate),
+      amount: data.amount ?? null,
+      units: data.units ?? null,
+      pricePerUnit: data.pricePerUnit ?? null,
+      netAmount: data.netAmount ?? null,
+      notes: data.notes ?? null,
+      meta: data.meta ?? null,
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -86,7 +72,7 @@ export class EventMockRepository implements IEventDataSourcePort {
     return newEvent;
   }
 
-  async findAll(userId: number): Promise<any[]> {
+  async findAll(userId: number): Promise<InvestmentEventRecord[]> {
     const ownedInvestmentIds = new Set(
       mockInvestmentsData
         .filter((investment) => investment.userId === userId)
@@ -98,15 +84,15 @@ export class EventMockRepository implements IEventDataSourcePort {
     );
   }
 
-  async findAllByInvestment(investmentId: string): Promise<any[]> {
+  async findAllByInvestment(investmentId: string): Promise<InvestmentEventRecord[]> {
     return mockInvestmentEvents.filter((event) => event.investmentId === Number(investmentId));
   }
 
-  async findOne(id: string): Promise<any> {
+  async findOne(id: string): Promise<InvestmentEventRecord | null> {
     return mockInvestmentEvents.find((event) => event.id === Number(id));
   }
 
-  async update(id: string, data: any): Promise<any> {
+  async update(id: string, data: UpdateInvestmentEventDto): Promise<InvestmentEventRecord | null> {
     const index = mockInvestmentEvents.findIndex((event) => event.id === Number(id));
     if (index === -1) return null;
 
@@ -119,13 +105,25 @@ export class EventMockRepository implements IEventDataSourcePort {
       linkedTransactionId: data.linkedTransactionId !== undefined ? normalizeNullableNumber(data.linkedTransactionId) : mockInvestmentEvents[index].linkedTransactionId,
       eventType: data.eventType !== undefined ? data.eventType : mockInvestmentEvents[index].eventType,
       dueDate: data.dueDate !== undefined ? normalizeDate(data.dueDate) : mockInvestmentEvents[index].dueDate,
-      status: data.status !== undefined ? data.status : mockInvestmentEvents[index].status,
-      eventSource: data.eventSource !== undefined ? data.eventSource : mockInvestmentEvents[index].eventSource,
+      status:
+        data.status !== undefined
+          ? (data.status as InvestmentEventRecord['status'])
+          : mockInvestmentEvents[index].status,
+      eventSource:
+        data.eventSource !== undefined
+          ? (data.eventSource as InvestmentEventRecord['eventSource'])
+          : mockInvestmentEvents[index].eventSource,
       sequenceNumber:
         data.sequenceNumber !== undefined
           ? normalizeNullableNumber(data.sequenceNumber)
           : mockInvestmentEvents[index].sequenceNumber,
-      eventDate: data.eventDate !== undefined ? normalizeDate(data.eventDate) : mockInvestmentEvents[index].eventDate,
+      eventDate: data.eventDate !== undefined ? new Date(data.eventDate) : mockInvestmentEvents[index].eventDate,
+      amount: data.amount !== undefined ? data.amount : mockInvestmentEvents[index].amount,
+      units: data.units !== undefined ? data.units : mockInvestmentEvents[index].units,
+      pricePerUnit: data.pricePerUnit !== undefined ? data.pricePerUnit : mockInvestmentEvents[index].pricePerUnit,
+      netAmount: data.netAmount !== undefined ? data.netAmount : mockInvestmentEvents[index].netAmount,
+      notes: data.notes !== undefined ? data.notes : mockInvestmentEvents[index].notes,
+      meta: data.meta !== undefined ? data.meta : mockInvestmentEvents[index].meta,
       updatedAt: new Date(),
     };
 

@@ -1,30 +1,46 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { IContributionPlanDataSourcePort } from './contribution-plan.datasource.port';
+import type { InvestmentContributionPlanRecord } from '../investment-contribution-plan.types';
+import {
+  ContributionPlanUpdateInput,
+  ContributionPlanWriteInput,
+  CreatePlanWithHistoricalEventsInput,
+  CreatePlanWithHistoricalEventsResult,
+  SkipCurrentContributionInput,
+  SkipCurrentContributionResult,
+} from '../investment-contribution-plan.types';
+import type { IContributionPlanDataSourcePort as IContributionPlanDataSourcePortType } from './contribution-plan.datasource.port';
 
 @Injectable()
 export class ContributionPlanRepository {
   constructor(
     @Inject('INVESTMENT_CONTRIBUTION_PLAN_DATA_SOURCE')
-    private readonly dataSource: IContributionPlanDataSourcePort,
+    private readonly dataSource: IContributionPlanDataSourcePortType,
   ) {}
 
-  async create(data: any): Promise<any> {
+  async create(data: ContributionPlanWriteInput): Promise<InvestmentContributionPlanRecord> {
     return this.dataSource.create(data);
   }
 
-  async findAllByInvestment(investmentId: string): Promise<any[]> {
+  async findAllByInvestment(investmentId: string): Promise<InvestmentContributionPlanRecord[]> {
     return this.dataSource.findAllByInvestment(investmentId);
   }
 
-  async findAllActiveByUser(userId: number): Promise<any[]> {
+  async findAllByUser(userId: number): Promise<InvestmentContributionPlanRecord[]> {
+    return this.dataSource.findAllByUser(userId);
+  }
+
+  async findAllActiveByUser(userId: number): Promise<InvestmentContributionPlanRecord[]> {
     return this.dataSource.findAllActiveByUser(userId);
   }
 
-  async findOne(id: string): Promise<any> {
+  async findOne(id: string): Promise<InvestmentContributionPlanRecord | null> {
     return this.dataSource.findOne(id);
   }
 
-  async update(id: string, data: any): Promise<any> {
+  async update(
+    id: string,
+    data: ContributionPlanUpdateInput,
+  ): Promise<InvestmentContributionPlanRecord | null> {
     return this.dataSource.update(id, data);
   }
 
@@ -32,27 +48,21 @@ export class ContributionPlanRepository {
     return this.dataSource.delete(id);
   }
 
-  async findActiveByInvestment(investmentId: string): Promise<any | null> {
+  async findActiveByInvestment(
+    investmentId: string,
+  ): Promise<InvestmentContributionPlanRecord | null> {
     return this.dataSource.findActiveByInvestment(investmentId);
   }
 
-  async createPlanWithHistoricalEvents(data: {
-    investmentId: string;
-    userId: number;
-    planPayload: any;
-    selectedHistoricalItems: any[];
-  }): Promise<any> {
+  async createPlanWithHistoricalEvents(
+    data: CreatePlanWithHistoricalEventsInput,
+  ): Promise<CreatePlanWithHistoricalEventsResult> {
     return this.dataSource.createPlanWithHistoricalEvents(data);
   }
 
-  async skipCurrentContribution(data: {
-    investmentId: string;
-    planId: string;
-    userId: number;
-    dueDate: string;
-    nextDueDate: string | null;
-    notes?: string;
-  }): Promise<any> {
+  async skipCurrentContribution(
+    data: SkipCurrentContributionInput,
+  ): Promise<SkipCurrentContributionResult> {
     return this.dataSource.skipCurrentContribution(data);
   }
 

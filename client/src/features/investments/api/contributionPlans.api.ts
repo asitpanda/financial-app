@@ -1,5 +1,12 @@
 import apiClient from '../../../api/client';
 
+export const recordInvestmentContribution = async (
+  payload: Record<string, unknown>,
+) => {
+  const response = await apiClient.post('/transactions/contributions/record', payload);
+  return response.data;
+};
+
 export const previewRecurringContributionPlan = async (
   investmentId: string | number,
   payload: Record<string, unknown>,
@@ -47,6 +54,7 @@ export const skipCurrentContributionPlan = async (
 };
 
 const contributionPlansApi = {
+  recordInvestmentContribution,
   previewRecurringContributionPlan,
   confirmRecurringContributionPlan,
   updateContributionPlan,

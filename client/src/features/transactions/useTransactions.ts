@@ -5,6 +5,7 @@ import { saveTransaction } from "./transactions.service";
 import { getCategories } from "../categories/categories.api";
 import { getGoals } from "../goals/goals.api";
 import { getFinancialAccounts } from "../accounts/financialAccounts.api";
+import type { FinancialAccountRecord } from "../accounts/types/account.types";
 import { useNotificationStore } from "../../store/notificationStore";
 import type { Goal } from "../../types";
 import type {
@@ -31,13 +32,6 @@ const toApplicationTransactionModel = (
 
 interface TransactionGoalRecord extends Goal {
   _id?: string;
-}
-
-interface FinancialAccountRecord {
-  id: number | string;
-  name?: string;
-  displayName?: string;
-  institutionName?: string;
 }
 
 interface TransactionPageData {

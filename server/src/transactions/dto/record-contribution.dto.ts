@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDateString, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString } from 'class-validator';
 
 export class RecordContributionDto {
   @ApiProperty({ description: 'Investment id' })
@@ -21,6 +21,7 @@ export class RecordContributionDto {
   @ApiProperty({ description: 'Contribution amount' })
   @Type(() => Number)
   @IsNumber()
+  @IsPositive()
   amount: number;
 
   @ApiProperty({ description: 'Transaction date (YYYY-MM-DD)' })

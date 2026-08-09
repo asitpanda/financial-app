@@ -13,7 +13,7 @@ export interface SaveValuationSnapshotDto {
 export const getValuationSnapshots = async (): Promise<
   InvestmentValuationSnapshot[]
 > => {
-  const response = await apiClient.get('/valuations/snapshots');
+  const response = await apiClient.get('/valuation-snapshots');
   return Array.isArray(response.data) ? response.data : [];
 };
 
@@ -21,37 +21,48 @@ export const getValuationSnapshotsByInvestment = async (
   investmentId: string | number,
 ): Promise<InvestmentValuationSnapshot[]> => {
   const response = await apiClient.get(
-    `/valuations/snapshots/investment/${investmentId}`,
+    `/investments/${investmentId}/valuation-snapshots`,
   );
   return response.data;
 };
 
 export const getValuationSnapshotById = async (
+  investmentId: string | number,
   id: string | number,
 ): Promise<InvestmentValuationSnapshot> => {
-  const response = await apiClient.get(`/valuations/snapshots/${id}`);
+  const response = await apiClient.get(
+    `/investments/${investmentId}/valuation-snapshots/${id}`,
+  );
   return response.data;
 };
 
 export const createValuationSnapshot = async (
   payload: SaveValuationSnapshotDto,
 ): Promise<InvestmentValuationSnapshot> => {
-  const response = await apiClient.post('/valuations/snapshots', payload);
+  const response = await apiClient.post(
+    `/investments/${payload.investmentId}/valuation-snapshots`,
+    payload,
+  );
   return response.data;
 };
 
 export const updateValuationSnapshot = async (
+  investmentId: string | number,
   id: string | number,
   payload: Partial<SaveValuationSnapshotDto>,
 ): Promise<InvestmentValuationSnapshot> => {
-  const response = await apiClient.put(`/valuations/snapshots/${id}`, payload);
+  const response = await apiClient.patch(
+    `/investments/${investmentId}/valuation-snapshots/${id}`,
+    payload,
+  );
   return response.data;
 };
 
 export const deleteValuationSnapshot = async (
+  investmentId: string | number,
   id: string | number,
 ): Promise<void> => {
-  await apiClient.delete(`/valuations/snapshots/${id}`);
+  await apiClient.delete(`/investments/${investmentId}/valuation-snapshots/${id}`);
 };
 
 export const valuationSnapshotsApi = {

@@ -1,4 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { GoalRecord } from '../goal.types';
+import type { CreateGoalDto } from '../dto/create-goal.dto';
+import type { UpdateGoalDto } from '../dto/update-goal.dto';
 import { IGoalDataSourcePort } from './goal.datasource.port';
 
 @Injectable()
@@ -8,19 +11,19 @@ export class GoalRepository {
     private readonly dataSource: IGoalDataSourcePort,
   ) {}
 
-  async create(data: any, userId: number): Promise<any> {
+  async create(data: CreateGoalDto, userId: number): Promise<GoalRecord> {
     return this.dataSource.create(data, userId);
   }
 
-  async findAll(userId: number): Promise<any[]> {
+  async findAll(userId: number): Promise<GoalRecord[]> {
     return this.dataSource.findAll(userId);
   }
 
-  async findOne(id: number, userId: number): Promise<any> {
+  async findOne(id: number, userId: number): Promise<GoalRecord | null> {
     return this.dataSource.findOne(id, userId);
   }
 
-  async update(id: number, data: any, userId: number): Promise<any> {
+  async update(id: number, data: UpdateGoalDto, userId: number): Promise<GoalRecord | null> {
     return this.dataSource.update(id, data, userId);
   }
 

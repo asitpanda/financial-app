@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import type { ValuationSnapshotRecord } from './valuation-snapshot.types';
 import { CreateValuationSnapshotDto } from './dto/create-valuation-snapshot.dto';
 import { UpdateValuationSnapshotDto } from './dto/update-valuation-snapshot.dto';
 import { InvestmentRepository } from '../investments/repositories/investment.repository';
@@ -11,7 +12,7 @@ export class ValuationSnapshotsService {
     private readonly investmentRepository: InvestmentRepository,
   ) {}
 
-  private getLatestSnapshot(snapshots: any[] = []) {
+  private getLatestSnapshot(snapshots: ValuationSnapshotRecord[] = []): ValuationSnapshotRecord | null {
     return snapshots
       .filter((snapshot) => snapshot?.snapshotDate)
       .sort(
@@ -73,7 +74,7 @@ export class ValuationSnapshotsService {
       Number(investmentId),
       {
         currentValue: Number(latestSnapshot.marketValue ?? investment.currentValue ?? 0),
-        lastValuationAt: latestSnapshot.snapshotDate,
+        lastValuationAt: new Date(latestSnapshot.snapshotDate).toISOString(),
         currentValueSource: 'valuation_snapshot',
       },
       userId,

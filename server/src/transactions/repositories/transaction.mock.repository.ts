@@ -4,6 +4,8 @@ import { CreateTransactionDto } from '../dto/create-transaction.dto';
 import { UpdateTransactionDto } from '../dto/update-transaction.dto';
 import { mockTransactionsData } from '../../mockdata';
 import { mockGoalsStore } from '../../mockdata/goals';
+import type { TransactionRecord } from '../transaction.types';
+import type { TransactionGoalDeltaSource } from '../transaction.types';
 
 // Mock data store
 let mockTransactions = [...mockTransactionsData];
@@ -11,7 +13,7 @@ const nextTransactionId = () => (mockTransactions.length ? Math.max(...mockTrans
 const normalizeNullableNumber = (value?: string | number | null) =>
   value === undefined || value === null || value === '' ? null : Number(value);
 
-const resolveGoalDelta = (transaction: { goalId?: number | null; type?: string; amount?: number }) => {
+const resolveGoalDelta = (transaction: TransactionGoalDeltaSource) => {
   if (!transaction?.goalId) return 0;
   const amount = Number(transaction.amount || 0);
   return transaction.type === 'expense' ? -amount : amount;
@@ -27,16 +29,16 @@ const applyGoalDelta = (goalId: number | null | undefined, delta: number, userId
 
 @Injectable()
 export class TransactionMockRepository implements ITransactionDataSourcePort {
-  async findAll(userId: number) {
+  async findAll(userId: number): Promise<TransactionRecord[]> {
     return mockTransactions.filter((t) => t.userId === userId);
   }
 
-  async findOne(id: number, userId: number) {
+  async findOne(id: number, userId: number): Promise<TransactionRecord | null> {
     return mockTransactions.find((t) => t.id === id && t.userId === userId);
   }
 
-  async create(data: CreateTransactionDto, userId: number) {
-    const newTransaction = {
+  async create(data: CreateTransactionDto, userId: number): Promise<TransactionRecord> {
+    const newTransaction: TransactionRecord = {
       id: nextTransactionId(),
       userId,
       categoryId: Number(data.categoryId),
@@ -58,7 +60,7 @@ export class TransactionMockRepository implements ITransactionDataSourcePort {
     return newTransaction;
   }
 
-  async update(id: number, data: UpdateTransactionDto, userId: number) {
+  async update(id: number, data: UpdateTransactionDto, userId: number): Promise<TransactionRecord | null> {
     const index = mockTransactions.findIndex(
       (t) => t.id === id && t.userId === userId,
     );
@@ -94,7 +96,7 @@ export class TransactionMockRepository implements ITransactionDataSourcePort {
     return null;
   }
 
-  async delete(id: number, userId: number) {
+  async delete(id: number, userId: number): Promise<void> {
     const existingTransaction = mockTransactions.find(
       (t) => t.id === id && t.userId === userId,
     );
@@ -106,14 +108,14 @@ export class TransactionMockRepository implements ITransactionDataSourcePort {
     }
   }
 
-  async findByDateRange(userId: number, startDate: Date, endDate: Date) {
+  async findByDateRange(userId: number, startDate: Date, endDate: Date): Promise<TransactionRecord[]> {
     return mockTransactions.filter(
       (t) =>
         t.userId === userId && t.date >= startDate && t.date <= endDate,
     );
   }
 
-  async findByType(userId: number, type: string) {
+  async findByType(userId: number, type: string): Promise<TransactionRecord[]> {
     return mockTransactions.filter(
       (t) => t.userId === userId && t.type === type,
     );

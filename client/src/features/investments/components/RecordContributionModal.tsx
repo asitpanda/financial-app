@@ -4,9 +4,11 @@ import { Alert, Box, Modal, Stack, TextField, Typography, CircularProgress } fro
 import dayjs from 'dayjs';
 import AppButton from '../../../components/common/AppButton';
 import { useNotificationStore } from '../../../store/notificationStore';
-import apiClient from '../../../api/client';
 import { validateRecordContributionForm } from '../investment.schema';
-import { skipCurrentContributionPlan } from '../api/contributionPlans.api';
+import {
+  useRecordInvestmentContribution,
+  useSkipCurrentInvestmentContribution,
+} from '../hooks/useContributionPlans';
 
 const modalStyle = {
   position: 'absolute',
@@ -28,7 +30,6 @@ export default function RecordContributionModal({
   investment,
   contributionPlan,
   accounts = [],
-  onContributionRecorded,
 }) {
   const [loadingAction, setLoadingAction] = useState(null);
   const [formData, setFormData] = useState({
@@ -39,6 +40,8 @@ export default function RecordContributionModal({
   });
   const [errors, setErrors] = useState({});
   const { pushNotification } = useNotificationStore();
+  const recordContributionMutation = useRecordInvestmentContribution();
+  const skipContributionMutation = useSkipCurrentInvestmentContribution();
   const loading = Boolean(loadingAction);
 
   const resolvedSourceAccountId =
@@ -112,7 +115,7 @@ export default function RecordContributionModal({
         notes: formData.notes || `Contribution for ${investment.name}`,
       };
 
-      const response = await apiClient.post('/transactions/contributions/record', payload);
+      await recordContributionMutation.mutateAsync(payload);
 
       pushNotification({ 
         message: `Contribution of ₹${Number(formData.amount).toLocaleString()} recorded successfully`, 
@@ -128,7 +131,6 @@ export default function RecordContributionModal({
       });
       setErrors({});
 
-      onContributionRecorded?.(response.data);
       onClose();
     } catch (error) {
       const message = error.response?.data?.message || error.message || 'Failed to record contribution';
@@ -143,20 +145,19 @@ export default function RecordContributionModal({
 
     setLoadingAction('skip');
     try {
-      const response = await skipCurrentContributionPlan(
-        investment.id,
-        contributionPlan.id,
-        {
+      await skipContributionMutation.mutateAsync({
+        investmentId: investment.id,
+        planId: contributionPlan.id,
+        payload: {
           notes: formData.notes || undefined,
         },
-      );
+      });
 
       pushNotification({
         message: `Skipped the due contribution for ${currentDueDateLabel}`,
         type: 'success',
       });
 
-      onContributionRecorded?.(response);
       onClose();
     } catch (error) {
       const message =

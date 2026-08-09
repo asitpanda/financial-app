@@ -1,18 +1,23 @@
 import { Injectable } from '@nestjs/common';
 import { IFinancialAccountDataSourcePort } from './financial-account.datasource.port';
 import { mockFinancialAccountsData } from '../../mockdata';
+import type { FinancialAccountRecord } from '../financial-account.types';
+import { CreateFinancialAccountDto } from '../dto/create-financial-account.dto';
+import { UpdateFinancialAccountDto } from '../dto/update-financial-account.dto';
 
 let mockFinancialAccounts = [...mockFinancialAccountsData];
 const nextAccountId = () => (mockFinancialAccounts.length ? Math.max(...mockFinancialAccounts.map((account) => account.id)) + 1 : 1);
 
 @Injectable()
 export class FinancialAccountMockRepository implements IFinancialAccountDataSourcePort {
-  async create(data: any, userId: string): Promise<any> {
+  async create(data: CreateFinancialAccountDto, userId: string): Promise<FinancialAccountRecord> {
     const timestamp = new Date();
     const normalizedUserId = Number(userId);
-    const newAccount = {
+    const newAccount: FinancialAccountRecord = {
       id: nextAccountId(),
       ...data,
+      institutionName: data.institutionName ?? null,
+      accountNumberMasked: data.accountNumberMasked ?? null,
       isActive: data.isActive ?? true,
       userId: normalizedUserId,
       createdAt: timestamp,
@@ -23,18 +28,18 @@ export class FinancialAccountMockRepository implements IFinancialAccountDataSour
     return newAccount;
   }
 
-  async findAll(userId: string): Promise<any[]> {
+  async findAll(userId: string): Promise<FinancialAccountRecord[]> {
     const normalizedUserId = Number(userId);
     return mockFinancialAccounts.filter((account) => account.userId === normalizedUserId);
   }
 
-  async findOne(id: string, userId: string): Promise<any> {
+  async findOne(id: string, userId: string): Promise<FinancialAccountRecord | null> {
     const normalizedId = Number(id);
     const normalizedUserId = Number(userId);
     return mockFinancialAccounts.find((account) => account.id === normalizedId && account.userId === normalizedUserId);
   }
 
-  async update(id: string, data: any, userId: string): Promise<any> {
+  async update(id: string, data: UpdateFinancialAccountDto, userId: string): Promise<FinancialAccountRecord | null> {
     const normalizedId = Number(id);
     const normalizedUserId = Number(userId);
     const index = mockFinancialAccounts.findIndex((account) => account.id === normalizedId && account.userId === normalizedUserId);

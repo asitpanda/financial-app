@@ -69,6 +69,8 @@ import {
   getTopCategoryActivity,
 } from "./categories.selectors";
 
+type CategoryTableRow = ReturnType<typeof getCategoryRows>[number];
+
 type DateRangeShortcut =
   | "all"
   | "custom"
@@ -390,14 +392,14 @@ export default function Categories() {
         onAction: openAddDrawer,
       };
 
-  const columns = useMemo<GridColDef<any>[]>(
+  const columns = useMemo<GridColDef<CategoryTableRow>[]>(
     () => [
       {
         field: "name",
         headerName: "Category",
         flex: 1.35,
         minWidth: 220,
-        renderCell: (params: any) => {
+        renderCell: (params) => {
           const iconPath = getIconPathByKey(params.row.icon);
           return (
             <Box
@@ -439,7 +441,7 @@ export default function Categories() {
         headerName: "Type",
         flex: 0.8,
         minWidth: 120,
-        renderCell: (params: any) => (
+        renderCell: (params) => (
           <StatusChip
             label={params.value}
             tone={params.value === "income" ? "success" : "error"}
@@ -458,7 +460,7 @@ export default function Categories() {
         headerName: "Net Amount",
         flex: 1,
         minWidth: 140,
-        renderCell: (params: any) => {
+        renderCell: (params) => {
           const numericValue = Number(params.value || 0);
           const tone =
             numericValue > 0
@@ -479,16 +481,16 @@ export default function Categories() {
         headerName: "Last Activity",
         flex: 1,
         minWidth: 150,
-        valueFormatter: (value: any) =>
-          value ? new Date(value).toLocaleDateString() : "No activity",
+        valueFormatter: (value) =>
+          value ? new Date(String(value)).toLocaleDateString() : "No activity",
       },
       {
         field: "createdAt",
         headerName: "Created",
         flex: 0.9,
         minWidth: 140,
-        valueFormatter: (value: any) =>
-          value ? new Date(value).toLocaleDateString() : "-",
+        valueFormatter: (value) =>
+          value ? new Date(String(value)).toLocaleDateString() : "-",
       },
       {
         field: "actions",
@@ -497,7 +499,7 @@ export default function Categories() {
         filterable: false,
         flex: 0.8,
         minWidth: 160,
-        renderCell: (params: any) => {
+        renderCell: (params) => {
           const categoryName = params.row.name || "category";
 
           return (
@@ -1019,7 +1021,7 @@ export default function Categories() {
           open={isCategoryFormDrawerOpen}
           onClose={closeDrawer}
           onSubmit={handleSubmitCategory}
-          initialValues={selectedCategory as any}
+          initialValues={selectedCategory}
           title={selectedCategory ? "Edit Category" : "Add Category"}
           submitLabel={selectedCategory ? "Update" : "Add"}
         />

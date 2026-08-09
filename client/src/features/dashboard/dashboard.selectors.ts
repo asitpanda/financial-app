@@ -274,7 +274,8 @@ export const getDashboardInvestmentSummary = (
   const upcomingContributions = periodActionInvestments
     .filter((investment) => {
       const dueDate = investment.activeContributionPlan?.nextDueDate;
-      if (!dueDate) return false;
+      const planStatus = String(investment.activeContributionPlan?.status || '').toLowerCase();
+      if (!dueDate || planStatus !== 'active') return false;
       const due = new Date(dueDate);
       return due >= periodStart && due <= periodEnd;
     })
@@ -287,6 +288,12 @@ export const getDashboardInvestmentSummary = (
   const overdueContributions = periodActionInvestments
     .filter((investment) => {
       if (!investment.activeContributionPlan?.nextDueDate) return false;
+      if (
+        !investment.activeContributionPlan?.nextDueDate ||
+        String(investment.activeContributionPlan?.status || '').toLowerCase() !== 'active'
+      ) {
+        return false;
+      }
       const due = new Date(investment.activeContributionPlan.nextDueDate);
       due.setHours(0, 0, 0, 0);
       return due < today;

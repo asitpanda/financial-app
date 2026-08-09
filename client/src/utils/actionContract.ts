@@ -1,4 +1,5 @@
 import type { ActionContract } from '../types/action';
+import { getRuntimeErrorMessage } from './errorMessage';
 
 interface ExecuteActionContractOptions {
   notify?: (notification: {
@@ -39,15 +40,11 @@ export async function executeActionContract<TPayload>(
       await contract.rollback();
     }
 
-    const runtimeMessage =
-      (error as any)?.response?.data?.message ||
-      (error as any)?.message;
+    const runtimeMessage = getRuntimeErrorMessage(error, '');
 
     if (notify) {
       if (typeof runtimeMessage === 'string' && runtimeMessage.trim()) {
         notify({ type: 'error', message: runtimeMessage });
-      } else if (Array.isArray(runtimeMessage) && runtimeMessage.length > 0) {
-        notify({ type: 'error', message: String(runtimeMessage[0]) });
       } else if (contract.feedback?.error) {
         notify({ type: 'error', message: contract.feedback.error });
       }

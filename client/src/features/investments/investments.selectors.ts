@@ -389,7 +389,9 @@ export const getInvestmentContributionViewItems = (
   return [...investments]
     .filter(
       (item) =>
-        item.status === 'active' && item.activeContributionPlan?.nextDueDate,
+        item.status === 'active' &&
+        item.activeContributionPlan?.nextDueDate &&
+        String(item.activeContributionPlan?.status || '').toLowerCase() === 'active',
     )
     .map((item) => ({
       item,
@@ -840,7 +842,10 @@ export const getInvestmentCalendarGroups = (
         });
       }
 
-      if (investment.activeContributionPlan?.nextDueDate) {
+      if (
+        investment.activeContributionPlan?.nextDueDate &&
+        String(investment.activeContributionPlan?.status || '').toLowerCase() === 'active'
+      ) {
         items.push({
           id: `${investment.id}-contribution`,
           title: investment.name,

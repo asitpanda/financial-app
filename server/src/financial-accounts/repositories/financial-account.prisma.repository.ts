@@ -1,12 +1,15 @@
 import { Injectable } from '@nestjs/common';
+import type { FinancialAccountRecord } from '../financial-account.types';
 import { PrismaService } from '../../database/prisma.service';
+import { CreateFinancialAccountDto } from '../dto/create-financial-account.dto';
+import { UpdateFinancialAccountDto } from '../dto/update-financial-account.dto';
 import { IFinancialAccountDataSourcePort } from './financial-account.datasource.port';
 
 @Injectable()
 export class FinancialAccountPrismaRepository implements IFinancialAccountDataSourcePort {
   constructor(private prisma: PrismaService) {}
 
-  async create(data: any, userId: string): Promise<any> {
+  async create(data: CreateFinancialAccountDto, userId: string): Promise<FinancialAccountRecord> {
     return this.prisma.financialAccount.create({
       data: {
         ...data,
@@ -15,20 +18,20 @@ export class FinancialAccountPrismaRepository implements IFinancialAccountDataSo
     });
   }
 
-  async findAll(userId: string): Promise<any[]> {
+  async findAll(userId: string): Promise<FinancialAccountRecord[]> {
     return this.prisma.financialAccount.findMany({
       where: { userId: Number(userId) },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async findOne(id: string, userId: string): Promise<any> {
+  async findOne(id: string, userId: string): Promise<FinancialAccountRecord | null> {
     return this.prisma.financialAccount.findFirst({
       where: { id: Number(id), userId: Number(userId) },
     });
   }
 
-  async update(id: string, data: any, userId: string): Promise<any> {
+  async update(id: string, data: UpdateFinancialAccountDto, userId: string): Promise<FinancialAccountRecord | null> {
     const existing = await this.prisma.financialAccount.findFirst({
       where: { id: Number(id), userId: Number(userId) },
     });

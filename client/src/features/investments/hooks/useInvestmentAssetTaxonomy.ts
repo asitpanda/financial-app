@@ -21,7 +21,7 @@ export const useSaveInvestmentAssetTaxonomy = () => {
       saveInvestmentAssetTaxonomy(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['investment-taxonomy'] });
-      queryClient.invalidateQueries({ queryKey: ['investments', 'page-data'] });
+      queryClient.invalidateQueries({ queryKey: ['investments', 'reference-data'] });
     },
   });
 };
@@ -33,7 +33,7 @@ export const useRemoveInvestmentAssetTaxonomy = () => {
     mutationFn: (id: string | number) => removeInvestmentAssetTaxonomy(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['investment-taxonomy'] });
-      queryClient.invalidateQueries({ queryKey: ['investments', 'page-data'] });
+      queryClient.invalidateQueries({ queryKey: ['investments', 'reference-data'] });
     },
   });
 };

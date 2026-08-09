@@ -1,9 +1,9 @@
 import { MOCK_SEED_DATE } from './shared';
-import { InvestmentAssetTaxonomyRecord } from './types';
+import type { InvestmentAssetTaxonomyRecord } from './types';
 
 const now = MOCK_SEED_DATE;
 
-export const mockInvestmentAssetTaxonomyData: InvestmentAssetTaxonomyRecord[] = [
+const baseInvestmentAssetTaxonomyData: Omit<InvestmentAssetTaxonomyRecord, 'userId'>[] = [
   {
     id: 1,
     label: 'Market',
@@ -357,3 +357,9 @@ export const mockInvestmentAssetTaxonomyData: InvestmentAssetTaxonomyRecord[] = 
     updatedAt: now,
   },
 ];
+
+export const mockInvestmentAssetTaxonomyData: InvestmentAssetTaxonomyRecord[] =
+  baseInvestmentAssetTaxonomyData.map((node) => ({
+    ...node,
+    userId: 1,
+  }));

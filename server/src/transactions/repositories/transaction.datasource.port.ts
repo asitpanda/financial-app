@@ -1,9 +1,13 @@
+import type { TransactionRecord } from '../transaction.types';
+import type { CreateTransactionDto } from '../dto/create-transaction.dto';
+import type { UpdateTransactionDto } from '../dto/update-transaction.dto';
+
 export interface ITransactionDataSourcePort {
-  findAll(userId: number): Promise<any[]>;
-  findOne(id: number, userId: number): Promise<any>;
-  create(data: any, userId: number): Promise<any>;
-  update(id: number, data: any, userId: number): Promise<any>;
+  findAll(userId: number): Promise<TransactionRecord[]>;
+  findOne(id: number, userId: number): Promise<TransactionRecord | null>;
+  create(data: CreateTransactionDto, userId: number): Promise<TransactionRecord>;
+  update(id: number, data: UpdateTransactionDto, userId: number): Promise<TransactionRecord | null>;
   delete(id: number, userId: number): Promise<void>;
-  findByDateRange(userId: number, startDate: Date, endDate: Date): Promise<any[]>;
-  findByType(userId: number, type: string): Promise<any[]>;
+  findByDateRange(userId: number, startDate: Date, endDate: Date): Promise<TransactionRecord[]>;
+  findByType(userId: number, type: string): Promise<TransactionRecord[]>;
 }

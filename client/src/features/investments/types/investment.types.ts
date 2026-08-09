@@ -65,7 +65,7 @@ export interface InvestmentEvent {
 	updatedAt?: string;
 }
 
-export interface Investment {
+export interface InvestmentBase {
 	id: string | number;
 	accountId?: number | null;
 	assetTaxonomyId?: string | number | null;
@@ -90,14 +90,128 @@ export interface Investment {
 	documentsMeta?: InvestmentDocumentsMeta | null;
 	documents?: string;
 	notes?: string | null;
-	activeContributionPlan?: InvestmentContributionPlan | null;
-	investmentEvents?: InvestmentEvent[];
-	performanceHistory?: InvestmentPerformanceHistoryPoint[];
-	performanceHistorySource?: string | null;
-	valuationSnapshots?: InvestmentValuationSnapshot[];
 	createdAt?: string;
 	updatedAt?: string;
 }
+
+export interface InvestmentSummary extends InvestmentBase {
+	activeContributionPlan?: InvestmentContributionPlan | null;
+}
+
+export interface InvestmentLatestSnapshot {
+	id: string | number;
+	snapshotDate: string;
+	marketValue: number;
+	units?: number | null;
+	price?: number | null;
+	source?: string | null;
+}
+
+export interface InvestmentDetailShell extends InvestmentSummary {
+	eventCount?: number;
+	snapshotCount?: number;
+	latestSnapshot?: InvestmentLatestSnapshot | null;
+}
+
+export interface InvestmentPerformancePayload {
+	investmentId: string | number;
+	performanceHistorySource: string | null;
+	performanceHistory: InvestmentPerformanceHistoryPoint[];
+}
+
+export interface InvestmentDashboardSummaryPayload {
+	totalInvestments: number;
+	totalInvested: number;
+	totalCurrentValue: number;
+	totalReturn: number;
+	returnPercentage: number;
+	upcomingMaturity: number;
+	insuranceCover: number;
+	valueSourceSummary: {
+		snapshotBackedValue: number;
+		estimatedValue: number;
+		investedOnlyValue: number;
+		snapshotBackedCount: number;
+		estimatedCount: number;
+		investedOnlyCount: number;
+		staleValuationCount: number;
+		staleValuationValue: number;
+		snapshotBackedIds: Array<string | number>;
+		estimatedIds: Array<string | number>;
+		investedOnlyIds: Array<string | number>;
+		staleValuationIds: Array<string | number>;
+	};
+}
+
+export interface InvestmentDashboardCategoryBreakdownItem {
+	key: string;
+	invested: number;
+	currentValue: number;
+	holdings: number;
+	investmentIds: Array<string | number>;
+}
+
+export interface InvestmentDashboardSeriesPoint {
+	label: string;
+	invested: number;
+	return: number;
+	investedBreakdown: Record<string, number>;
+	returnBreakdown: Record<string, number>;
+}
+
+export interface InvestmentDashboardPortfolioGrowthPoint {
+	label: string;
+	investedToDate: number;
+	currentValueToDate: number;
+	returnToDate: number;
+	snapshotBackedValue: number;
+	estimatedValue: number;
+	investedOnlyValue: number;
+}
+
+export interface InvestmentDashboardCategoryPerformanceRow {
+	key: string;
+	label: string;
+	holdings: number;
+	invested: number;
+	currentValue: number;
+	returnAmount: number;
+	returnPercentage: number;
+	sparkline: number[];
+	investmentIds: Array<string | number>;
+}
+
+export interface InvestmentDashboardUpcomingPayload {
+	upcomingContributions: InvestmentSummary[];
+	recentInvestments: InvestmentSummary[];
+	topCurrentValueItems: InvestmentSummary[];
+	upcomingMaturities: InvestmentSummary[];
+}
+
+export interface InvestmentDashboardAnalyticsPayload {
+	portfolioGrowthData: InvestmentDashboardPortfolioGrowthPoint[];
+	timeSeries: {
+		yearly: InvestmentDashboardSeriesPoint[];
+		monthlyByYear: Record<string, InvestmentDashboardSeriesPoint[]>;
+	};
+	categoryPerformanceRows: InvestmentDashboardCategoryPerformanceRow[];
+}
+
+export interface InvestmentDashboardAnalyticsResponse {
+	summary: InvestmentDashboardSummaryPayload;
+	categoryBreakdown: InvestmentDashboardCategoryBreakdownItem[];
+	upcoming: InvestmentDashboardUpcomingPayload;
+	analytics: InvestmentDashboardAnalyticsPayload;
+}
+
+export interface InvestmentDrawerData extends InvestmentDetailShell {
+	investmentEvents: InvestmentEvent[];
+	performanceHistory: InvestmentPerformanceHistoryPoint[];
+	performanceHistorySource?: string | null;
+	valuationSnapshots: InvestmentValuationSnapshot[];
+}
+
+export type Investment = InvestmentSummary;
 
 export interface CreateInvestmentDto {
 	accountId?: number | null;

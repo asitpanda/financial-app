@@ -37,10 +37,12 @@ export const investmentSchema = z
       (value) => (value === "" || value === null || value === undefined ? undefined : Number(value)),
       z.number().min(0, "Current value cannot be negative").optional()
     ),
-    startDate: z.any().refine((value) => Boolean(value) && dayjs(value).isValid(), "Start date is required"),
+    startDate: z
+      .unknown()
+      .refine((value) => Boolean(value) && dayjs(value).isValid(), "Start date is required"),
     status: z.enum(["active", "matured", "closed"]),
     maturityDate: z
-      .any()
+      .unknown()
       .optional()
       .nullable()
       .refine((value) => !value || dayjs(value).isValid(), "Invalid maturity date"),

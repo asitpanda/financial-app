@@ -5,6 +5,7 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  type Theme,
   Typography,
   alpha,
 } from '@mui/material';
@@ -30,41 +31,43 @@ interface ConfirmDialogProps {
   onConfirm: () => void;
 }
 
+type ToneStyleResolver = (theme: Theme) => string;
+
 const DIALOG_TONE_META = {
   error: {
     icon: mdiDeleteOutline,
     iconColor: '#ef4444',
-    iconBg: (theme: any) => alpha(theme.palette.error.main, 0.1),
-    headerBg: (theme: any) => alpha(theme.palette.error.main, 0.08),
-    borderColor: (theme: any) => alpha(theme.palette.error.main, 0.16),
+    iconBg: ((theme: Theme) => alpha(theme.palette.error.main, 0.1)) as ToneStyleResolver,
+    headerBg: ((theme: Theme) => alpha(theme.palette.error.main, 0.08)) as ToneStyleResolver,
+    borderColor: ((theme: Theme) => alpha(theme.palette.error.main, 0.16)) as ToneStyleResolver,
   },
   warning: {
     icon: mdiAlertOutline,
     iconColor: '#f59e0b',
-    iconBg: (theme: any) => alpha(theme.palette.warning.main, 0.12),
-    headerBg: (theme: any) => alpha(theme.palette.warning.main, 0.1),
-    borderColor: (theme: any) => alpha(theme.palette.warning.main, 0.18),
+    iconBg: ((theme: Theme) => alpha(theme.palette.warning.main, 0.12)) as ToneStyleResolver,
+    headerBg: ((theme: Theme) => alpha(theme.palette.warning.main, 0.1)) as ToneStyleResolver,
+    borderColor: ((theme: Theme) => alpha(theme.palette.warning.main, 0.18)) as ToneStyleResolver,
   },
   success: {
     icon: mdiCheckCircleOutline,
     iconColor: '#10b981',
-    iconBg: (theme: any) => alpha(theme.palette.success.main, 0.12),
-    headerBg: (theme: any) => alpha(theme.palette.success.main, 0.1),
-    borderColor: (theme: any) => alpha(theme.palette.success.main, 0.16),
+    iconBg: ((theme: Theme) => alpha(theme.palette.success.main, 0.12)) as ToneStyleResolver,
+    headerBg: ((theme: Theme) => alpha(theme.palette.success.main, 0.1)) as ToneStyleResolver,
+    borderColor: ((theme: Theme) => alpha(theme.palette.success.main, 0.16)) as ToneStyleResolver,
   },
   info: {
     icon: mdiInformationOutline,
     iconColor: '#3b82f6',
-    iconBg: (theme: any) => alpha(theme.palette.info.main, 0.12),
-    headerBg: (theme: any) => alpha(theme.palette.info.main, 0.1),
-    borderColor: (theme: any) => alpha(theme.palette.info.main, 0.16),
+    iconBg: ((theme: Theme) => alpha(theme.palette.info.main, 0.12)) as ToneStyleResolver,
+    headerBg: ((theme: Theme) => alpha(theme.palette.info.main, 0.1)) as ToneStyleResolver,
+    borderColor: ((theme: Theme) => alpha(theme.palette.info.main, 0.16)) as ToneStyleResolver,
   },
   primary: {
     icon: mdiAlertCircleOutline,
     iconColor: '#2563eb',
-    iconBg: (theme: any) => alpha(theme.palette.primary.main, 0.12),
-    headerBg: (theme: any) => alpha(theme.palette.primary.main, 0.1),
-    borderColor: (theme: any) => alpha(theme.palette.primary.main, 0.16),
+    iconBg: ((theme: Theme) => alpha(theme.palette.primary.main, 0.12)) as ToneStyleResolver,
+    headerBg: ((theme: Theme) => alpha(theme.palette.primary.main, 0.1)) as ToneStyleResolver,
+    borderColor: ((theme: Theme) => alpha(theme.palette.primary.main, 0.16)) as ToneStyleResolver,
   },
 } as const;
 

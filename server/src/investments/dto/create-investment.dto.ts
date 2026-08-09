@@ -1,30 +1,37 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDateString, IsInt, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsDefined, IsIn, IsInt, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, Min } from 'class-validator';
+
+export const INVESTMENT_STATUS_VALUES = ['active', 'matured', 'closed'] as const;
 
 export class CreateInvestmentDto {
   @ApiProperty()
   @IsString()
+  @IsNotEmpty()
   name: string;
 
   @ApiProperty()
   @IsString()
+  @IsNotEmpty()
   assetType: string;
 
   @ApiProperty()
   @IsString()
+  @IsNotEmpty()
   assetCategory: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiProperty()
+  @IsDefined()
   @Type(() => Number)
   @IsInt()
-  accountId?: number;
+  @Min(1)
+  accountId: number;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
+  @Min(1)
   assetTaxonomyId?: number;
 
   @ApiProperty({ required: false })
@@ -32,10 +39,10 @@ export class CreateInvestmentDto {
   @IsString()
   holdingMode?: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiProperty()
   @IsString()
-  institutionName?: string;
+  @IsNotEmpty()
+  institutionName: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -44,12 +51,12 @@ export class CreateInvestmentDto {
 
   @ApiProperty()
   @IsString()
+  @IsIn(INVESTMENT_STATUS_VALUES)
   status: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiProperty()
   @IsDateString()
-  startDate?: string;
+  startDate: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -58,15 +65,20 @@ export class CreateInvestmentDto {
 
   @ApiProperty()
   @IsString()
+  @IsNotEmpty()
   currency: string;
 
   @ApiProperty()
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   totalInvested: number;
 
   @ApiProperty({ required: false })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   currentValue?: number;
 
   @ApiProperty({ required: false })
@@ -81,7 +93,9 @@ export class CreateInvestmentDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   insuranceCover?: number;
 
   @ApiProperty({ required: false })

@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import type { ValuationSnapshotRecord } from '../valuation-snapshot.types';
+import { CreateValuationSnapshotDto } from '../dto/create-valuation-snapshot.dto';
+import { UpdateValuationSnapshotDto } from '../dto/update-valuation-snapshot.dto';
 import { IValuationSnapshotDataSourcePort } from './valuation-snapshot.datasource.port';
 import { parseRequiredDateInput } from '../../common/utils/date-input';
 
@@ -12,14 +15,14 @@ export class ValuationSnapshotPrismaRepository
 {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(userId: number): Promise<any[]> {
+  async findAll(userId: number): Promise<ValuationSnapshotRecord[]> {
     return this.prisma.valuationSnapshot.findMany({
       where: { userId },
       orderBy: [{ snapshotDate: 'desc' }, { id: 'desc' }],
     });
   }
 
-  async create(data: any): Promise<any> {
+  async create(data: CreateValuationSnapshotDto): Promise<ValuationSnapshotRecord> {
     return this.prisma.valuationSnapshot.create({
       data: {
         ...data,
@@ -32,20 +35,20 @@ export class ValuationSnapshotPrismaRepository
     });
   }
 
-  async findAllByInvestment(investmentId: string): Promise<any[]> {
+  async findAllByInvestment(investmentId: string): Promise<ValuationSnapshotRecord[]> {
     return this.prisma.valuationSnapshot.findMany({
       where: { investmentId: Number(investmentId) },
       orderBy: { snapshotDate: 'desc' },
     });
   }
 
-  async findOne(id: string): Promise<any> {
+  async findOne(id: string): Promise<ValuationSnapshotRecord | null> {
     return this.prisma.valuationSnapshot.findUnique({
       where: { id: Number(id) },
     });
   }
 
-  async update(id: string, data: any): Promise<any> {
+  async update(id: string, data: UpdateValuationSnapshotDto): Promise<ValuationSnapshotRecord | null> {
     return this.prisma.valuationSnapshot.update({
       where: { id: Number(id) },
       data: {

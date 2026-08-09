@@ -1,4 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { FinancialAccountRecord } from '../financial-account.types';
+import type { CreateFinancialAccountDto } from '../dto/create-financial-account.dto';
+import type { UpdateFinancialAccountDto } from '../dto/update-financial-account.dto';
 import { IFinancialAccountDataSourcePort } from './financial-account.datasource.port';
 
 @Injectable()
@@ -8,19 +11,19 @@ export class FinancialAccountRepository {
     private readonly dataSource: IFinancialAccountDataSourcePort,
   ) {}
 
-  async create(data: any, userId: string): Promise<any> {
+  async create(data: CreateFinancialAccountDto, userId: string): Promise<FinancialAccountRecord> {
     return this.dataSource.create(data, userId);
   }
 
-  async findAll(userId: string): Promise<any[]> {
+  async findAll(userId: string): Promise<FinancialAccountRecord[]> {
     return this.dataSource.findAll(userId);
   }
 
-  async findOne(id: string, userId: string): Promise<any> {
+  async findOne(id: string, userId: string): Promise<FinancialAccountRecord | null> {
     return this.dataSource.findOne(id, userId);
   }
 
-  async update(id: string, data: any, userId: string): Promise<any> {
+  async update(id: string, data: UpdateFinancialAccountDto, userId: string): Promise<FinancialAccountRecord | null> {
     return this.dataSource.update(id, data, userId);
   }
 

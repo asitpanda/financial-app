@@ -1,4 +1,5 @@
 // @ts-nocheck
+/** @typedef {import('../types/investment.types').InvestmentDrawerData} InvestmentDrawerData */
 import React from "react";
 import {
   Alert,
@@ -27,8 +28,8 @@ import {
   StatusChip,
 } from "../../../components/common";
 import RecordValuationModal from "./RecordValuationModal";
-import { updateContributionPlan } from "../api/contributionPlans.api";
-import { deleteValuationSnapshot } from "../api/valuationSnapshots.api";
+import { useUpdateInvestmentContributionPlan } from "../hooks/useContributionPlans";
+import { useDeleteInvestmentSnapshot } from "../hooks/useInvestmentSnapshots";
 import { useNotificationStore } from "../../../store/notificationStore";
 import { getRuntimeErrorMessage } from "../../../utils/errorMessage";
 import {
@@ -412,13 +413,21 @@ function InvestmentPerformanceChart({ investment, formatValue }) {
 
 export default InvestmentViewDrawer;
 
+/**
+ * @param {{
+ *   open: boolean,
+ *   onClose: () => void,
+ *   investment: InvestmentDrawerData | null,
+ *   taxonomyNodes?: unknown[],
+ *   onEdit?: (investment: InvestmentDrawerData) => void,
+ * }} props
+ */
 export function InvestmentViewDrawer({
   open,
   onClose,
   investment,
   taxonomyNodes = [],
   onEdit,
-  onPlanUpdated,
 }) {
   const [recordValuationOpen, setRecordValuationOpen] = React.useState(false);
   const [selectedSnapshot, setSelectedSnapshot] = React.useState(null);
@@ -430,6 +439,8 @@ export function InvestmentViewDrawer({
   const pushNotification = useNotificationStore(
     (state) => state.pushNotification,
   );
+  const updateContributionPlanMutation = useUpdateInvestmentContributionPlan();
+  const deleteSnapshotMutation = useDeleteInvestmentSnapshot();
 
   React.useEffect(() => {
     if (!open) return;
@@ -440,10 +451,6 @@ export function InvestmentViewDrawer({
         : "",
     );
   }, [open, investment?.activeContributionPlan?.endDate]);
-
-  const handleSnapshotAdded = async () => {
-    await onPlanUpdated?.();
-  };
 
   const handleOpenCreateSnapshot = () => {
     setSelectedSnapshot(null);
@@ -484,12 +491,11 @@ export function InvestmentViewDrawer({
     setPlanActionLoading(true);
 
     try {
-      await updateContributionPlan(
-        investment.id,
-        investment.activeContributionPlan.id,
+      await updateContributionPlanMutation.mutateAsync({
+        investmentId: investment.id,
+        planId: investment.activeContributionPlan.id,
         payload,
-      );
-      await onPlanUpdated?.();
+      });
       pushNotification({ type: "success", message: successMessage });
     } catch (error) {
       const fallbackMessage =
@@ -552,12 +558,14 @@ export function InvestmentViewDrawer({
   const totalReturnColor = totalReturnValue >= 0 ? "#10b981" : "#ef4444";
 
   const handleDeleteSnapshot = async () => {
-    if (!deleteSnapshotTarget?.id) return;
+    if (!deleteSnapshotTarget?.id || !investment?.id) return;
 
     setSnapshotActionLoading(true);
     try {
-      await deleteValuationSnapshot(deleteSnapshotTarget.id);
-      await onPlanUpdated?.();
+      await deleteSnapshotMutation.mutateAsync({
+        snapshotId: deleteSnapshotTarget.id,
+        investmentId: investment.id,
+      });
       pushNotification({
         type: "success",
         message: `Deleted valuation snapshot for ${formatInvestmentDate(deleteSnapshotTarget.snapshotDate)}`,
@@ -1377,7 +1385,6 @@ export function InvestmentViewDrawer({
         investmentId={investment?.id}
         investmentName={investment?.name}
         snapshot={selectedSnapshot}
-        onSnapshotSaved={handleSnapshotAdded}
       />
 
       <ConfirmDialog

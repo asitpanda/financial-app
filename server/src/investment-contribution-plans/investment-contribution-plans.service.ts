@@ -11,13 +11,23 @@ import { UpdateInvestmentContributionPlanDto } from './dto/update-investment-con
 import { ConfirmRecurringContributionPlanDto } from './dto/confirm-recurring-contribution-plan.dto';
 import { PreviewRecurringContributionPlanDto } from './dto/preview-recurring-contribution-plan.dto';
 import { SkipCurrentContributionDto } from './dto/skip-current-contribution.dto';
+import type {
+  InvestmentContributionPlanRecord,
+  PreviewOpeningBalanceOccurrence,
+  RecurringPlanLike,
+} from './investment-contribution-plan.types';
 import { ContributionPlanRepository } from './repositories/contribution-plan.repository';
-import { RecurringScheduleCalculator } from './recurring-schedule-calculator.service';
+import {
+  RecurringCadenceUnit,
+  RecurringScheduleCalculator,
+} from './recurring-schedule-calculator.service';
 import { InvestmentRepository } from '../investments/repositories/investment.repository';
 import { FinancialAccountsService } from '../financial-accounts/financial-accounts.service';
 
 @Injectable()
 export class InvestmentContributionPlansService {
+  private readonly writableStatuses = new Set(['active', 'paused']);
+
   constructor(
     private readonly repository: ContributionPlanRepository,
     private readonly scheduleCalculator: RecurringScheduleCalculator,
@@ -25,13 +35,99 @@ export class InvestmentContributionPlansService {
     private readonly financialAccountsService: FinancialAccountsService,
   ) {}
 
+  private normalizePlanStatus(status: string | null | undefined) {
+    return String(status || 'active').trim().toLowerCase();
+  }
+
+  private getEffectiveAnchorDate(
+    anchorDate: string | undefined,
+    fallbackPlan?: InvestmentContributionPlanRecord | null,
+  ) {
+    if (anchorDate !== undefined) {
+      return anchorDate;
+    }
+
+    if (!fallbackPlan?.anchorDate) {
+      return undefined;
+    }
+
+    return this.toDateOnlyString(this.toUtcDateOnly(fallbackPlan.anchorDate));
+  }
+
+  private getEffectiveEndDate(
+    endDate: string | undefined,
+    fallbackPlan?: InvestmentContributionPlanRecord | null,
+  ) {
+    if (endDate !== undefined) {
+      return endDate;
+    }
+
+    if (!fallbackPlan?.endDate) {
+      return undefined;
+    }
+
+    return this.toDateOnlyString(this.toUtcDateOnly(fallbackPlan.endDate));
+  }
+
+  private validatePlanMutationInput(
+    input: Partial<CreateInvestmentContributionPlanDto>,
+    fallbackPlan?: InvestmentContributionPlanRecord | null,
+  ) {
+    if (input.amount !== undefined && Number(input.amount) <= 0) {
+      throw new BadRequestException('Contribution amount must be greater than 0');
+    }
+
+    if (
+      input.cadenceInterval !== undefined &&
+      (!Number.isInteger(Number(input.cadenceInterval)) || Number(input.cadenceInterval) < 1)
+    ) {
+      throw new BadRequestException('cadenceInterval must be a positive integer');
+    }
+
+    if (input.cadenceUnit !== undefined) {
+      this.toCadenceUnit(String(input.cadenceUnit));
+    }
+
+    if (input.status !== undefined) {
+      const normalizedStatus = this.normalizePlanStatus(input.status);
+      if (!this.writableStatuses.has(normalizedStatus)) {
+        throw new BadRequestException('status must be either active or paused');
+      }
+    }
+
+    const effectiveAnchorDate = this.getEffectiveAnchorDate(input.anchorDate, fallbackPlan);
+    const effectiveEndDate = this.getEffectiveEndDate(input.endDate, fallbackPlan);
+    if (effectiveAnchorDate) {
+      this.validatePlanDates(effectiveAnchorDate, effectiveEndDate);
+    }
+  }
+
+  private async assertNoConflictingActivePlan(investmentId: string, planIdToExclude?: string) {
+    const existingActivePlan = await this.repository.findActiveByInvestment(investmentId);
+    if (
+      existingActivePlan &&
+      String(existingActivePlan.id) !== String(planIdToExclude ?? '')
+    ) {
+      throw new ConflictException('An active recurring plan already exists for this investment');
+    }
+  }
+
   async create(createDto: CreateInvestmentContributionPlanDto, userId?: number) {
     if (userId !== undefined) {
       await this.assertOwnedInvestment(createDto.investmentId, userId);
       await this.assertOwnedSourceAccount(createDto.sourceAccountId, userId);
     }
 
+    this.validatePlanMutationInput(createDto);
+    if (this.normalizePlanStatus(createDto.status) === 'active') {
+      await this.assertNoConflictingActivePlan(String(createDto.investmentId));
+    }
+
     return this.repository.create(createDto);
+  }
+
+  async findAllByUser(userId: number) {
+    return this.repository.findAllByUser(userId);
   }
 
   async findAllActiveByUser(userId: number) {
@@ -52,7 +148,7 @@ export class InvestmentContributionPlansService {
     const today = this.toUtcDateOnly(new Date());
     const allDueDatesThroughToday = this.scheduleCalculator.calculateDueDates({
       anchorDate: dto.anchorDate,
-      cadenceUnit: dto.cadenceUnit as any,
+      cadenceUnit: this.toCadenceUnit(dto.cadenceUnit),
       cadenceInterval: dto.cadenceInterval,
       cutoffDate: today,
       endDate: dto.endDate,
@@ -60,7 +156,7 @@ export class InvestmentContributionPlansService {
 
     const nextDueDate = this.scheduleCalculator.firstDueDateOnOrAfter({
       anchorDate: dto.anchorDate,
-      cadenceUnit: dto.cadenceUnit as any,
+      cadenceUnit: this.toCadenceUnit(dto.cadenceUnit),
       cadenceInterval: dto.cadenceInterval,
       referenceDate: today,
       endDate: dto.endDate,
@@ -81,7 +177,7 @@ export class InvestmentContributionPlansService {
       const principalAmount = Number(dto.openingPrincipalAmount || 0);
       const incomeAmount = Number(dto.openingIncomeAmount || 0);
 
-      const occurrences = [] as any[];
+      const occurrences: PreviewOpeningBalanceOccurrence[] = [];
       let sequenceNumber = 1;
 
       if (principalAmount > 0) {
@@ -139,7 +235,7 @@ export class InvestmentContributionPlansService {
     const today = this.toUtcDateOnly(new Date());
     const nextDueDate = this.scheduleCalculator.firstDueDateOnOrAfter({
       anchorDate: dto.anchorDate,
-      cadenceUnit: dto.cadenceUnit as any,
+      cadenceUnit: this.toCadenceUnit(dto.cadenceUnit),
       cadenceInterval: dto.cadenceInterval,
       referenceDate: today,
       endDate: dto.endDate,
@@ -262,13 +358,25 @@ export class InvestmentContributionPlansService {
   }
 
   async update(id: string, updateDto: UpdateInvestmentContributionPlanDto, userId?: number) {
-    if (userId !== undefined) {
-      const plan = await this.findOne(id, userId);
-      if (!plan) return null;
+    const plan = await this.findOne(id, userId);
+    if (!plan) return null;
 
+    if (userId !== undefined) {
       const investmentId = String(updateDto.investmentId ?? plan.investmentId);
       await this.assertOwnedInvestment(investmentId, userId);
       await this.assertOwnedSourceAccount(updateDto.sourceAccountId, userId);
+    }
+
+    this.validatePlanMutationInput(updateDto, plan);
+
+    const targetInvestmentId = String(updateDto.investmentId ?? plan.investmentId);
+    const targetStatus =
+      updateDto.status !== undefined
+        ? this.normalizePlanStatus(updateDto.status)
+        : this.normalizePlanStatus(plan.status);
+
+    if (targetStatus === 'active') {
+      await this.assertNoConflictingActivePlan(targetInvestmentId, id);
     }
 
     return this.repository.update(id, updateDto);
@@ -328,6 +436,10 @@ export class InvestmentContributionPlansService {
     // Get the current plan
     const plan = await this.repository.findOne(String(id));
     if (!plan) return null;
+
+    if (this.normalizePlanStatus(plan.status) !== 'active') {
+      throw new BadRequestException('Paused recurring plans cannot advance due dates');
+    }
 
     // Update the plan
     const updateDto: UpdateInvestmentContributionPlanDto = {
@@ -392,17 +504,26 @@ export class InvestmentContributionPlansService {
     return account;
   }
 
-  private calculateNextDueDate(plan: {
-    nextDueDate?: string | Date | null;
-    anchorDate: string | Date;
-    cadenceUnit: string;
-    cadenceInterval: number;
-  }): string | null {
+  private toCadenceUnit(value: string): RecurringCadenceUnit {
+    if (
+      value === 'day' ||
+      value === 'week' ||
+      value === 'month' ||
+      value === 'quarter' ||
+      value === 'year'
+    ) {
+      return value;
+    }
+
+    throw new BadRequestException(`Unsupported cadenceUnit: ${value}`);
+  }
+
+  private calculateNextDueDate(plan: RecurringPlanLike): string | null {
     if (!plan.nextDueDate) return null;
 
     const nextDueDate = this.scheduleCalculator.firstDueDateOnOrAfter({
       anchorDate: this.toDateOnlyString(this.toUtcDateOnly(plan.anchorDate)),
-      cadenceUnit: plan.cadenceUnit as any,
+      cadenceUnit: this.toCadenceUnit(plan.cadenceUnit),
       cadenceInterval: Number(plan.cadenceInterval) || 1,
       referenceDate: this.toDateOnlyString(
         this.toUtcDateOnly(new Date(new Date(plan.nextDueDate).getTime() + 24 * 60 * 60 * 1000)),

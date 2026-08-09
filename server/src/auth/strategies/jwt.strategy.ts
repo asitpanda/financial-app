@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from '../auth.service';
+import type { JwtPayload } from '../auth.types';
 
 function requireJwtSecret(configService: ConfigService): string {
   const jwtSecret = String(configService.get('JWT_SECRET') ?? '').trim();
@@ -27,7 +28,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: any) {
+  async validate(payload: JwtPayload) {
     const user = await this.authService.validateUser(payload.sub);
     return user;
   }

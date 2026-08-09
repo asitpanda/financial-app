@@ -9,7 +9,7 @@ export const getInvestmentEvents = async (): Promise<InvestmentEvent[]> => {
 export const getInvestmentEventsByInvestmentId = async (
   investmentId: string | number,
 ): Promise<InvestmentEvent[]> => {
-  const response = await apiClient.get(`/investment-events/investment/${investmentId}`);
+  const response = await apiClient.get(`/investments/${investmentId}/events`);
   return Array.isArray(response.data) ? response.data : [];
 };
 

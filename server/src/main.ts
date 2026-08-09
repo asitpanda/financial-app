@@ -1,8 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { BadRequestException, ValidationPipe, ValidationError } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import type { Request, Response, NextFunction } from 'express';
+import type { Response, NextFunction } from 'express';
 import { AppModule } from './app.module';
+import type { RequestWithContext } from './common/http.types';
 import { isDatabaseBackedProvider, resolveDbProvider } from './database/db-provider';
 import { GlobalExceptionFilter } from './common/errors/global-exception.filter';
 
@@ -70,7 +71,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const isJsonLogFormat = String(process.env.LOG_FORMAT || '').toLowerCase() === 'json';
 
-  app.use((req: Request, res: Response, next: NextFunction) => {
+  app.use((req: RequestWithContext, res: Response, next: NextFunction) => {
     const startedAt = Date.now();
     const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const origin = req.get('origin') ?? 'n/a';
@@ -97,12 +98,12 @@ async function bootstrap() {
       );
     }
 
-    (req as any).requestId = requestId;
+    req.requestId = requestId;
     res.setHeader('x-request-id', requestId);
 
     res.on('finish', () => {
       const durationMs = Date.now() - startedAt;
-      const userId = (req as any).user?.id ?? 'anonymous';
+      const userId = req.user?.id ?? 'anonymous';
       if (isJsonLogFormat) {
         console.log(
           JSON.stringify({

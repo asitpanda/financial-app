@@ -144,7 +144,7 @@ export class AuthService {
     }
 
     return this.prisma.user.findUnique({
-      where: { id: Number(userId) as any },
+      where: { id: Number(userId) },
       select: {
         id: true,
         email: true,

@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import type { InvestmentAssetTaxonomyRecord } from '../investment-asset-taxonomy.types';
 import { PrismaService } from '../../database/prisma.service';
+import type {
+  InvestmentAssetTaxonomyUpdateInput,
+  InvestmentAssetTaxonomyWriteInput,
+} from '../investment-asset-taxonomy.types';
 import { IAssetTaxonomyDataSourcePort } from './asset-taxonomy.datasource.port';
 
 const normalizeNullableNumber = (value?: string | number | null) =>
@@ -11,7 +16,7 @@ export class AssetTaxonomyPrismaRepository
 {
   constructor(private prisma: PrismaService) {}
 
-  async create(data: any): Promise<any> {
+  async create(data: InvestmentAssetTaxonomyWriteInput): Promise<InvestmentAssetTaxonomyRecord> {
     const userId = Number(data.userId);
     const parentId = normalizeNullableNumber(data.parentId);
 
@@ -35,20 +40,20 @@ export class AssetTaxonomyPrismaRepository
     });
   }
 
-  async findAll(userId: number): Promise<any[]> {
+  async findAll(userId: number): Promise<InvestmentAssetTaxonomyRecord[]> {
     return this.prisma.investmentAssetTaxonomy.findMany({
       where: { userId: Number(userId) },
       orderBy: [{ level: 'asc' }, { sortOrder: 'asc' }, { label: 'asc' }],
     });
   }
 
-  async findOne(id: number, userId: number): Promise<any> {
+  async findOne(id: number, userId: number): Promise<InvestmentAssetTaxonomyRecord | null> {
     return this.prisma.investmentAssetTaxonomy.findFirst({
       where: { id, userId: Number(userId) },
     });
   }
 
-  async update(id: number, userId: number, data: any): Promise<any> {
+  async update(id: number, userId: number, data: InvestmentAssetTaxonomyUpdateInput): Promise<InvestmentAssetTaxonomyRecord | null> {
     const ownerScoped = await this.prisma.investmentAssetTaxonomy.findFirst({
       where: { id, userId: Number(userId) },
       select: { id: true },

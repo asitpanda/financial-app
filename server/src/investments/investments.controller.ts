@@ -1,7 +1,10 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { InvestmentsService } from './investments.service';
 import { CreateInvestmentDto } from './dto/create-investment.dto';
+import { InvestmentDashboardAnalyticsResponseDto } from './dto/dashboard-analytics-response.dto';
+import { InvestmentDetailResponseDto } from './dto/investment-detail-response.dto';
+import { InvestmentPerformanceResponseDto } from './dto/investment-performance-response.dto';
 import { UpdateInvestmentDto } from './dto/update-investment.dto';
 import { CurrentUserId } from '../auth/current-user-id.decorator';
 
@@ -23,8 +26,23 @@ export class InvestmentsController {
     return this.investmentsService.findAll(userId);
   }
 
+  @Get('dashboard')
+  @ApiOperation({ summary: 'Get grouped dashboard analytics for investments' })
+  @ApiOkResponse({ type: InvestmentDashboardAnalyticsResponseDto })
+  getDashboardAnalytics(@CurrentUserId() userId: number) {
+    return this.investmentsService.getDashboardAnalytics(userId);
+  }
+
+  @Get(':id/performance')
+  @ApiOperation({ summary: 'Get investment performance history' })
+  @ApiOkResponse({ type: InvestmentPerformanceResponseDto })
+  getPerformance(@Param('id', ParseIntPipe) id: number, @CurrentUserId() userId: number) {
+    return this.investmentsService.getPerformance(id, userId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get an investment by ID' })
+  @ApiOkResponse({ type: InvestmentDetailResponseDto })
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUserId() userId: number) {
     return this.investmentsService.findOne(id, userId);
   }

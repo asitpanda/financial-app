@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { IAssetTaxonomyDataSourcePort } from './asset-taxonomy.datasource.port';
 import { mockInvestmentAssetTaxonomyData } from '../../mockdata';
+import type { InvestmentAssetTaxonomyRecord } from '../investment-asset-taxonomy.types';
+import type {
+  InvestmentAssetTaxonomyUpdateInput,
+  InvestmentAssetTaxonomyWriteInput,
+} from '../investment-asset-taxonomy.types';
 
 let mockInvestmentAssetTaxonomy = [...mockInvestmentAssetTaxonomyData];
 
@@ -12,7 +17,7 @@ const normalizeNullableNumber = (value?: string | number | null) =>
 
 @Injectable()
 export class AssetTaxonomyMockRepository implements IAssetTaxonomyDataSourcePort {
-  async create(data: any): Promise<any> {
+  async create(data: InvestmentAssetTaxonomyWriteInput): Promise<InvestmentAssetTaxonomyRecord> {
     const timestamp = new Date();
     const userId = Number(data.userId);
     const parentId = normalizeNullableNumber(data.parentId);
@@ -26,7 +31,7 @@ export class AssetTaxonomyMockRepository implements IAssetTaxonomyDataSourcePort
       }
     }
 
-    const newNode = {
+    const newNode: InvestmentAssetTaxonomyRecord = {
       id: nextTaxonomyId(),
       userId,
       label: data.label,
@@ -43,7 +48,7 @@ export class AssetTaxonomyMockRepository implements IAssetTaxonomyDataSourcePort
     return newNode;
   }
 
-  async findAll(userId: number): Promise<any[]> {
+  async findAll(userId: number): Promise<InvestmentAssetTaxonomyRecord[]> {
     return [...mockInvestmentAssetTaxonomy].sort((left, right) => {
       if (Number(left.userId ?? 1) !== Number(right.userId ?? 1)) {
         return Number(left.userId ?? 1) - Number(right.userId ?? 1);
@@ -54,7 +59,7 @@ export class AssetTaxonomyMockRepository implements IAssetTaxonomyDataSourcePort
     }).filter((node) => Number(node.userId ?? 1) === Number(userId));
   }
 
-  async findOne(id: number, userId: number): Promise<any> {
+  async findOne(id: number, userId: number): Promise<InvestmentAssetTaxonomyRecord | null> {
     return (
       mockInvestmentAssetTaxonomy.find(
         (node) => node.id === id && Number(node.userId ?? 1) === Number(userId),
@@ -62,7 +67,7 @@ export class AssetTaxonomyMockRepository implements IAssetTaxonomyDataSourcePort
     );
   }
 
-  async update(id: number, userId: number, data: any): Promise<any> {
+  async update(id: number, userId: number, data: InvestmentAssetTaxonomyUpdateInput): Promise<InvestmentAssetTaxonomyRecord | null> {
     const index = mockInvestmentAssetTaxonomy.findIndex(
       (node) => node.id === id && Number(node.userId ?? 1) === Number(userId),
     );

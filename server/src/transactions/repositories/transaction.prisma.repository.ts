@@ -1,9 +1,18 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import type { TransactionRecord } from '../transaction.types';
 import { ITransactionDataSourcePort } from './transaction.datasource.port';
 import { CreateTransactionDto } from '../dto/create-transaction.dto';
 import { UpdateTransactionDto } from '../dto/update-transaction.dto';
 import { parseRequiredDateInput } from '../../common/utils/date-input';
+import type {
+  TransactionCreateData,
+  TransactionGoalDeltaSource,
+  TransactionPersistedWriteData,
+  TransactionReferenceCheckInput,
+  TransactionUpdateData,
+} from '../transaction.types';
 
 @Injectable()
 export class TransactionPrismaRepository implements ITransactionDataSourcePort {
@@ -33,7 +42,11 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
     return parsed;
   }
 
-  private async assertValidReferences(tx: any, userId: number, data: any): Promise<void> {
+  private async assertValidReferences(
+    tx: Prisma.TransactionClient,
+    userId: number,
+    data: TransactionReferenceCheckInput,
+  ): Promise<void> {
     const categoryId = Number(data.categoryId);
     if (!Number.isInteger(categoryId) || categoryId <= 0) {
       throw new BadRequestException('Invalid categoryId.');
@@ -97,28 +110,28 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
     }
   }
 
-  private resolveGoalDelta(transaction: { goalId?: number | string | null; type?: string; amount?: number }) {
+  private resolveGoalDelta(transaction: TransactionGoalDeltaSource) {
     if (!transaction?.goalId) return 0;
     const amount = Number(transaction.amount || 0);
     return transaction.type === 'expense' ? -amount : amount;
   }
 
-  async findAll(userId: number) {
+  async findAll(userId: number): Promise<TransactionRecord[]> {
     return this.prisma.transaction.findMany({
-      where: { userId: userId as any },
+      where: { userId },
       orderBy: { date: 'desc' },
     });
   }
 
-  async findOne(id: number, userId: number) {
+  async findOne(id: number, userId: number): Promise<TransactionRecord | null> {
     return this.prisma.transaction.findFirst({
-      where: { id: id as any, userId: userId as any },
+      where: { id, userId },
     });
   }
 
-  async create(data: CreateTransactionDto, userId: number) {
+  async create(data: CreateTransactionDto, userId: number): Promise<TransactionRecord> {
     return this.prisma.$transaction(async (tx) => {
-      const createData: any = {
+      const createData: TransactionCreateData = {
         ...data,
         userId,
         date: parseRequiredDateInput(data.date, 'date'),
@@ -150,15 +163,15 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
     });
   }
 
-  async update(id: number, data: UpdateTransactionDto, userId: number) {
+  async update(id: number, data: UpdateTransactionDto, userId: number): Promise<TransactionRecord | null> {
     return this.prisma.$transaction(async (tx) => {
       const existingTransaction = await tx.transaction.findFirst({
-        where: { id: id as any, userId: userId as any },
+        where: { id, userId },
       });
 
       if (!existingTransaction) return null;
 
-      const updateData: any = {
+      const updateData: TransactionUpdateData = {
         ...data,
         date: data.date !== undefined ? parseRequiredDateInput(data.date, 'date') : undefined,
         goalId: data.goalId !== undefined ? this.normalizeOptionalInt(data.goalId, 'goalId') : undefined,
@@ -182,7 +195,7 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
       });
 
       const updatedTransaction = await tx.transaction.update({
-        where: { id: id as any },
+        where: { id },
         data: updateData,
       });
 
@@ -228,16 +241,16 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
     });
   }
 
-  async delete(id: number, userId: number) {
+  async delete(id: number, userId: number): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       const existingTransaction = await tx.transaction.findFirst({
-        where: { id: id as any, userId: userId as any },
+        where: { id, userId },
       });
 
       if (!existingTransaction) return;
 
       await tx.transaction.delete({
-        where: { id: id as any },
+        where: { id },
       });
 
       const delta = this.resolveGoalDelta(existingTransaction);
@@ -254,10 +267,10 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
     });
   }
 
-  async findByDateRange(userId: number, startDate: Date, endDate: Date) {
+  async findByDateRange(userId: number, startDate: Date, endDate: Date): Promise<TransactionRecord[]> {
     return this.prisma.transaction.findMany({
       where: {
-        userId: userId as any,
+        userId,
         date: {
           gte: startDate,
           lte: endDate,
@@ -267,9 +280,9 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
     });
   }
 
-  async findByType(userId: number, type: string) {
+  async findByType(userId: number, type: string): Promise<TransactionRecord[]> {
     return this.prisma.transaction.findMany({
-      where: { userId: userId as any, type },
+      where: { userId, type },
       orderBy: { date: 'desc' },
     });
   }

@@ -1,4 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { InvestmentEventRecord } from '../investment-event.types';
+import type { CreateInvestmentEventDto } from '../dto/create-investment-event.dto';
+import type { UpdateInvestmentEventDto } from '../dto/update-investment-event.dto';
 import { IEventDataSourcePort } from './event.datasource.port';
 
 @Injectable()
@@ -8,23 +11,23 @@ export class EventRepository {
     private readonly dataSource: IEventDataSourcePort,
   ) {}
 
-  async create(data: any): Promise<any> {
+  async create(data: CreateInvestmentEventDto): Promise<InvestmentEventRecord> {
     return this.dataSource.create(data);
   }
 
-  async findAll(userId: number): Promise<any[]> {
+  async findAll(userId: number): Promise<InvestmentEventRecord[]> {
     return this.dataSource.findAll(userId);
   }
 
-  async findAllByInvestment(investmentId: string): Promise<any[]> {
+  async findAllByInvestment(investmentId: string): Promise<InvestmentEventRecord[]> {
     return this.dataSource.findAllByInvestment(investmentId);
   }
 
-  async findOne(id: string): Promise<any> {
+  async findOne(id: string): Promise<InvestmentEventRecord | null> {
     return this.dataSource.findOne(id);
   }
 
-  async update(id: string, data: any): Promise<any> {
+  async update(id: string, data: UpdateInvestmentEventDto): Promise<InvestmentEventRecord | null> {
     return this.dataSource.update(id, data);
   }
 

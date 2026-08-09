@@ -15,7 +15,7 @@ export const goalSchema = z.object({
       z.number().min(0, "Current amount cannot be negative").optional()
     ),
   deadline: z
-    .any()
+    .unknown()
     .optional()
     .nullable()
     .refine((value) => !value || dayjs(value).isValid(), "Invalid deadline"),

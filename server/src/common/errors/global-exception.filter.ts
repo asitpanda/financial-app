@@ -6,17 +6,18 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { Request, Response } from 'express';
+import { Response } from 'express';
+import type { RequestWithContext } from '../http.types';
 import { ApiErrorCode, ApiErrorResponse } from './api-error.types';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
-    const req = ctx.getRequest<Request>();
+    const req = ctx.getRequest<RequestWithContext>();
     const res = ctx.getResponse<Response>();
 
-    const requestId = String((req as any).requestId || 'unknown');
+    const requestId = String(req.requestId || 'unknown');
     const base: Omit<ApiErrorResponse, 'statusCode' | 'code' | 'message'> = {
       requestId,
       timestamp: new Date().toISOString(),

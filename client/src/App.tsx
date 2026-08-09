@@ -12,17 +12,28 @@ import { useAuth } from "./features/auth/useAuth";
 import { useAppStore } from "./store/appStore";
 import { navigateTo } from "./services/navigation";
 import { NotificationCenter } from "./components/common";
+import type { TransactionRecord } from "./features/transactions/transaction.types";
 import "./App.css";
 
-const TransactionsPage = Transactions as any;
+type TransactionsPrefillFilter = {
+  mode?: "monthly" | "yearly";
+  fiscalYearStart?: number;
+  month?: number;
+  periodLabel?: string;
+};
+
+type DashboardTransactionNavigationPayload = {
+  prefetchedTransactions: TransactionRecord[];
+  prefillFilter: TransactionsPrefillFilter | null;
+};
 
 export default function App() {
   const { token, user, isAuthenticated, loading, setLoading, setUser, logout } =
     useAuth();
   const activeScreen = useAppStore((state) => state.activeScreen);
-  const [transactionsPrefetch, setTransactionsPrefetch] = useState<any[]>([]);
+  const [transactionsPrefetch, setTransactionsPrefetch] = useState<TransactionRecord[]>([]);
   const [transactionsPrefillFilter, setTransactionsPrefillFilter] = useState<
-    any | null
+    TransactionsPrefillFilter | null
   >(null);
 
   // Check for existing token on mount
@@ -67,10 +78,9 @@ export default function App() {
     );
   }
 
-  const handleOpenTransactionsFromDashboard = (payload: {
-    prefetchedTransactions: any[];
-    prefillFilter: any;
-  }) => {
+  const handleOpenTransactionsFromDashboard = (
+    payload: DashboardTransactionNavigationPayload,
+  ) => {
     setTransactionsPrefetch(payload.prefetchedTransactions || []);
     setTransactionsPrefillFilter(payload.prefillFilter || null);
     navigateTo("transactions");
@@ -85,8 +95,8 @@ export default function App() {
     );
   } else if (activeScreen === "transactions") {
     content = (
-      <TransactionsPage
-        prefetchedTransactions={transactionsPrefetch as any}
+      <Transactions
+        prefetchedTransactions={transactionsPrefetch}
         prefillFilter={transactionsPrefillFilter}
       />
     );

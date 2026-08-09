@@ -1,7 +1,10 @@
 import apiClient from '../../../api/client';
 import type {
   CreateInvestmentDto,
+  InvestmentDashboardAnalyticsResponse,
   Investment,
+  InvestmentDetailShell,
+  InvestmentPerformancePayload,
   UpdateInvestmentDto,
 } from '../types/investment.types';
 
@@ -12,8 +15,20 @@ export const getInvestments = async (): Promise<Investment[]> => {
 
 export const getInvestmentById = async (
   id: string | number,
-): Promise<Investment> => {
+): Promise<InvestmentDetailShell> => {
   const response = await apiClient.get(`/investments/${id}`);
+  return response.data;
+};
+
+export const getInvestmentPerformanceById = async (
+  id: string | number,
+): Promise<InvestmentPerformancePayload> => {
+  const response = await apiClient.get(`/investments/${id}/performance`);
+  return response.data;
+};
+
+export const getInvestmentDashboardAnalytics = async (): Promise<InvestmentDashboardAnalyticsResponse> => {
+  const response = await apiClient.get('/investments/dashboard');
   return response.data;
 };
 
@@ -42,6 +57,8 @@ export const deleteInvestment = async (id: string | number): Promise<void> => {
 export const investmentApi = {
   getAll: getInvestments,
   getById: getInvestmentById,
+  getPerformanceById: getInvestmentPerformanceById,
+  getDashboardAnalytics: getInvestmentDashboardAnalytics,
   create: createInvestment,
   update: updateInvestment,
   delete: deleteInvestment,

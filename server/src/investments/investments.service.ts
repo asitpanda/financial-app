@@ -1,9 +1,31 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InvestmentEventType } from '@prisma/client';
 import { InvestmentContributionPlansService } from '../investment-contribution-plans/investment-contribution-plans.service';
 import { InvestmentEventsService } from '../investment-events/investment-events.service';
 import { ValuationSnapshotsService } from '../valuation-snapshots/valuation-snapshots.service';
 import { CreateInvestmentDto } from './dto/create-investment.dto';
+import {
+  InvestmentDashboardAnalyticsResponseDto,
+  InvestmentDashboardCategoryBreakdownItemDto,
+  InvestmentDashboardSummaryDto,
+  InvestmentValueSourceSummaryDto,
+} from './dto/dashboard-analytics-response.dto';
+import {
+  InvestmentActiveContributionPlanResponseDto,
+  InvestmentDetailResponseDto,
+  InvestmentLatestSnapshotResponseDto,
+} from './dto/investment-detail-response.dto';
+import { InvestmentPerformanceResponseDto } from './dto/investment-performance-response.dto';
+import type {
+  ActivePlanLike,
+  EventLike,
+  InvestmentCrudRuleInput,
+  InvestmentLike,
+  ResolvedAnalyticsRecord,
+  SnapshotLike,
+  SummaryInvestment,
+  TimeSeriesPoint,
+} from './investment.types';
 import { UpdateInvestmentDto } from './dto/update-investment.dto';
 import { InvestmentRepository } from './repositories/investment.repository';
 
@@ -16,11 +38,593 @@ export class InvestmentsService {
     private readonly valuationSnapshotsService: ValuationSnapshotsService,
   ) {}
 
+  private assertInvestmentCrudRules(investment: InvestmentCrudRuleInput) {
+    if (investment.accountId == null || Number(investment.accountId) < 1) {
+      throw new BadRequestException({
+        message: 'Account is required',
+        field: 'accountId',
+      });
+    }
+
+    if (!String(investment.name || '').trim()) {
+      throw new BadRequestException({
+        message: 'Investment name is required',
+        field: 'name',
+      });
+    }
+
+    if (!String(investment.assetType || '').trim()) {
+      throw new BadRequestException({
+        message: 'Investment type is required',
+        field: 'assetType',
+      });
+    }
+
+    if (!String(investment.institutionName || '').trim()) {
+      throw new BadRequestException({
+        message: 'Institution is required',
+        field: 'institutionName',
+      });
+    }
+
+    if (!investment.startDate || Number.isNaN(new Date(investment.startDate).getTime())) {
+      throw new BadRequestException({
+        message: 'Start date is required',
+        field: 'startDate',
+      });
+    }
+
+    if (
+      investment.maturityDate &&
+      !Number.isNaN(new Date(investment.maturityDate).getTime()) &&
+      new Date(investment.maturityDate).getTime() < new Date(investment.startDate).getTime()
+    ) {
+      throw new BadRequestException({
+        message: 'Maturity date cannot be before start date',
+        field: 'maturityDate',
+      });
+    }
+
+    const numericChecks = [
+      ['totalInvested', investment.totalInvested, 'Total invested cannot be negative'],
+      ['currentValue', investment.currentValue, 'Current value cannot be negative'],
+      ['insuranceCover', investment.insuranceCover, 'Insurance cover cannot be negative'],
+    ] as const;
+
+    numericChecks.forEach(([field, value, message]) => {
+      if (value != null && Number(value) < 0) {
+        throw new BadRequestException({ message, field });
+      }
+    });
+  }
+
   async create(createInvestmentDto: CreateInvestmentDto, userId: number) {
+    this.assertInvestmentCrudRules(createInvestmentDto);
     return this.repository.create(createInvestmentDto, userId);
   }
 
-  private mapActiveContributionPlan(activePlan: any) {
+  private getCategoryKey(investment: InvestmentLike) {
+    return String(
+      investment?.assetCategory || investment?.assetType || 'other',
+    );
+  }
+
+  private readonly monthNames = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  private readonly fiscalYearStartMonth = 3;
+
+  private parseDate(value: string | Date | null | undefined) {
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return parsed;
+  }
+
+  private normalizeContributionPlanStatus(status: string | null | undefined) {
+    return String(status || 'active').trim().toLowerCase();
+  }
+
+  private selectDisplayContributionPlan<
+    T extends ActivePlanLike & {
+      updatedAt?: string | Date | null;
+      createdAt?: string | Date | null;
+    },
+  >(plans: T[] = []): T | null {
+    if (plans.length === 0) {
+      return null;
+    }
+
+    const getPriority = (plan: T) => {
+      const normalizedStatus = this.normalizeContributionPlanStatus(plan.status);
+      if (normalizedStatus === 'active') return 0;
+      if (normalizedStatus === 'paused') return 1;
+      return 2;
+    };
+
+    const getSortTime = (plan: T) => {
+      return (
+        this.parseDate(plan.updatedAt)?.getTime() ??
+        this.parseDate(plan.createdAt)?.getTime() ??
+        this.parseDate(plan.nextDueDate)?.getTime() ??
+        0
+      );
+    };
+
+    return [...plans].sort((left, right) => {
+      const priorityDifference = getPriority(left) - getPriority(right);
+      if (priorityDifference !== 0) {
+        return priorityDifference;
+      }
+
+      const timeDifference = getSortTime(right) - getSortTime(left);
+      if (timeDifference !== 0) {
+        return timeDifference;
+      }
+
+      return String(right.id).localeCompare(String(left.id), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      });
+    })[0];
+  }
+
+  private startOfMonth(value: Date) {
+    return new Date(value.getFullYear(), value.getMonth(), 1);
+  }
+
+  private endOfMonth(value: Date) {
+    return new Date(value.getFullYear(), value.getMonth() + 1, 0, 23, 59, 59, 999);
+  }
+
+  private addMonths(value: Date, monthOffset: number) {
+    return new Date(value.getFullYear(), value.getMonth() + monthOffset, 1);
+  }
+
+  private diffMonths(left: Date, right: Date) {
+    return (left.getFullYear() - right.getFullYear()) * 12 + (left.getMonth() - right.getMonth());
+  }
+
+  private formatMonthYear(value: Date) {
+    return `${this.monthNames[value.getMonth()]} ${value.getFullYear()}`;
+  }
+
+  private getFiscalYearLabel(value: Date) {
+    const year = value.getFullYear();
+    const fiscalStartYear = value.getMonth() >= this.fiscalYearStartMonth ? year : year - 1;
+    return `FY ${fiscalStartYear}-${String(fiscalStartYear + 1).slice(-2)}`;
+  }
+
+  private buildSnapshotsByInvestment(snapshots: SnapshotLike[] = []) {
+    const snapshotsByInvestmentId = new Map<string, SnapshotLike[]>();
+
+    snapshots.forEach((snapshot) => {
+      const key = String(snapshot?.investmentId ?? '');
+      if (!key) return;
+
+      const existing = snapshotsByInvestmentId.get(key) ?? [];
+      existing.push(snapshot);
+      snapshotsByInvestmentId.set(key, existing);
+    });
+
+    snapshotsByInvestmentId.forEach((items, key) => {
+      snapshotsByInvestmentId.set(
+        key,
+        items
+          .filter((item) => this.parseDate(item?.snapshotDate))
+          .sort(
+            (left, right) =>
+              this.parseDate(left.snapshotDate)!.getTime() -
+              this.parseDate(right.snapshotDate)!.getTime(),
+          ),
+      );
+    });
+
+    return snapshotsByInvestmentId;
+  }
+
+  private getTimelineStartDate(investment: SummaryInvestment, snapshots: SnapshotLike[] = []) {
+    const today = this.startOfMonth(new Date());
+    const rawCandidates = [
+      investment?.startDate,
+      investment?.createdAt,
+      investment?.lastValuationAt,
+      investment?.activeContributionPlan?.anchorDate,
+      ...snapshots.map((snapshot) => snapshot?.snapshotDate),
+    ];
+
+    const validCandidates = rawCandidates
+      .map((value) => this.parseDate(value))
+      .filter((value): value is Date => Boolean(value))
+      .map((value) => this.startOfMonth(value));
+
+    if (validCandidates.length === 0) {
+      return today;
+    }
+
+    const nonFutureCandidates = validCandidates.filter(
+      (value) => value.getTime() <= today.getTime(),
+    );
+
+    if (nonFutureCandidates.length === 0) {
+      return today;
+    }
+
+    return nonFutureCandidates.reduce((earliest, value) =>
+      value.getTime() < earliest.getTime() ? value : earliest,
+    );
+  }
+
+  private resolveInvestmentValueAtDate(
+    investment: SummaryInvestment,
+    snapshots: SnapshotLike[] = [],
+    pointDate: Date,
+  ) {
+    const investedValue = Number(investment?.totalInvested || 0);
+
+    const latestSnapshot = [...snapshots]
+      .filter((snapshot) => {
+        const snapshotDate = this.parseDate(snapshot?.snapshotDate);
+        return snapshotDate && snapshotDate.getTime() <= pointDate.getTime();
+      })
+      .sort(
+        (left, right) =>
+          this.parseDate(right.snapshotDate)!.getTime() -
+          this.parseDate(left.snapshotDate)!.getTime(),
+      )[0];
+
+    if (latestSnapshot) {
+      return {
+        value: Number(latestSnapshot.marketValue || investedValue),
+        source: 'snapshot',
+      };
+    }
+
+    const lastValuationAt = this.parseDate(investment?.lastValuationAt);
+    const currentValue = Number(investment?.currentValue ?? Number.NaN);
+
+    if (
+      lastValuationAt &&
+      lastValuationAt.getTime() <= pointDate.getTime() &&
+      Number.isFinite(currentValue)
+    ) {
+      return {
+        value: currentValue,
+        source: 'estimated',
+      };
+    }
+
+    return {
+      value: investedValue,
+      source: 'invested',
+    };
+  }
+
+  private buildResolvedAnalyticsRecord(
+    investment: SummaryInvestment,
+    snapshots: SnapshotLike[] = [],
+  ): ResolvedAnalyticsRecord {
+    const resolvedCurrentValue = this.resolveInvestmentValueAtDate(
+      investment,
+      snapshots,
+      new Date(),
+    );
+    const investedAmount = Number(investment?.totalInvested || 0);
+
+    return {
+      id: investment.id,
+      investment,
+      category: this.getCategoryKey(investment),
+      investedAmount,
+      currentValue: resolvedCurrentValue.value,
+      returnAmount: resolvedCurrentValue.value - investedAmount,
+      timelineStartDate: this.getTimelineStartDate(investment, snapshots),
+      snapshots,
+    };
+  }
+
+  private buildPortfolioGrowthData(records: ResolvedAnalyticsRecord[]) {
+    const datedRecords = records.filter((record) => record.timelineStartDate instanceof Date);
+
+    if (datedRecords.length === 0) {
+      return [];
+    }
+
+    const earliestStart = datedRecords.reduce(
+      (earliest, entry) =>
+        entry.timelineStartDate.getTime() < earliest.getTime()
+          ? entry.timelineStartDate
+          : earliest,
+      datedRecords[0].timelineStartDate,
+    );
+    const today = new Date();
+    const currentMonth = this.startOfMonth(today);
+    const monthCount = this.diffMonths(currentMonth, earliestStart);
+
+    return Array.from({ length: monthCount + 1 }, (_, monthOffset) => {
+      const monthStart = this.addMonths(earliestStart, monthOffset);
+      const monthEnd = this.endOfMonth(monthStart);
+      const pointDate = monthEnd.getTime() > today.getTime() ? today : monthEnd;
+
+      const point = datedRecords.reduce(
+        (acc, entry) => {
+          if (entry.timelineStartDate.getTime() > pointDate.getTime()) {
+            return acc;
+          }
+
+          const resolvedValue = this.resolveInvestmentValueAtDate(
+            entry.investment,
+            entry.snapshots,
+            pointDate,
+          );
+
+          acc.investedToDate += entry.investedAmount;
+          acc.currentValueToDate += resolvedValue.value;
+
+          if (resolvedValue.source === 'snapshot') {
+            acc.snapshotBackedValue += resolvedValue.value;
+          } else if (resolvedValue.source === 'estimated') {
+            acc.estimatedValue += resolvedValue.value;
+          } else {
+            acc.investedOnlyValue += resolvedValue.value;
+          }
+
+          return acc;
+        },
+        {
+          label: this.formatMonthYear(monthStart),
+          investedToDate: 0,
+          currentValueToDate: 0,
+          returnToDate: 0,
+          snapshotBackedValue: 0,
+          estimatedValue: 0,
+          investedOnlyValue: 0,
+        },
+      );
+
+      point.returnToDate = point.currentValueToDate - point.investedToDate;
+      return point;
+    });
+  }
+
+  private buildYearlyTimeSeriesData(records: ResolvedAnalyticsRecord[]) {
+    const yearGroups: Record<string, TimeSeriesPoint> = {};
+
+    records.forEach((record) => {
+      const startDate = record.timelineStartDate;
+      if (!(startDate instanceof Date)) return;
+
+      const fiscalYearLabel = this.getFiscalYearLabel(startDate);
+
+      if (!yearGroups[fiscalYearLabel]) {
+        yearGroups[fiscalYearLabel] = {
+          label: fiscalYearLabel,
+          invested: 0,
+          return: 0,
+          investedBreakdown: {},
+          returnBreakdown: {},
+        };
+      }
+
+      yearGroups[fiscalYearLabel].invested += record.investedAmount;
+      yearGroups[fiscalYearLabel].return += record.returnAmount;
+      yearGroups[fiscalYearLabel].investedBreakdown[record.category] =
+        (yearGroups[fiscalYearLabel].investedBreakdown[record.category] || 0) +
+        record.investedAmount;
+      yearGroups[fiscalYearLabel].returnBreakdown[record.category] =
+        (yearGroups[fiscalYearLabel].returnBreakdown[record.category] || 0) +
+        record.returnAmount;
+    });
+
+    return Object.values(yearGroups).sort((left, right) => {
+      const leftYear = Number(String(left.label).split(' ')[1]?.split('-')[0] || 0);
+      const rightYear = Number(String(right.label).split(' ')[1]?.split('-')[0] || 0);
+      return leftYear - rightYear;
+    });
+  }
+
+  private buildMonthlyTimeSeriesData(records: ResolvedAnalyticsRecord[], selectedYearForDrill: string) {
+    const yearMatch = selectedYearForDrill.match(/FY (\d+)-(\d+)/);
+    if (!yearMatch) {
+      return [];
+    }
+
+    const startYear = Number(yearMatch[1]);
+    const monthGroups: Record<string, TimeSeriesPoint> = {};
+
+    for (let index = 0; index < 12; index += 1) {
+      const actualMonth = (this.fiscalYearStartMonth + index) % 12;
+      const actualYear = startYear + Math.floor((this.fiscalYearStartMonth + index) / 12);
+      const monthKey = `${this.monthNames[actualMonth]} ${actualYear}`;
+
+      monthGroups[monthKey] = {
+        label: monthKey,
+        invested: 0,
+        return: 0,
+        investedBreakdown: {},
+        returnBreakdown: {},
+      };
+    }
+
+    records.forEach((record) => {
+      const startDate = record.timelineStartDate;
+      if (!(startDate instanceof Date)) return;
+
+      const fiscalStartYear =
+        startDate.getMonth() >= this.fiscalYearStartMonth
+          ? startDate.getFullYear()
+          : startDate.getFullYear() - 1;
+
+      if (fiscalStartYear !== startYear) return;
+
+      const monthKey = `${this.monthNames[startDate.getMonth()]} ${startDate.getFullYear()}`;
+      if (!monthGroups[monthKey]) return;
+
+      monthGroups[monthKey].invested += record.investedAmount;
+      monthGroups[monthKey].return += record.returnAmount;
+      monthGroups[monthKey].investedBreakdown[record.category] =
+        (monthGroups[monthKey].investedBreakdown[record.category] || 0) +
+        record.investedAmount;
+      monthGroups[monthKey].returnBreakdown[record.category] =
+        (monthGroups[monthKey].returnBreakdown[record.category] || 0) +
+        record.returnAmount;
+    });
+
+    return Object.values(monthGroups).filter(
+      (monthGroup) => monthGroup.invested > 0 || monthGroup.return !== 0,
+    );
+  }
+
+  private buildCategoryPerformanceRows(records: ResolvedAnalyticsRecord[], months = 12) {
+    const categoryGroups = records.reduce<Record<string, ResolvedAnalyticsRecord[]>>((groups, record) => {
+      if (!groups[record.category]) {
+        groups[record.category] = [];
+      }
+
+      groups[record.category].push(record);
+      return groups;
+    }, {});
+
+    const startMonth = this.startOfMonth(new Date());
+    const monthPoints = Array.from({ length: Math.max(months, 1) }, (_, index) =>
+      this.endOfMonth(this.addMonths(startMonth, -(Math.max(months, 1) - 1 - index))),
+    );
+
+    return Object.entries(categoryGroups)
+      .map(([key, items]) => {
+        const invested = items.reduce((sum, item) => sum + item.investedAmount, 0);
+        const currentValue = items.reduce((sum, item) => sum + item.currentValue, 0);
+        const returnAmount = currentValue - invested;
+        const returnPercentage = invested > 0 ? (returnAmount / invested) * 100 : 0;
+
+        return {
+          key,
+          label: key,
+          holdings: items.length,
+          invested,
+          currentValue,
+          returnAmount,
+          returnPercentage,
+          investmentIds: items.map((item) => item.id),
+          sparkline: monthPoints.map((pointDate) =>
+            items.reduce(
+              (sum, item) =>
+                item.timelineStartDate.getTime() > pointDate.getTime()
+                  ? sum
+                  : sum + this.resolveInvestmentValueAtDate(
+                      item.investment,
+                      item.snapshots,
+                      pointDate,
+                    ).value,
+              0,
+            ),
+          ),
+        };
+      })
+      .sort((left, right) => right.currentValue - left.currentValue);
+  }
+
+  private getEffectiveCurrentValue(investment: InvestmentLike) {
+    const currentValue = Number(investment?.currentValue ?? Number.NaN);
+    if (Number.isFinite(currentValue) && currentValue > 0) {
+      return currentValue;
+    }
+
+    return Number(investment?.totalInvested || 0);
+  }
+
+  private getValueSourceKey(investment: InvestmentLike) {
+    const source = String(investment?.currentValueSource || '').trim().toLowerCase();
+    if (source === 'valuation_snapshot' || source === 'snapshot') {
+      return 'snapshot';
+    }
+    if (source === 'manual' || source === 'estimated') {
+      return 'estimated';
+    }
+    return 'invested';
+  }
+
+  private isStaleValuation(investment: InvestmentLike) {
+    if (!investment?.lastValuationAt) {
+      return true;
+    }
+
+    const lastValuationTime = new Date(investment.lastValuationAt).getTime();
+    if (Number.isNaN(lastValuationTime)) {
+      return true;
+    }
+
+    const daysSinceLastValuation =
+      (Date.now() - lastValuationTime) / (1000 * 60 * 60 * 24);
+
+    return daysSinceLastValuation > 90;
+  }
+
+  private isWithinDays(value: string | Date | null | undefined, days: number) {
+    if (!value) return false;
+
+    const target = new Date(value).getTime();
+    if (Number.isNaN(target)) return false;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const start = today.getTime();
+    const end = start + days * 24 * 60 * 60 * 1000;
+
+    return target >= start && target <= end;
+  }
+
+  private compareDescByDate(
+    left: string | Date | null | undefined,
+    right: string | Date | null | undefined,
+  ) {
+    return new Date(right || 0).getTime() - new Date(left || 0).getTime();
+  }
+
+  private toOptionalDateString(value: string | Date | null | undefined) {
+    if (!value) {
+      return null;
+    }
+
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    return value;
+  }
+
+  private mapInvestmentSummaryItem(investment: InvestmentLike): SummaryInvestment {
+    return {
+      ...investment,
+      currentValue: this.getEffectiveCurrentValue(investment),
+      currentValueSource: this.getValueSourceKey(investment),
+      categoryKey: this.getCategoryKey(investment),
+    };
+  }
+
+  private async getSummaryInvestments(userId: number): Promise<SummaryInvestment[]> {
+    const investments = await this.findAll(userId);
+    return investments.map((investment) => this.mapInvestmentSummaryItem(investment));
+  }
+
+  private mapActiveContributionPlan(
+    activePlan: ActivePlanLike | null,
+  ): InvestmentActiveContributionPlanResponseDto | null {
     if (!activePlan) {
       return null;
     }
@@ -31,14 +635,36 @@ export class InvestmentsService {
       cadenceUnit: activePlan.cadenceUnit,
       cadenceInterval: activePlan.cadenceInterval,
       historicalImportMode: activePlan.historicalImportMode,
-      anchorDate: activePlan.anchorDate,
-      nextDueDate: activePlan.nextDueDate,
-      endDate: activePlan.endDate,
+      anchorDate: this.toOptionalDateString(activePlan.anchorDate),
+      nextDueDate: this.toOptionalDateString(activePlan.nextDueDate),
+      endDate: this.toOptionalDateString(activePlan.endDate),
       status: activePlan.status,
     };
   }
 
-  private getLatestSnapshot(snapshots: any[] = []) {
+  private mapLatestSnapshot(
+    latestSnapshot: SnapshotLike | null,
+  ): InvestmentLatestSnapshotResponseDto | null {
+    if (!latestSnapshot) {
+      return null;
+    }
+
+    const snapshotDate = this.toOptionalDateString(latestSnapshot.snapshotDate);
+    if (!snapshotDate) {
+      return null;
+    }
+
+    return {
+      id: latestSnapshot.id,
+      snapshotDate,
+      marketValue: latestSnapshot.marketValue,
+      units: latestSnapshot.units ?? null,
+      price: latestSnapshot.price ?? null,
+      source: latestSnapshot.source ?? null,
+    };
+  }
+
+  private getLatestSnapshot(snapshots: SnapshotLike[] = []): SnapshotLike | null {
     return snapshots
       .filter((snapshot) => snapshot?.snapshotDate)
       .sort(
@@ -49,8 +675,8 @@ export class InvestmentsService {
   }
 
   private buildPerformanceHistoryFromSnapshots(
-    investment: any,
-    snapshots: any[] = [],
+    investment: InvestmentLike,
+    snapshots: SnapshotLike[] = [],
   ) {
     if (!Array.isArray(snapshots) || snapshots.length === 0) {
       return [];
@@ -65,28 +691,35 @@ export class InvestmentsService {
           new Date(left.snapshotDate).getTime() -
           new Date(right.snapshotDate).getTime(),
       )
-      .map((snapshot) => {
+      .reduce<InvestmentPerformanceResponseDto['performanceHistory']>((history, snapshot) => {
+        const date = this.toOptionalDateString(snapshot.snapshotDate);
+        if (!date) {
+          return history;
+        }
+
         const currentValue = Number(snapshot.marketValue ?? 0);
         const gainLossValue = currentValue - investedValue;
         const gainLossPercentage =
           investedValue > 0 ? (gainLossValue / investedValue) * 100 : 0;
 
-        return {
-          date: snapshot.snapshotDate,
+        history.push({
+          date,
           currentValue,
           investedValue,
           gainLossValue,
           gainLossPercentage,
           source: 'valuation_snapshot',
-        };
-      });
+        });
+
+        return history;
+      }, []);
   }
 
   private normalizeEventStatus(value: unknown) {
     return String(value || '').trim().toUpperCase();
   }
 
-  private buildPerformanceHistoryFromEvents(events: any[] = []) {
+  private buildPerformanceHistoryFromEvents(events: EventLike[] = []) {
     const confirmedEvents = events
       .filter(
         (event) => this.normalizeEventStatus(event?.status) === 'CONFIRMED',
@@ -107,8 +740,9 @@ export class InvestmentsService {
     return confirmedEvents.reduce((history, event) => {
       const amount = Number(event?.amount || 0);
       const eventDate = event?.eventDate || event?.dueDate;
+      const eventDateString = this.toOptionalDateString(eventDate);
 
-      if (!eventDate) {
+      if (!eventDateString) {
         return history;
       }
 
@@ -136,7 +770,7 @@ export class InvestmentsService {
         investedValue > 0 ? (gainLossValue / investedValue) * 100 : 0;
 
       history.push({
-        date: eventDate,
+        date: eventDateString,
         currentValue,
         investedValue,
         gainLossValue,
@@ -146,10 +780,10 @@ export class InvestmentsService {
       });
 
       return history;
-    }, [] as any[]);
+    }, [] as InvestmentPerformanceResponseDto['performanceHistory']);
   }
 
-  private buildDerivedEventValuation(events: any[] = []) {
+  private buildDerivedEventValuation(events: EventLike[] = []) {
     const confirmedEvents = events.filter(
       (event) => this.normalizeEventStatus(event?.status) === 'CONFIRMED',
     );
@@ -196,72 +830,339 @@ export class InvestmentsService {
     };
   }
 
-  private mergeDerivedValuation(investment: any, snapshots: any[] = [], events: any[] = []) {
-    const latestSnapshot = this.getLatestSnapshot(snapshots);
-    if (!latestSnapshot) {
-      const derivedEventValuation = this.buildDerivedEventValuation(events);
-      const performanceHistory = this.buildPerformanceHistoryFromEvents(events);
+  private buildValueSourceSummary(investments: SummaryInvestment[]): InvestmentValueSourceSummaryDto {
+    return investments.reduce<InvestmentValueSourceSummaryDto>(
+      (summary, investment) => {
+        const source = this.getValueSourceKey(investment);
+        const currentValue = this.getEffectiveCurrentValue(investment);
 
+        if (source === 'snapshot') {
+          summary.snapshotBackedValue += currentValue;
+          summary.snapshotBackedCount += 1;
+          summary.snapshotBackedIds.push(investment.id);
+        } else if (source === 'estimated') {
+          summary.estimatedValue += currentValue;
+          summary.estimatedCount += 1;
+          summary.estimatedIds.push(investment.id);
+        } else {
+          summary.investedOnlyValue += currentValue;
+          summary.investedOnlyCount += 1;
+          summary.investedOnlyIds.push(investment.id);
+        }
+
+        if (investment.status === 'active' && this.isStaleValuation(investment)) {
+          summary.staleValuationCount += 1;
+          summary.staleValuationValue += currentValue;
+          summary.staleValuationIds.push(investment.id);
+        }
+
+        return summary;
+      },
+      {
+        snapshotBackedValue: 0,
+        estimatedValue: 0,
+        investedOnlyValue: 0,
+        snapshotBackedCount: 0,
+        estimatedCount: 0,
+        investedOnlyCount: 0,
+        staleValuationCount: 0,
+        staleValuationValue: 0,
+        snapshotBackedIds: [],
+        estimatedIds: [],
+        investedOnlyIds: [],
+        staleValuationIds: [],
+      },
+    );
+  }
+
+  private buildDashboardCategoryBreakdown(
+    investments: SummaryInvestment[],
+  ): InvestmentDashboardCategoryBreakdownItemDto[] {
+    const categoryBreakdown = investments.reduce<
+      Record<string, InvestmentDashboardCategoryBreakdownItemDto>
+    >((acc, investment) => {
+      const categoryKey = this.getCategoryKey(investment);
+      if (!acc[categoryKey]) {
+        acc[categoryKey] = {
+          key: categoryKey,
+          invested: 0,
+          currentValue: 0,
+          holdings: 0,
+          investmentIds: [],
+        };
+      }
+
+      acc[categoryKey].invested += Number(investment.totalInvested || 0);
+      acc[categoryKey].currentValue += this.getEffectiveCurrentValue(investment);
+      acc[categoryKey].holdings += 1;
+      acc[categoryKey].investmentIds.push(investment.id);
+      return acc;
+    }, {});
+
+    return Object.values(categoryBreakdown)
+      .filter((item) => item.invested > 0 || item.currentValue > 0)
+      .sort((left, right) => right.currentValue - left.currentValue);
+  }
+
+  private buildDashboardSummary(
+    investments: SummaryInvestment[],
+    records: ResolvedAnalyticsRecord[],
+  ): InvestmentDashboardSummaryDto {
+    const totalInvested = investments.reduce(
+      (sum, investment) => sum + Number(investment.totalInvested || 0),
+      0,
+    );
+    const totalCurrentValue = records.reduce(
+      (sum, record) => sum + Number(record.currentValue || 0),
+      0,
+    );
+    const totalReturn = totalCurrentValue - totalInvested;
+    const returnPercentage =
+      totalInvested > 0 ? (totalReturn / totalInvested) * 100 : 0;
+    const upcomingMaturity = records
+      .filter(
+        (record) =>
+          record.investment.status === 'active' &&
+          this.isWithinDays(record.investment.maturityDate, 90),
+      )
+      .reduce((sum, record) => sum + Number(record.currentValue || 0), 0);
+    const insuranceCover = records
+      .filter(
+        (record) =>
+          record.investment.status === 'active' && record.category === 'insurance',
+      )
+      .reduce(
+        (sum, record) => sum + Number(record.investment.insuranceCover || 0),
+        0,
+      );
+
+    return {
+      totalInvestments: investments.length,
+      totalInvested,
+      totalCurrentValue,
+      totalReturn,
+      returnPercentage,
+      upcomingMaturity,
+      insuranceCover,
+      valueSourceSummary: this.buildValueSourceSummary(investments),
+    };
+  }
+
+  private buildDetailShellResponse(
+    investment: InvestmentLike,
+    activePlan: ActivePlanLike | null,
+    eventCount: number,
+    snapshotCount: number,
+    latestSnapshot: SnapshotLike | null,
+  ): InvestmentDetailResponseDto {
+    return {
+      id: investment.id,
+      accountId: investment.accountId ?? null,
+      assetTaxonomyId: investment.assetTaxonomyId ?? null,
+      name: investment.name,
+      assetType: investment.assetType ?? undefined,
+      assetCategory: investment.assetCategory ?? undefined,
+      institutionName: investment.institutionName ?? null,
+      totalInvested: Number(investment.totalInvested || 0),
+      currentValue: investment.currentValue ?? undefined,
+      startDate: this.toOptionalDateString(investment.startDate),
+      status: investment.status,
+      maturityDate: this.toOptionalDateString(investment.maturityDate),
+      currency: investment.currency ?? undefined,
+      holdingMode: investment.holdingMode ?? null,
+      currentValueSource: investment.currentValueSource ?? null,
+      lastValuationAt: this.toOptionalDateString(investment.lastValuationAt),
+      insuranceCover: investment.insuranceCover ?? undefined,
+      referenceNumber: investment.referenceNumber ?? null,
+      documentsMeta: investment.documentsMeta ?? null,
+      notes: investment.notes ?? null,
+      activeContributionPlan: this.mapActiveContributionPlan(activePlan),
+      eventCount,
+      snapshotCount,
+      latestSnapshot: this.mapLatestSnapshot(latestSnapshot),
+      createdAt: this.toOptionalDateString(investment.createdAt) ?? undefined,
+      updatedAt: this.toOptionalDateString(investment.updatedAt) ?? undefined,
+    };
+  }
+
+  private buildPerformanceResponse(
+    investment: InvestmentLike,
+    valuationSnapshots: SnapshotLike[],
+    investmentEvents: EventLike[],
+  ): InvestmentPerformanceResponseDto {
+    const latestSnapshot = this.getLatestSnapshot(valuationSnapshots);
+
+    if (latestSnapshot) {
       return {
-        ...investment,
-        ...(derivedEventValuation || {}),
-        performanceHistory,
-        performanceHistorySource:
-          performanceHistory.length > 0 ? 'investment_event' : 'none',
-        valuationSnapshots: snapshots,
+        investmentId: investment.id,
+        performanceHistorySource: 'valuation_snapshot',
+        performanceHistory: this.buildPerformanceHistoryFromSnapshots(
+          investment,
+          valuationSnapshots,
+        ),
       };
     }
 
     return {
-      ...investment,
-      currentValue: Number(latestSnapshot.marketValue ?? investment.currentValue ?? 0),
-      lastValuationAt: latestSnapshot.snapshotDate ?? investment.lastValuationAt,
-      currentValueSource: 'valuation_snapshot',
-      performanceHistory: this.buildPerformanceHistoryFromSnapshots(
-        investment,
-        snapshots,
-      ),
-      performanceHistorySource: 'valuation_snapshot',
-      valuationSnapshots: snapshots,
+      investmentId: investment.id,
+      performanceHistorySource: 'investment_event',
+      performanceHistory: this.buildPerformanceHistoryFromEvents(investmentEvents),
     };
   }
 
-  async findAll(userId: number) {
+  async findAll(userId: number): Promise<SummaryInvestment[]> {
     const investments = await this.repository.findAll(userId);
-    const activePlans = await this.contributionPlansService.findAllActiveByUser(
-      userId,
-    );
-    const activePlanByInvestmentId = new Map(
-      activePlans.map((plan) => [String(plan.investmentId), plan]),
-    );
+    const plans = await this.contributionPlansService.findAllByUser(userId);
+    const plansByInvestmentId = new Map<string, ActivePlanLike[]>();
+
+    plans.forEach((plan) => {
+      const investmentId = String(plan.investmentId);
+      const existingPlans = plansByInvestmentId.get(investmentId) ?? [];
+      existingPlans.push(plan);
+      plansByInvestmentId.set(investmentId, existingPlans);
+    });
 
     return investments.map((investment) => ({
       ...investment,
       activeContributionPlan: this.mapActiveContributionPlan(
-        activePlanByInvestmentId.get(String(investment.id)) ?? null,
+        this.selectDisplayContributionPlan(
+          plansByInvestmentId.get(String(investment.id)) ?? [],
+        ),
       ),
     }));
   }
 
-  async findOne(id: number, userId: number) {
+  private async buildDashboardUpcoming(userId: number) {
+    const investments = await this.getSummaryInvestments(userId);
+
+    const upcomingContributions = investments
+      .filter(
+        (investment) =>
+          investment.status === 'active' && investment.activeContributionPlan?.nextDueDate,
+      )
+      .sort((left, right) =>
+        new Date(left.activeContributionPlan?.nextDueDate || 0).getTime() -
+        new Date(right.activeContributionPlan?.nextDueDate || 0).getTime(),
+      )
+      .slice(0, 6);
+
+    const recentInvestments = [...investments]
+      .sort((left, right) =>
+        this.compareDescByDate(
+          left.createdAt || left.startDate,
+          right.createdAt || right.startDate,
+        ),
+      )
+      .slice(0, 5);
+
+    const topCurrentValueItems = [...investments]
+      .sort(
+        (left, right) =>
+          this.getEffectiveCurrentValue(right) - this.getEffectiveCurrentValue(left),
+      )
+      .slice(0, 5);
+
+    const upcomingMaturities = investments
+      .filter((investment) => investment.status === 'active' && investment.maturityDate)
+      .sort(
+        (left, right) =>
+          new Date(left.maturityDate || 0).getTime() -
+          new Date(right.maturityDate || 0).getTime(),
+      )
+      .slice(0, 5);
+
+    return {
+      upcomingContributions,
+      recentInvestments,
+      topCurrentValueItems,
+      upcomingMaturities,
+    };
+  }
+
+  async getDashboardAnalytics(userId: number): Promise<InvestmentDashboardAnalyticsResponseDto> {
+    const [investments, snapshots, upcoming] = await Promise.all([
+      this.getSummaryInvestments(userId),
+      this.valuationSnapshotsService.findAll(userId),
+      this.buildDashboardUpcoming(userId),
+    ]);
+    const snapshotsByInvestment = this.buildSnapshotsByInvestment(snapshots);
+    const records = investments.map((investment) =>
+      this.buildResolvedAnalyticsRecord(
+        investment,
+        snapshotsByInvestment.get(String(investment.id)) ?? [],
+      ),
+    );
+    const yearly = this.buildYearlyTimeSeriesData(records);
+
+    return {
+      summary: this.buildDashboardSummary(investments, records),
+      categoryBreakdown: this.buildDashboardCategoryBreakdown(investments),
+      upcoming,
+      analytics: {
+        portfolioGrowthData: this.buildPortfolioGrowthData(records),
+        timeSeries: {
+          yearly,
+          monthlyByYear: yearly.reduce<Record<string, TimeSeriesPoint[]>>((acc, point) => {
+            acc[point.label] = this.buildMonthlyTimeSeriesData(records, point.label);
+            return acc;
+          }, {}),
+        },
+        categoryPerformanceRows: this.buildCategoryPerformanceRows(records, 12),
+      },
+    };
+  }
+
+  async findDetailShell(id: number, userId: number): Promise<InvestmentDetailResponseDto | null> {
     const investment = await this.repository.findOne(id, userId);
     if (!investment) return null;
 
-    const activePlan =
-      (await this.contributionPlansService.findAllByInvestment(
-        String(investment.id),
-      )).find((p) => p.status === 'active') ?? null;
+    const [plans, investmentEvents, valuationSnapshots] = await Promise.all([
+      this.contributionPlansService.findAllByInvestment(String(investment.id)),
+      this.investmentEventsService.findAllByInvestment(String(investment.id)),
+      this.valuationSnapshotsService.findAllByInvestment(String(investment.id)),
+    ]);
+
+    const activePlan = this.selectDisplayContributionPlan(plans);
+    const latestSnapshot = this.getLatestSnapshot(valuationSnapshots);
+
+    return this.buildDetailShellResponse(
+      investment,
+      activePlan,
+      investmentEvents.length,
+      valuationSnapshots.length,
+      latestSnapshot,
+    );
+  }
+
+  async getPerformance(id: number, userId: number): Promise<InvestmentPerformanceResponseDto | null> {
+    const investment = await this.repository.findOne(id, userId);
+    if (!investment) return null;
+
     const investmentEvents = await this.investmentEventsService.findAllByInvestment(String(investment.id));
     const valuationSnapshots = await this.valuationSnapshotsService.findAllByInvestment(String(investment.id));
 
-    return this.mergeDerivedValuation({
-      ...investment,
+    return this.buildPerformanceResponse(
+      investment,
+      valuationSnapshots,
       investmentEvents,
-      activeContributionPlan: this.mapActiveContributionPlan(activePlan),
-    }, valuationSnapshots, investmentEvents);
+    );
+  }
+
+  async findOne(id: number, userId: number): Promise<InvestmentDetailResponseDto | null> {
+    return this.findDetailShell(id, userId);
   }
 
   async update(id: number, updateInvestmentDto: UpdateInvestmentDto, userId: number) {
+    const existingInvestment = await this.repository.findOne(id, userId);
+    if (!existingInvestment) {
+      return null;
+    }
+
+    this.assertInvestmentCrudRules({
+      ...existingInvestment,
+      ...updateInvestmentDto,
+    });
+
     return this.repository.update(id, updateInvestmentDto, userId);
   }
 

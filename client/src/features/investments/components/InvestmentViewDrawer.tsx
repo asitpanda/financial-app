@@ -6,30 +6,39 @@ import {
   Box,
   Chip,
   IconButton,
+  MenuItem,
+  Select,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Tab,
+  Tabs,
   TextField,
   Typography,
 } from "@mui/material";
-import { mdiDeleteOutline, mdiPencilOutline, mdiPlus } from "@mdi/js";
+import {
+  mdiCalendarBlankOutline,
+  mdiCalendarClock,
+  mdiCalendarEnd,
+  mdiCalendarStart,
+  mdiCash,
+  mdiDeleteOutline,
+  mdiPauseCircleOutline,
+  mdiPencilOutline,
+  mdiPlayCircleOutline,
+  mdiPlus,
+  mdiRepeat,
+  mdiTrendingUp,
+} from "@mdi/js";
 import Icon from "@mdi/react";
 import dayjs from "dayjs";
 import AppDrawer from "../../../components/drawers/AppDrawer";
 import AppButton from "../../../components/common/AppButton";
 import ConfirmDialog from "../../../components/dialogs/ConfirmDialog";
-import {
-  EmptyState,
-  SectionCard,
-  StatusChip,
-} from "../../../components/common";
+import { EmptyState, SectionCard, StatusChip } from "../../../components/common";
+import DataTable from "../../../components/common/DataTable";
 import RecordValuationModal from "./RecordValuationModal";
 import { useUpdateInvestmentContributionPlan } from "../hooks/useContributionPlans";
 import { useDeleteInvestmentSnapshot } from "../hooks/useInvestmentSnapshots";
+import { INVESTMENT_EVENT_TYPES } from "../../../types/investmentEventTypes";
 import { useNotificationStore } from "../../../store/notificationStore";
 import { getRuntimeErrorMessage } from "../../../utils/errorMessage";
 import {
@@ -39,20 +48,268 @@ import {
   getInvestmentStatusTone,
 } from "../../../utils/investmentHelpers";
 
-function InvestmentPerformanceChart({ investment, formatValue }) {
+const DRAWER_TABS = ["overview", "contribution", "valuation", "details"];
+const VALUATION_STALE_DAYS = 30;
+const PERIOD_OPTIONS = ["3M", "6M", "1Y", "ALL"];
+const CONTRIBUTION_FILTER_OPTIONS = ["all", "contributions", "withdrawals", "other"];
+
+function formatCodeLabel(value) {
+  return String(value || "")
+    .replace(/_/g, " ")
+    .trim()
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatValueOrDash(value, formatter) {
+  if (value == null || value === "") {
+    return "—";
+  }
+
+  return formatter ? formatter(value) : value;
+}
+
+function formatDateOrDash(value) {
+  if (!value) return "—";
+  const formatted = formatInvestmentDate(value);
+  return formatted === "Not set" ? "—" : formatted;
+}
+
+function getContributionEventLabel(eventType) {
+  switch (eventType) {
+    case INVESTMENT_EVENT_TYPES.CONTRIBUTION:
+      return "Contribution";
+    case INVESTMENT_EVENT_TYPES.OPENING_BALANCE:
+      return "Opening Balance";
+    case INVESTMENT_EVENT_TYPES.OPENING_INCOME_CREDIT:
+      return "Opening Income";
+    case INVESTMENT_EVENT_TYPES.WITHDRAWAL_PRINCIPAL:
+      return "Principal Withdrawal";
+    default:
+      return formatCodeLabel(eventType || "Activity");
+  }
+}
+
+function getContributionAmount(event) {
+  const amount = Number(event?.amount || event?.netAmount || 0);
+  return event?.eventType === INVESTMENT_EVENT_TYPES.WITHDRAWAL_PRINCIPAL
+    ? -Math.abs(amount)
+    : amount;
+}
+
+function getContributionSourceLabel(event) {
+  if (event?.recurringPlanId != null) {
+    return "Recurring Plan";
+  }
+
+  if (event?.eventSource) {
+    return formatCodeLabel(event.eventSource);
+  }
+
+  return "Manual";
+}
+
+function getContributionCadenceLabel(plan) {
+  if (!plan) return "—";
+  const interval = Number(plan.cadenceInterval || 1);
+  const unit = String(plan.cadenceUnit || "").toLowerCase();
+
+  if (!unit) return "—";
+  if (interval > 1) {
+    return `Every ${interval} ${unit}`;
+  }
+
+  return unit.charAt(0).toUpperCase() + unit.slice(1);
+}
+
+function getContributionAmountSummary(plan) {
+  if (!plan) return "—";
+
+  const interval = Number(plan.cadenceInterval || 1);
+  const unit = String(plan.cadenceUnit || "").toLowerCase();
+  const cadenceSuffix = unit ? (interval > 1 ? `${interval} ${unit}` : unit) : "period";
+
+  return `${formatInvestmentCurrency(plan.amount)} / ${cadenceSuffix}`;
+}
+
+function isContributionLike(eventType) {
+  return [
+    INVESTMENT_EVENT_TYPES.CONTRIBUTION,
+    INVESTMENT_EVENT_TYPES.OPENING_BALANCE,
+    INVESTMENT_EVENT_TYPES.OPENING_INCOME_CREDIT,
+  ].includes(eventType);
+}
+
+function isWithdrawalLike(eventType) {
+  return eventType === INVESTMENT_EVENT_TYPES.WITHDRAWAL_PRINCIPAL;
+}
+
+function getStatusChipColor(statusLabel) {
+  const normalized = String(statusLabel || "").toLowerCase();
+
+  if (["confirmed", "active"].includes(normalized)) return "success";
+  if (["pending", "expected"].includes(normalized)) return "warning";
+  if (["failed", "cancelled", "skipped", "closed"].includes(normalized)) {
+    return "default";
+  }
+
+  return "default";
+}
+
+function getFreshnessMeta(latestSnapshot, lastValuationAt) {
+  const dateValue = latestSnapshot?.snapshotDate || lastValuationAt || null;
+  if (!dateValue) {
+    return { label: "No valuation recorded", stale: true };
+  }
+
+  const valuationDate = dayjs(dateValue);
+  const stale = dayjs().diff(valuationDate, "day") > VALUATION_STALE_DAYS;
+
+  return {
+    label: `Valued ${valuationDate.format("DD MMM YYYY")}`,
+    stale,
+  };
+}
+
+function getPeriodStartDate(period, points) {
+  if (period === "ALL" || points.length === 0) return null;
+
+  const latestPoint = dayjs(points[points.length - 1]?.date);
+  if (!latestPoint.isValid()) return null;
+
+  if (period === "3M") return latestPoint.subtract(3, "month");
+  if (period === "6M") return latestPoint.subtract(6, "month");
+  if (period === "1Y") return latestPoint.subtract(1, "year");
+  return null;
+}
+
+function SectionBlock({ title, helperText, action, children, grow = false }) {
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        minHeight: grow ? 0 : "auto",
+        flex: grow ? 1 : "initial",
+      }}
+    >
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 2,
+          mb: 1.5,
+        }}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, letterSpacing: 0.1 }}>
+            {title}
+          </Typography>
+          {helperText ? (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+              {helperText}
+            </Typography>
+          ) : null}
+        </Box>
+        {action ? <Box sx={{ flexShrink: 0 }}>{action}</Box> : null}
+      </Box>
+      {children}
+    </Box>
+  );
+}
+
+function MetricStat({ label, value, subtext, valueColor = "text.primary", subtle = false }) {
+  return (
+    <Box
+      sx={{
+        minWidth: 0,
+        px: 1.75,
+        py: 1.5,
+        borderRadius: 2,
+        bgcolor: subtle ? "rgba(248, 250, 252, 0.8)" : "rgba(255, 255, 255, 0.9)",
+        border: subtle
+          ? "1px solid rgba(226, 232, 240, 0.95)"
+          : "1px solid rgba(226, 232, 240, 0.72)",
+      }}
+    >
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontWeight: 600, mb: 0.5 }}>
+        {label}
+      </Typography>
+      <Typography variant="h6" sx={{ fontWeight: 700, color: valueColor, lineHeight: 1.2 }}>
+        {value}
+      </Typography>
+      {subtext ? (
+        <Typography
+          variant="caption"
+          color={subtle ? "warning.main" : "text.secondary"}
+          sx={{ display: "block", mt: 0.75 }}
+        >
+          {subtext}
+        </Typography>
+      ) : null}
+    </Box>
+  );
+}
+
+function MetadataGrid({
+  items,
+  columns = {
+    xs: "1fr",
+    sm: "repeat(2, minmax(0, 1fr))",
+    lg: "repeat(3, minmax(0, 1fr))",
+  },
+}) {
+  return (
+    <Box
+      component="dl"
+      sx={{
+        m: 0,
+        display: "grid",
+        gridTemplateColumns: columns,
+        columnGap: 1.5,
+        rowGap: 0.65,
+      }}
+    >
+      {items.map((item) => (
+        <Typography
+          key={item.label}
+          component="div"
+          variant="body2"
+          sx={{
+            minWidth: 0,
+            lineHeight: 1.45,
+          }}
+        >
+          <Typography component="span" variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+            {item.label}:
+          </Typography>{" "}
+          <Typography component="span" variant="body2" sx={{ fontWeight: 600, color: "text.primary", wordBreak: "break-word" }}>
+            {item.value}
+          </Typography>
+        </Typography>
+      ))}
+    </Box>
+  );
+}
+
+function CompactKeyValue({ label, value, emphasize = false, valueColor = "text.primary" }) {
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontWeight: 600, mb: 0.35 }}>
+        {label}
+      </Typography>
+      <Typography variant="body2" sx={{ fontWeight: emphasize ? 700 : 600, color: valueColor }}>
+        {value}
+      </Typography>
+    </Box>
+  );
+}
+
+function InvestmentPerformanceChart({ points, formatValue }) {
   const [hoveredIndex, setHoveredIndex] = React.useState(null);
 
-  const performanceData = React.useMemo(() => {
-    return (Array.isArray(investment?.performanceHistory)
-      ? investment.performanceHistory
-      : []
-    ).map((point) => ({
-      ...point,
-      label: dayjs(point.date).format("MMM YY"),
-    }));
-  }, [investment?.performanceHistory]);
-
-  if (performanceData.length === 0) {
+  if (points.length === 0) {
     return (
       <Typography color="text.secondary" sx={{ textAlign: "center", py: 3 }}>
         No historical performance data available yet
@@ -60,39 +317,33 @@ function InvestmentPerformanceChart({ investment, formatValue }) {
     );
   }
 
+  const chartData = points.map((point) => ({
+    ...point,
+    label: dayjs(point.date).format("MMM YY"),
+  }));
   const maxValue = Math.max(
-    ...performanceData.map((d) => Math.max(d.currentValue, d.investedValue)),
+    ...chartData.map((item) => Math.max(item.currentValue, item.investedValue)),
   );
   const minValue = Math.min(
-    ...performanceData.map((d) => Math.min(d.currentValue, d.investedValue)),
+    ...chartData.map((item) => Math.min(item.currentValue, item.investedValue)),
     0,
   );
   const range = maxValue - minValue;
-
-  const padding = { top: 24, right: 24, bottom: 50, left: 70 };
-
-  // Highly responsive width: scale for ANY dataset size
-  // Base calculation: more points = wider chart
+  const padding = { top: 18, right: 24, bottom: 34, left: 70 };
   const dataPointWidth = (() => {
-    if (performanceData.length > 200) return 8; // Very dense: 8px per point
-    if (performanceData.length > 120) return 10; // Dense: 10px per point
-    if (performanceData.length > 60) return 12; // Medium: 12px per point
-    if (performanceData.length > 24) return 15; // Sparse: 15px per point
-    return 20; // Very sparse: 20px per point
+    if (chartData.length > 200) return 8;
+    if (chartData.length > 120) return 10;
+    if (chartData.length > 60) return 12;
+    if (chartData.length > 24) return 15;
+    return 22;
   })();
-
-  const baseChartWidth = 600;
-  const calculatedWidth = performanceData.length * dataPointWidth;
-  const chartWidth = Math.max(baseChartWidth, calculatedWidth);
-
-  const chartHeight = 300;
+  const chartWidth = Math.max(620, chartData.length * dataPointWidth);
+  const chartHeight = 236;
   const plotWidth = chartWidth - padding.left - padding.right;
   const plotHeight = chartHeight - padding.top - padding.bottom;
 
-  const points = performanceData.map((item, idx) => {
-    const x =
-      padding.left +
-      (idx / Math.max(performanceData.length - 1, 1)) * plotWidth;
+  const plottedPoints = chartData.map((item, idx) => {
+    const x = padding.left + (idx / Math.max(chartData.length - 1, 1)) * plotWidth;
     const yInvestedValue =
       padding.top +
       plotHeight -
@@ -104,309 +355,103 @@ function InvestmentPerformanceChart({ investment, formatValue }) {
     return { x, yInvestedValue, yCurrentValue, ...item };
   });
 
-  // Smart dot frequency based on total data points
-  // Aim for roughly 20-30 visible dots maximum regardless of data size
-  const dotFrequency = (() => {
-    const targetDots = 25;
-    return Math.max(1, Math.ceil(performanceData.length / targetDots));
-  })();
-  const showDots = points.map(
-    (p, idx) => idx % dotFrequency === 0 || idx === points.length - 1,
+  const dotFrequency = Math.max(1, Math.ceil(chartData.length / 25));
+  const showDots = plottedPoints.map(
+    (_, idx) => idx % dotFrequency === 0 || idx === plottedPoints.length - 1,
   );
-
-  const linePathInvestedValue = points
-    .map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x} ${p.yInvestedValue}`)
+  const currentLine = plottedPoints
+    .map((point, idx) => `${idx === 0 ? "M" : "L"} ${point.x} ${point.yCurrentValue}`)
     .join(" ");
-  const linePathCurrentValue = points
-    .map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x} ${p.yCurrentValue}`)
+  const investedLine = plottedPoints
+    .map((point, idx) => `${idx === 0 ? "M" : "L"} ${point.x} ${point.yInvestedValue}`)
     .join(" ");
-
-  // Y-axis gridlines and labels
-  const gridLines = [];
-  const yAxisLabels = [];
-  for (let i = 0; i <= 4; i++) {
-    const ratio = i / 4;
-    const y = padding.top + plotHeight - ratio * plotHeight;
-    const value = minValue + ratio * range;
-    gridLines.push(
-      <line
-        key={`grid-${i}`}
-        x1={padding.left}
-        y1={y}
-        x2={chartWidth - padding.right}
-        y2={y}
-        stroke="#e5e7eb"
-        strokeWidth="1"
-        strokeDasharray="2,2"
-      />,
-    );
-    yAxisLabels.push(
-      <text
-        key={`label-${i}`}
-        x={padding.left - 8}
-        y={y}
-        textAnchor="end"
-        dominantBaseline="middle"
-        style={{ fontSize: 13, fill: "#6b7280" }}
-      >
-        {formatValue(value)}
-      </text>,
-    );
-  }
 
   return (
-    <Box
-      sx={{
-        overflowX: "auto",
-        p: 2,
-        bgcolor: "background.paper",
-        borderRadius: 1,
-        border: "1px solid",
-        borderColor: "divider",
-      }}
-    >
-      <svg width={chartWidth} height={chartHeight} style={{ display: "block" }}>
-        {/* Y-axis */}
-        <line
-          x1={padding.left}
-          y1={padding.top}
-          x2={padding.left}
-          y2={chartHeight - padding.bottom}
-          stroke="#d1d5db"
-          strokeWidth="1"
-        />
+    <Box sx={{ width: "100%", overflow: "hidden", px: 0, py: 0.5, borderRadius: 2, bgcolor: "rgba(248, 250, 252, 0.72)" }}>
+      <svg
+        width="100%"
+        height={chartHeight}
+        viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+        preserveAspectRatio="none"
+        style={{ display: "block" }}
+      >
+        <line x1={padding.left} y1={padding.top} x2={padding.left} y2={chartHeight - padding.bottom} stroke="#d1d5db" strokeWidth="1" />
+        <line x1={padding.left} y1={chartHeight - padding.bottom} x2={chartWidth - padding.right} y2={chartHeight - padding.bottom} stroke="#d1d5db" strokeWidth="1" />
 
-        {/* X-axis */}
-        <line
-          x1={padding.left}
-          y1={chartHeight - padding.bottom}
-          x2={chartWidth - padding.right}
-          y2={chartHeight - padding.bottom}
-          stroke="#d1d5db"
-          strokeWidth="1"
-        />
-
-        {/* Gridlines and labels */}
-        {gridLines}
-        {yAxisLabels}
-
-        {/* X-axis labels - smart adaptive spacing for any dataset size */}
-        {points.map((p, idx) => {
-          // Dynamically determine label frequency to avoid overcrowding
-          // Show approximately 8-12 labels regardless of data size
-          const targetLabels = 10;
-          const labelFrequency = Math.max(
-            1,
-            Math.ceil(performanceData.length / targetLabels),
+        {Array.from({ length: 5 }).map((_, idx) => {
+          const ratio = idx / 4;
+          const y = padding.top + plotHeight - ratio * plotHeight;
+          const value = minValue + ratio * range;
+          return (
+            <g key={`grid-${idx}`}>
+              <line x1={padding.left} y1={y} x2={chartWidth - padding.right} y2={y} stroke="#e5e7eb" strokeWidth="1" strokeDasharray="2,2" />
+              <text x={padding.left - 8} y={y} textAnchor="end" dominantBaseline="middle" style={{ fontSize: 12, fill: "#6b7280" }}>
+                {formatValue(value)}
+              </text>
+            </g>
           );
+        })}
 
-          if (idx % labelFrequency !== 0 && idx !== points.length - 1)
+        {plottedPoints.map((point, idx) => {
+          const labelFrequency = Math.max(1, Math.ceil(chartData.length / 10));
+          if (idx % labelFrequency !== 0 && idx !== plottedPoints.length - 1) {
             return null;
+          }
 
           return (
-            <text
-              key={`x-label-${idx}`}
-              x={p.x}
-              y={chartHeight - padding.bottom + 20}
-              textAnchor="middle"
-              style={{
-                fontSize: performanceData.length > 100 ? 9 : 10,
-                fill: "#6b7280",
-              }}
-            >
-              {p.label}
+            <text key={`label-${idx}`} x={point.x} y={chartHeight - padding.bottom + 15} textAnchor="middle" style={{ fontSize: chartData.length > 100 ? 9 : 10, fill: "#6b7280" }}>
+              {point.label}
             </text>
           );
         })}
 
-        {/* Lines */}
-        <path
-          d={linePathInvestedValue}
-          fill="none"
-          stroke="#f59e0b"
-          strokeWidth="2"
-        />
-        <path
-          d={linePathCurrentValue}
-          fill="none"
-          stroke="#3b82f6"
-          strokeWidth="2.5"
-        />
+        <path d={investedLine} fill="none" stroke="#f59e0b" strokeWidth="2" />
+        <path d={currentLine} fill="none" stroke="#2563eb" strokeWidth="2.5" />
 
-        {points.map((p, pointIdx) => {
+        {plottedPoints.map((point, pointIdx) => {
           const tooltipWidth = 200;
           const tooltipHeight = 96;
-          let tooltipX = p.x - tooltipWidth / 2;
-          let tooltipY = p.yCurrentValue - tooltipHeight - 10;
+          let tooltipX = point.x - tooltipWidth / 2;
+          let tooltipY = point.yCurrentValue - tooltipHeight - 10;
 
           if (tooltipX < padding.left) tooltipX = padding.left + 5;
-          if (tooltipX + tooltipWidth > chartWidth - padding.right)
+          if (tooltipX + tooltipWidth > chartWidth - padding.right) {
             tooltipX = chartWidth - padding.right - tooltipWidth - 5;
-
-          if (tooltipY < padding.top) tooltipY = p.yCurrentValue + 10;
-
-          const shouldShowDot = showDots[pointIdx];
+          }
+          if (tooltipY < padding.top) tooltipY = point.yCurrentValue + 10;
 
           return (
             <g key={`point-${pointIdx}`}>
-              {shouldShowDot && (
+              {showDots[pointIdx] ? (
                 <>
-                  <circle
-                    cx={p.x}
-                    cy={p.yCurrentValue}
-                    r={hoveredIndex === pointIdx ? 5 : 3}
-                    fill="#3b82f6"
-                    opacity={hoveredIndex === pointIdx ? 1 : 0.7}
-                    style={{ cursor: "pointer", transition: "all 0.15s" }}
-                    onMouseEnter={() => setHoveredIndex(pointIdx)}
-                    onMouseLeave={() => setHoveredIndex(null)}
-                  />
-
-                  <circle
-                    cx={p.x}
-                    cy={p.yInvestedValue}
-                    r={hoveredIndex === pointIdx ? 4.5 : 2.5}
-                    fill="#f59e0b"
-                    opacity={hoveredIndex === pointIdx ? 1 : 0.6}
-                    style={{ cursor: "pointer", transition: "all 0.15s" }}
-                    onMouseEnter={() => setHoveredIndex(pointIdx)}
-                    onMouseLeave={() => setHoveredIndex(null)}
-                  />
+                  <circle cx={point.x} cy={point.yCurrentValue} r={hoveredIndex === pointIdx ? 5 : 3} fill="#2563eb" opacity={hoveredIndex === pointIdx ? 1 : 0.7} style={{ cursor: "pointer", transition: "all 0.15s" }} onMouseEnter={() => setHoveredIndex(pointIdx)} onMouseLeave={() => setHoveredIndex(null)} />
+                  <circle cx={point.x} cy={point.yInvestedValue} r={hoveredIndex === pointIdx ? 4.5 : 2.5} fill="#f59e0b" opacity={hoveredIndex === pointIdx ? 1 : 0.6} style={{ cursor: "pointer", transition: "all 0.15s" }} onMouseEnter={() => setHoveredIndex(pointIdx)} onMouseLeave={() => setHoveredIndex(null)} />
                 </>
-              )}
+              ) : null}
 
-              {hoveredIndex === pointIdx && (
+              {hoveredIndex === pointIdx ? (
                 <g>
-                  <rect
-                    x={tooltipX}
-                    y={tooltipY}
-                    width={tooltipWidth}
-                    height={tooltipHeight}
-                    rx="4"
-                    fill="#1f2937"
-                    opacity="0.95"
-                  />
-                  <text
-                    x={tooltipX + tooltipWidth / 2}
-                    y={tooltipY + 14}
-                    textAnchor="middle"
-                    style={{ fontSize: 14, fontWeight: 700, fill: "#fff" }}
-                  >
-                    {dayjs(p.date).format("MM-DD-YYYY")}
+                  <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} rx="6" fill="#1f2937" opacity="0.96" />
+                  <text x={tooltipX + tooltipWidth / 2} y={tooltipY + 15} textAnchor="middle" style={{ fontSize: 13, fontWeight: 700, fill: "#fff" }}>
+                    {dayjs(point.date).format("DD MMM YYYY")}
                   </text>
-                  <text
-                    x={tooltipX + 8}
-                    y={tooltipY + 42}
-                    style={{ fontSize: 11, fill: "#e5e7eb" }}
-                  >
-                    <tspan fontWeight="600">Current Value:</tspan>
-                  </text>
-                  <text
-                    x={tooltipX + tooltipWidth - 8}
-                    y={tooltipY + 42}
-                    textAnchor="end"
-                    style={{ fontSize: 11, fill: "#3b82f6", fontWeight: 700 }}
-                  >
-                    {formatValue(p.currentValue)}
-                  </text>
-                  <text
-                    x={tooltipX + 8}
-                    y={tooltipY + 56}
-                    style={{ fontSize: 11, fill: "#e5e7eb" }}
-                  >
-                    <tspan fontWeight="600">Invested:</tspan>
-                  </text>
-                  <text
-                    x={tooltipX + tooltipWidth - 8}
-                    y={tooltipY + 56}
-                    textAnchor="end"
-                    style={{ fontSize: 11, fill: "#f59e0b", fontWeight: 700 }}
-                  >
-                    {formatValue(p.investedValue)}
-                  </text>
-                  <text
-                    x={tooltipX + 8}
-                    y={tooltipY + 70}
-                    style={{ fontSize: 11, fill: "#e5e7eb" }}
-                  >
-                    <tspan fontWeight="600">Gain / Loss:</tspan>
-                  </text>
-                  <text
-                    x={tooltipX + tooltipWidth - 8}
-                    y={tooltipY + 70}
-                    textAnchor="end"
-                    style={{
-                      fontSize: 11,
-                      fill: p.gainLossValue >= 0 ? "#10b981" : "#ef4444",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {p.gainLossValue >= 0 ? "+" : ""}
-                    {formatValue(p.gainLossValue)}
-                  </text>
-                  <text
-                    x={tooltipX + 8}
-                    y={tooltipY + 84}
-                    style={{
-                      fontSize: 10,
-                      fill: p.gainLossValue >= 0 ? "#10b981" : "#ef4444",
-                    }}
-                  >
-                    {p.gainLossPercentage >= 0 ? "+" : ""}
-                    {p.gainLossPercentage.toFixed(2)}%
+                  <text x={tooltipX + 10} y={tooltipY + 42} style={{ fontSize: 11, fill: "#e5e7eb" }}>Current Value</text>
+                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 42} textAnchor="end" style={{ fontSize: 11, fill: "#60a5fa", fontWeight: 700 }}>{formatValue(point.currentValue)}</text>
+                  <text x={tooltipX + 10} y={tooltipY + 58} style={{ fontSize: 11, fill: "#e5e7eb" }}>Total Invested</text>
+                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 58} textAnchor="end" style={{ fontSize: 11, fill: "#fcd34d", fontWeight: 700 }}>{formatValue(point.investedValue)}</text>
+                  <text x={tooltipX + 10} y={tooltipY + 74} style={{ fontSize: 11, fill: "#e5e7eb" }}>Return</text>
+                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 74} textAnchor="end" style={{ fontSize: 11, fill: point.gainLossValue >= 0 ? "#34d399" : "#f87171", fontWeight: 700 }}>
+                    {point.gainLossValue >= 0 ? "+" : ""}
+                    {formatValue(point.gainLossValue)} ({point.gainLossPercentage >= 0 ? "+" : ""}
+                    {point.gainLossPercentage.toFixed(2)}%)
                   </text>
                 </g>
-              )}
+              ) : null}
             </g>
           );
         })}
       </svg>
 
-      {/* Legend */}
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "center",
-          gap: 3,
-          mt: 2,
-          flexWrap: "wrap",
-        }}
-      >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Box sx={{ width: 20, height: 2, backgroundColor: "#3b82f6" }} />
-          <Typography variant="caption" sx={{ fontWeight: 600 }}>
-            Current Value
-          </Typography>
-        </Box>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Box
-            sx={{
-              width: 20,
-              height: 2,
-              backgroundColor: "#f59e0b",
-            }}
-          />
-          <Typography variant="caption" sx={{ fontWeight: 600 }}>
-            Invested Amount
-          </Typography>
-        </Box>
-      </Box>
-
-      {/* Info note for large datasets */}
-      {performanceData.length > 12 && (
-        <Box sx={{ mt: 2, p: 1.5, bgcolor: "#f3f4f6", borderRadius: 1 }}>
-          <Typography
-            variant="caption"
-            sx={{ display: "block", color: "text.secondary" }}
-          >
-            <strong>{performanceData.length}</strong> data points •
-            {performanceData.length > 100
-              ? " Horizontal scroll enabled for large dataset • "
-              : " "}
-            Dots shown at key intervals for clarity
-          </Typography>
-        </Box>
-      )}
     </Box>
   );
 }
@@ -429,28 +474,34 @@ export function InvestmentViewDrawer({
   taxonomyNodes = [],
   onEdit,
 }) {
+  const [activeTab, setActiveTab] = React.useState("overview");
+  const [contributionFilter, setContributionFilter] = React.useState("all");
+  const [contributionStatusFilter, setContributionStatusFilter] = React.useState("all");
+  const [contributionSourceFilter, setContributionSourceFilter] = React.useState("all");
+  const [valuationPeriod, setValuationPeriod] = React.useState("ALL");
   const [recordValuationOpen, setRecordValuationOpen] = React.useState(false);
   const [selectedSnapshot, setSelectedSnapshot] = React.useState(null);
   const [deleteSnapshotTarget, setDeleteSnapshotTarget] = React.useState(null);
   const [snapshotActionLoading, setSnapshotActionLoading] = React.useState(false);
   const [planActionLoading, setPlanActionLoading] = React.useState(false);
   const [planActionError, setPlanActionError] = React.useState("");
-  const [planEndDateDraft, setPlanEndDateDraft] = React.useState("");
-  const pushNotification = useNotificationStore(
-    (state) => state.pushNotification,
-  );
+  const pushNotification = useNotificationStore((state) => state.pushNotification);
   const updateContributionPlanMutation = useUpdateInvestmentContributionPlan();
   const deleteSnapshotMutation = useDeleteInvestmentSnapshot();
 
   React.useEffect(() => {
     if (!open) return;
     setPlanActionError("");
-    setPlanEndDateDraft(
-      investment?.activeContributionPlan?.endDate
-        ? dayjs(investment.activeContributionPlan.endDate).format("YYYY-MM-DD")
-        : "",
-    );
-  }, [open, investment?.activeContributionPlan?.endDate]);
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setActiveTab("overview");
+    setContributionFilter("all");
+    setContributionStatusFilter("all");
+    setContributionSourceFilter("all");
+    setValuationPeriod("ALL");
+  }, [open, investment?.id]);
 
   const handleOpenCreateSnapshot = () => {
     setSelectedSnapshot(null);
@@ -473,11 +524,7 @@ export function InvestmentViewDrawer({
         Close
       </AppButton>
       {investment ? (
-        <AppButton
-          variant="contained"
-          onClick={() => onEdit?.(investment)}
-          sx={{ minWidth: 160 }}
-        >
+        <AppButton variant="contained" onClick={() => onEdit?.(investment)} sx={{ minWidth: 160 }}>
           Edit Investment
         </AppButton>
       ) : null}
@@ -485,77 +532,36 @@ export function InvestmentViewDrawer({
   );
 
   const handlePlanUpdate = async (payload, successMessage) => {
-    if (!investment?.activeContributionPlan?.id || !investment?.id) return;
+    const planId = investment?.activeContributionPlan?.id;
+    if (!investment?.id || !planId) return;
 
-    setPlanActionError("");
     setPlanActionLoading(true);
-
+    setPlanActionError("");
     try {
       await updateContributionPlanMutation.mutateAsync({
         investmentId: investment.id,
-        planId: investment.activeContributionPlan.id,
+        planId,
         payload,
       });
-      pushNotification({ type: "success", message: successMessage });
+      pushNotification({
+        type: "success",
+        message: successMessage,
+      });
     } catch (error) {
-      const fallbackMessage =
-        error?.response?.data?.message ||
-        error?.message ||
-        "Failed to update recurring plan";
-      setPlanActionError(fallbackMessage);
-      pushNotification({ type: "error", message: fallbackMessage });
+      const message = getRuntimeErrorMessage(error, "Failed to update recurring plan");
+      setPlanActionError(message);
+      pushNotification({
+        type: "error",
+        message,
+      });
     } finally {
       setPlanActionLoading(false);
     }
   };
 
-  const handlePausePlan = () =>
-    handlePlanUpdate({ status: "paused" }, "Recurring plan paused");
 
-  const handleResumePlan = () =>
-    handlePlanUpdate({ status: "active" }, "Recurring plan resumed");
-
-  const handleSavePlanEndDate = () =>
-    handlePlanUpdate(
-      {
-        endDate: planEndDateDraft || null,
-      },
-      "Recurring plan end date updated",
-    );
-
-  const hasValuationSnapshots =
-    Array.isArray(investment?.valuationSnapshots) &&
-    investment.valuationSnapshots.length > 0;
-  const performanceHistoryData = React.useMemo(
-    () =>
-      Array.isArray(investment?.performanceHistory)
-        ? investment.performanceHistory
-        : [],
-    [investment?.performanceHistory],
-  );
-  const hasPerformanceHistory = performanceHistoryData.length > 0;
-  const valuationSnapshots = React.useMemo(() => {
-    if (!Array.isArray(investment?.valuationSnapshots)) {
-      return [];
-    }
-
-    return [...investment.valuationSnapshots].sort(
-      (left, right) =>
-        new Date(right.snapshotDate).getTime() -
-        new Date(left.snapshotDate).getTime(),
-    );
-  }, [investment?.valuationSnapshots]);
-  const latestSnapshot = valuationSnapshots[0] ?? null;
-  const effectiveCurrentValue = Number(
-    investment?.currentValue ?? investment?.totalInvested ?? 0,
-  );
-  const effectiveTotalInvested = Number(investment?.totalInvested ?? 0);
-  const totalReturnValue = effectiveCurrentValue - effectiveTotalInvested;
-  const totalReturnPercentage =
-    effectiveTotalInvested > 0
-      ? (totalReturnValue / effectiveTotalInvested) * 100
-      : 0;
-  const totalReturnColor = totalReturnValue >= 0 ? "#10b981" : "#ef4444";
+  const handlePausePlan = () => handlePlanUpdate({ status: "paused" }, "Recurring plan paused");
+  const handleResumePlan = () => handlePlanUpdate({ status: "active" }, "Recurring plan resumed");
 
   const handleDeleteSnapshot = async () => {
     if (!deleteSnapshotTarget?.id || !investment?.id) return;
@@ -568,833 +574,1025 @@ export function InvestmentViewDrawer({
       });
       pushNotification({
         type: "success",
-        message: `Deleted valuation snapshot for ${formatInvestmentDate(deleteSnapshotTarget.snapshotDate)}`,
+        message: `Deleted valuation for ${formatInvestmentDate(deleteSnapshotTarget.snapshotDate)}`,
       });
       setDeleteSnapshotTarget(null);
     } catch (error) {
       pushNotification({
         type: "error",
-        message: getRuntimeErrorMessage(
-          error,
-          "Failed to delete valuation snapshot",
-        ),
+        message: getRuntimeErrorMessage(error, "Failed to delete valuation"),
       });
     } finally {
       setSnapshotActionLoading(false);
     }
   };
 
+  const valuationSnapshots = React.useMemo(() => {
+    if (!Array.isArray(investment?.valuationSnapshots)) {
+      return [];
+    }
+
+    return [...investment.valuationSnapshots].sort(
+      (left, right) => new Date(right.snapshotDate).getTime() - new Date(left.snapshotDate).getTime(),
+    );
+  }, [investment?.valuationSnapshots]);
+
+  const activityEvents = React.useMemo(() => {
+    if (!Array.isArray(investment?.investmentEvents)) {
+      return [];
+    }
+
+    return [...investment.investmentEvents].sort((left, right) => {
+      const leftDate = new Date(left.eventDate || left.dueDate || 0).getTime();
+      const rightDate = new Date(right.eventDate || right.dueDate || 0).getTime();
+      return rightDate - leftDate;
+    });
+  }, [investment?.investmentEvents]);
+
+  const performanceHistoryData = React.useMemo(() => {
+    const base = Array.isArray(investment?.performanceHistory) ? investment.performanceHistory : [];
+    const sorted = [...base].sort((left, right) => new Date(left.date).getTime() - new Date(right.date).getTime());
+    const periodStart = getPeriodStartDate(valuationPeriod, sorted);
+
+    if (!periodStart) {
+      return sorted;
+    }
+
+    const filtered = sorted.filter(
+      (point) => dayjs(point.date).isAfter(periodStart) || dayjs(point.date).isSame(periodStart, "day"),
+    );
+    return filtered.length > 1 ? filtered : sorted;
+  }, [investment?.performanceHistory, valuationPeriod]);
+
+  const latestSnapshot = valuationSnapshots[0] ?? investment?.latestSnapshot ?? null;
+  const effectiveCurrentValue = Number(investment?.currentValue ?? investment?.totalInvested ?? 0);
+  const effectiveTotalInvested = Number(investment?.totalInvested ?? 0);
+  const totalReturnValue = effectiveCurrentValue - effectiveTotalInvested;
+  const totalReturnPercentage =
+    effectiveTotalInvested > 0 ? (totalReturnValue / effectiveTotalInvested) * 100 : 0;
+  const totalReturnColor = totalReturnValue >= 0 ? "success.main" : "error.main";
+  const freshnessMeta = getFreshnessMeta(latestSnapshot, investment?.lastValuationAt);
+  const recurringPlanStatus = String(investment?.activeContributionPlan?.status || "active").toLowerCase();
+  const categoryLabel = getInvestmentCategoryLabel(
+    investment?.category || investment?.assetCategory,
+    taxonomyNodes,
+  );
+  const institutionLabel = investment?.institution || investment?.institutionName || "—";
+  const holdingMode = investment?.contributionMode ? formatCodeLabel(investment.contributionMode) : "—";
+  const sourceLabel = investment?.currentValueSource ? formatCodeLabel(investment.currentValueSource) : "—";
+  const statusOptions = React.useMemo(() => {
+    const uniqueStatuses = Array.from(
+      new Set(
+        activityEvents
+          .map((event) => String(event.status || "recorded").toLowerCase())
+          .filter(Boolean),
+      ),
+    );
+    return ["all", ...uniqueStatuses];
+  }, [activityEvents]);
+
+  const sourceOptions = React.useMemo(() => {
+    const sources = Array.from(new Set(activityEvents.map((e) => getContributionSourceLabel(e))));
+    return ["all", ...sources];
+  }, [activityEvents]);
+
+  const contributionFilterCounts = React.useMemo(() => ({
+    all: activityEvents.length,
+    contributions: activityEvents.filter((e) => isContributionLike(e.eventType)).length,
+    withdrawals: activityEvents.filter((e) => isWithdrawalLike(e.eventType)).length,
+    other: activityEvents.filter((e) => !isContributionLike(e.eventType) && !isWithdrawalLike(e.eventType)).length,
+  }), [activityEvents]);
+
+  const filteredContributionEvents = React.useMemo(() => {
+    return activityEvents.filter((event) => {
+      const eventStatus = String(event.status || "recorded").toLowerCase();
+      const eventSource = getContributionSourceLabel(event);
+
+      if (contributionFilter === "contributions" && !isContributionLike(event.eventType)) return false;
+      if (contributionFilter === "withdrawals" && !isWithdrawalLike(event.eventType)) return false;
+      if (contributionFilter === "other" && (isContributionLike(event.eventType) || isWithdrawalLike(event.eventType))) return false;
+      if (contributionStatusFilter !== "all" && eventStatus !== contributionStatusFilter) return false;
+      if (contributionSourceFilter !== "all" && eventSource !== contributionSourceFilter) return false;
+
+      return true;
+    });
+  }, [activityEvents, contributionFilter, contributionStatusFilter, contributionSourceFilter]);
+
+  const contributionRows = filteredContributionEvents.map((event) => {
+    const signedAmount = getContributionAmount(event);
+    const status = String(event.status || "recorded").toLowerCase();
+    return {
+      id: event.id,
+      date: event.eventDate || event.dueDate,
+      activity: getContributionEventLabel(event.eventType),
+      amount: signedAmount,
+      status,
+      source: getContributionSourceLabel(event),
+      notes: event.notes || "—",
+      linkedTransactionId: event.linkedTransactionId,
+      dueDate: event.dueDate,
+    };
+  });
+
+  const contributionColumns = [
+    {
+      field: "date",
+      headerName: "Date",
+      flex: 1.05,
+      minWidth: 132,
+      renderCell: ({ row }) => (
+        <Box sx={{ py: 0.75 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            {formatDateOrDash(row.date)}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {row.date ? dayjs(row.date).format("ddd") : "—"}
+          </Typography>
+        </Box>
+      ),
+    },
+    { field: "activity", headerName: "Contribution", flex: 1.2, minWidth: 160 },
+    {
+      field: "amount",
+      headerName: "Amount",
+      flex: 0.9,
+      minWidth: 130,
+      renderCell: ({ value }) => (
+        <Typography variant="body2" sx={{ fontWeight: 700, color: value >= 0 ? "success.main" : "error.main" }}>
+          {value >= 0 ? "+" : ""}
+          {formatInvestmentCurrency(value)}
+        </Typography>
+      ),
+    },
+    {
+      field: "status",
+      headerName: "Status",
+      flex: 0.9,
+      minWidth: 120,
+      renderCell: ({ value }) => (
+        <Chip size="small" label={formatCodeLabel(value)} color={getStatusChipColor(value)} sx={{ fontWeight: 600 }} />
+      ),
+    },
+    { field: "source", headerName: "Source", flex: 1, minWidth: 140 },
+    {
+      field: "linkedTransactionId",
+      headerName: "Linked Transaction",
+      flex: 1,
+      minWidth: 160,
+      renderCell: ({ value }) =>
+        value ? (
+          <Typography variant="body2" sx={{ fontWeight: 600, color: "primary.main" }}>
+            TXN-{value}
+          </Typography>
+        ) : (
+          <Typography variant="body2" color="text.secondary">—</Typography>
+        ),
+    },
+    {
+      field: "dueDate",
+      headerName: "Due Date",
+      flex: 1,
+      minWidth: 130,
+      renderCell: ({ value }) => (
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          {formatDateOrDash(value)}
+        </Typography>
+      ),
+    },
+    { field: "notes", headerName: "Notes", flex: 1.4, minWidth: 190 },
+  ];
+
+  const valuationRows = valuationSnapshots.map((snapshot) => ({
+    id: snapshot.id,
+    snapshotDate: snapshot.snapshotDate,
+    marketValue: snapshot.marketValue,
+    units: snapshot.units,
+    price: snapshot.price,
+    source: snapshot.source,
+    snapshot,
+  }));
+
+  const valuationColumns = [
+    {
+      field: "snapshotDate",
+      headerName: "Valuation Date",
+      flex: 1.05,
+      minWidth: 150,
+      renderCell: ({ row }) => (
+        <Box sx={{ py: 0.75 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            {formatDateOrDash(row.snapshotDate)}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {row.snapshotDate ? dayjs(row.snapshotDate).format("ddd") : "—"}
+          </Typography>
+        </Box>
+      ),
+    },
+    {
+      field: "marketValue",
+      headerName: "Market Value",
+      flex: 1,
+      minWidth: 150,
+      renderCell: ({ value }) => (
+        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+          {formatInvestmentCurrency(value)}
+        </Typography>
+      ),
+    },
+    {
+      field: "units",
+      headerName: "Units",
+      flex: 0.8,
+      minWidth: 110,
+      renderCell: ({ value }) => <Typography variant="body2">{value ?? "—"}</Typography>,
+    },
+    {
+      field: "price",
+      headerName: "Price",
+      flex: 0.9,
+      minWidth: 130,
+      renderCell: ({ value }) => <Typography variant="body2">{value != null ? formatInvestmentCurrency(value) : "—"}</Typography>,
+    },
+    {
+      field: "source",
+      headerName: "Source",
+      flex: 0.9,
+      minWidth: 130,
+      renderCell: ({ value }) => <Chip size="small" variant="outlined" label={value ? formatCodeLabel(value) : "Manual"} />,
+    },
+    {
+      field: "actions",
+      headerName: "Actions",
+      sortable: false,
+      filterable: false,
+      align: "right",
+      headerAlign: "right",
+      minWidth: 116,
+      renderCell: ({ row }) => (
+        <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+          <IconButton size="small" onClick={() => handleOpenEditSnapshot(row.snapshot)} aria-label={`Edit valuation on ${formatInvestmentDate(row.snapshotDate)}`}>
+            <Icon path={mdiPencilOutline} size={0.8} />
+          </IconButton>
+          <IconButton size="small" color="error" onClick={() => setDeleteSnapshotTarget(row.snapshot)} aria-label={`Delete valuation on ${formatInvestmentDate(row.snapshotDate)}`}>
+            <Icon path={mdiDeleteOutline} size={0.8} />
+          </IconButton>
+        </Box>
+      ),
+    },
+  ];
+
+  const renderOverviewTab = () => {
+    const planStatus = formatCodeLabel(investment?.activeContributionPlan?.status || "active");
+    const planStatusNormalized = String(investment?.activeContributionPlan?.status || "active").toLowerCase();
+    const latestValuationAmount = latestSnapshot
+      ? formatInvestmentCurrency(latestSnapshot.marketValue ?? effectiveCurrentValue)
+      : "—";
+    const contributionHeadlineAmount = investment?.activeContributionPlan
+      ? formatInvestmentCurrency(investment.activeContributionPlan.amount)
+      : "—";
+    const contributionHeadlineCadence = investment?.activeContributionPlan
+      ? (() => {
+          const interval = Number(investment.activeContributionPlan.cadenceInterval || 1);
+          const unit = String(investment.activeContributionPlan.cadenceUnit || "").toLowerCase();
+          if (!unit) return "period";
+          return interval > 1 ? `${interval} ${unit}` : unit;
+        })()
+      : "period";
+
+    const atGlanceItems = [
+      { label: "Institution", value: institutionLabel },
+      { label: "Start Date", value: formatDateOrDash(investment?.startDate) },
+      { label: "Holding Mode", value: holdingMode },
+      { label: "Asset Category", value: categoryLabel || "—" },
+      { label: "Maturity Date", value: formatDateOrDash(investment?.maturityDate) },
+      { label: "Reference Number", value: formatValueOrDash(investment?.referenceNumber) },
+      { label: "Asset Type", value: investment?.type || investment?.assetType || "—" },
+      { label: "Insurance Cover", value: formatValueOrDash(investment?.insuranceCover, formatInvestmentCurrency) },
+      { label: "Status", value: formatCodeLabel(investment?.status || "—") },
+    ];
+    const atGlanceColumns = [
+      [atGlanceItems[0], atGlanceItems[3], atGlanceItems[6]],
+      [atGlanceItems[1], atGlanceItems[4], atGlanceItems[7]],
+      [atGlanceItems[2], atGlanceItems[5], atGlanceItems[8]],
+    ];
+
+    return (
+      <Stack spacing={2} sx={{ pb: 0.5 }}>
+        <SectionCard title="At a glance">
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: {
+                xs: "1fr",
+                md: "repeat(3, minmax(0, 1fr))",
+              },
+              columnGap: 0,
+            }}
+          >
+            {atGlanceColumns.map((columnItems, columnIndex) => (
+              <Box
+                key={`at-glance-column-${columnIndex}`}
+                sx={(theme) => ({
+                  minWidth: 0,
+                  px: { xs: 0, md: 1.75 },
+                  borderLeft:
+                    columnIndex > 0 ? `1px solid ${theme.palette.divider}` : "none",
+                  [theme.breakpoints.down("md")]: {
+                    borderLeft: "none",
+                  },
+                })}
+              >
+                <Stack spacing={1.2}>
+                  {columnItems.map((item) => (
+                    <Box
+                      key={item.label}
+                      sx={{
+                        minWidth: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 1.25,
+                      }}
+                    >
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{
+                          fontWeight: 500,
+                          lineHeight: 1.45,
+                          letterSpacing: 0.1,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {item.label}
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: 700,
+                          lineHeight: 1.45,
+                          color: "text.primary",
+                          textAlign: "right",
+                          minWidth: 0,
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {item.value}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              </Box>
+            ))}
+          </Box>
+        </SectionCard>
+
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+            gap: 2,
+          }}
+        >
+          <SectionCard
+            title={
+              <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.8 }}>
+                <Icon path={mdiCalendarBlankOutline} size={0.8} color="#d97706" />
+                <Typography component="span" variant="subtitle1" sx={{ fontWeight: 700 }}>
+                  Contribution Plan
+                </Typography>
+              </Box>
+            }
+            action={
+              investment?.activeContributionPlan ? (
+                <Chip
+                  size="small"
+                  label={planStatus}
+                  color={planStatusNormalized === "active" ? "success" : planStatusNormalized === "paused" ? "warning" : "default"}
+                  variant="outlined"
+                  sx={{ fontWeight: 700, height: 22 }}
+                />
+              ) : null
+            }
+          >
+            {investment?.activeContributionPlan ? (
+              <Stack spacing={1.2}>
+                <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1.2 }}>
+                  {contributionHeadlineAmount}
+                  <Typography
+                    component="span"
+                    sx={{
+                      ml: 0.4,
+                      fontWeight: 600,
+                      fontSize: "0.68em",
+                      color: "text.secondary",
+                    }}
+                  >
+                    / {contributionHeadlineCadence}
+                  </Typography>
+                </Typography>
+
+                <Box sx={{ display: "grid", rowGap: 0.8 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.25 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                      Next due
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
+                      {formatDateOrDash(investment.activeContributionPlan.nextDueDate)}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.25 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                      Start / Anchor date
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
+                      {formatDateOrDash(investment.activeContributionPlan.anchorDate)}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.25 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                      End date
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
+                      {formatDateOrDash(investment.activeContributionPlan.endDate)}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.25 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                      Reminder
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
+                      —
+                    </Typography>
+                  </Box>
+                </Box>
+              </Stack>
+            ) : (
+              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
+                Not configured
+              </Typography>
+            )}
+          </SectionCard>
+
+          <SectionCard
+            title={
+              <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.8 }}>
+                <Icon path={mdiTrendingUp} size={0.8} color="#2563eb" />
+                <Typography component="span" variant="subtitle1" sx={{ fontWeight: 700 }}>
+                  Latest Valuation
+                </Typography>
+              </Box>
+            }
+          >
+            {latestSnapshot ? (
+              <Stack spacing={1.2}>
+                <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1.2 }}>
+                  {latestValuationAmount}
+                </Typography>
+
+                <Box sx={{ display: "grid", rowGap: 0.8 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.25 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                      Valuation Date
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
+                      {formatDateOrDash(latestSnapshot.snapshotDate || investment?.lastValuationAt)}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.25 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                      Source
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
+                      {latestSnapshot.source ? formatCodeLabel(latestSnapshot.source) : sourceLabel}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.25 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                      Units
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
+                      {formatValueOrDash(latestSnapshot.units)}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.25 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                      Price
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
+                      {latestSnapshot.price != null ? formatInvestmentCurrency(latestSnapshot.price) : "—"}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Stack>
+            ) : (
+              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
+                No valuation history
+              </Typography>
+            )}
+          </SectionCard>
+        </Box>
+      </Stack>
+    );
+  };
+
+  const renderContributionTab = () => {
+    const planStatusNormalized = String(investment?.activeContributionPlan?.status || "active").toLowerCase();
+    const planStatusLabel = formatCodeLabel(investment?.activeContributionPlan?.status || "active");
+    const normalizedContributionMode = String(investment?.contributionMode || "").trim().toUpperCase();
+    const isRecurringContributionType =
+      normalizedContributionMode === "RECURRING" || Boolean(investment?.activeContributionPlan?.id);
+
+    const filterOptions = [
+      { key: "all", label: `All (${contributionFilterCounts.all})` },
+      { key: "contributions", label: `Contributions (${contributionFilterCounts.contributions})` },
+      { key: "withdrawals", label: `Withdrawals (${contributionFilterCounts.withdrawals})` },
+      { key: "other", label: `Other (${contributionFilterCounts.other})` },
+    ];
+
+    return (
+      <Stack spacing={0} sx={{ height: "100%", minHeight: 0 }}>
+        {investment?.activeContributionPlan ? (
+          <SectionCard
+            title={
+              <Box sx={{ display: "inline-flex", alignItems: "center", gap: 1 }}>
+                Contribution Plan
+                <Chip
+                  size="small"
+                  label={planStatusLabel}
+                  color={planStatusNormalized === "active" ? "success" : planStatusNormalized === "paused" ? "warning" : "default"}
+                  variant="outlined"
+                  sx={{ fontWeight: 700, height: 22 }}
+                />
+              </Box>
+            }
+            action={
+              isRecurringContributionType ? (
+                planStatusNormalized === "paused" ? (
+                  <AppButton
+                    size="small"
+                    variant="outlined"
+                    onClick={handleResumePlan}
+                    disabled={planActionLoading}
+                  >
+                    <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+                      <Icon path={mdiPlayCircleOutline} size={0.72} />
+                      Resume Plan
+                    </Box>
+                  </AppButton>
+                ) : (
+                  <AppButton
+                    size="small"
+                    variant="outlined"
+                    onClick={handlePausePlan}
+                    disabled={planActionLoading}
+                  >
+                    <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+                      <Icon path={mdiPauseCircleOutline} size={0.72} />
+                      Pause Plan
+                    </Box>
+                  </AppButton>
+                )
+              ) : null
+            }
+          >
+            <Stack spacing={1.5}>
+              <Box sx={{ display: "flex", overflowX: "auto" }}>
+              {[
+                {
+                  icon: mdiCash,
+                  label: "Contribution Amount",
+                  value: formatInvestmentCurrency(investment.activeContributionPlan.amount),
+                },
+                {
+                  icon: mdiRepeat,
+                  label: "Cadence",
+                  value: getContributionCadenceLabel(investment.activeContributionPlan),
+                },
+                {
+                  icon: mdiCalendarClock,
+                  label: "Next Due Date",
+                  value: formatDateOrDash(investment.activeContributionPlan.nextDueDate),
+                },
+                {
+                  icon: mdiCalendarStart,
+                  label: "Anchor / Start Date",
+                  value: formatDateOrDash(investment.activeContributionPlan.anchorDate),
+                },
+                {
+                  icon: mdiCalendarEnd,
+                  label: "End Date",
+                  value: formatDateOrDash(investment.activeContributionPlan.endDate),
+                },
+              ].map((field, idx) => (
+                <Box
+                  key={field.label}
+                  sx={(theme) => ({
+                    flex: 1,
+                    minWidth: 110,
+                    px: 1.75,
+                    borderLeft: idx > 0 ? `1px solid ${theme.palette.divider}` : "none",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  })}
+                >
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.5 }}>
+                    <Icon path={field.icon} size={0.72} color="#2563eb" />
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ fontWeight: 500, lineHeight: 1.45, letterSpacing: 0.1, whiteSpace: "nowrap" }}
+                    >
+                      {field.label}
+                    </Typography>
+                  </Box>
+                  {typeof field.value === "string" ? (
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: "text.primary", lineHeight: 1.45 }}>
+                      {field.value}
+                    </Typography>
+                  ) : (
+                    field.value
+                  )}
+                </Box>
+              ))}
+              </Box>
+
+              {planActionError ? <Alert severity="error">{planActionError}</Alert> : null}
+            </Stack>
+          </SectionCard>
+        ) : null}
+
+        <SectionBlock
+          grow
+        >
+          <Stack spacing={1.5} sx={{ flex: 1, minHeight: 0 }}>
+            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                {(CONTRIBUTION_FILTER_OPTIONS.map((key) => ({
+                  key,
+                  label: filterOptions.find((option) => option.key === key)?.label || key,
+                }))).map(({ key, label }) => (
+                  <Chip
+                    key={key}
+                    label={label}
+                    variant={contributionFilter === key ? "filled" : "outlined"}
+                    color={contributionFilter === key ? "primary" : "default"}
+                    onClick={() => setContributionFilter(key)}
+                  />
+                ))}
+              </Box>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                {statusOptions.length > 1 ? (
+                  <Select
+                    size="small"
+                    value={contributionStatusFilter}
+                    onChange={(e) => setContributionStatusFilter(e.target.value)}
+                    sx={{ minWidth: 130 }}
+                  >
+                    {statusOptions.map((s) => (
+                      <MenuItem key={s} value={s}>{s === "all" ? "All Status" : formatCodeLabel(s)}</MenuItem>
+                    ))}
+                  </Select>
+                ) : null}
+                {sourceOptions.length > 1 ? (
+                  <Select
+                    size="small"
+                    value={contributionSourceFilter}
+                    onChange={(e) => setContributionSourceFilter(e.target.value)}
+                    sx={{ minWidth: 130 }}
+                  >
+                    {sourceOptions.map((s) => (
+                      <MenuItem key={s} value={s}>{s === "all" ? "All Source" : s}</MenuItem>
+                    ))}
+                  </Select>
+                ) : null}
+              </Box>
+            </Box>
+
+            {contributionRows.length > 0 ? (
+              <DataTable
+                rows={contributionRows}
+                columns={contributionColumns}
+                disableColumnMenu
+                pageSizeOptions={[10, 25, 50]}
+                initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+                containerSx={{ height: "100%", minHeight: 320 }}
+                sx={{
+                  "& .MuiDataGrid-row": { minHeight: 58 },
+                  "& .MuiDataGrid-cell": { py: 0.5, alignItems: "center" },
+                }}
+              />
+            ) : (
+              <Alert severity="info">No contributions match the current filters.</Alert>
+            )}
+          </Stack>
+        </SectionBlock>
+      </Stack>
+    );
+  };
+
+  const renderValuationTab = () => {
+    const valuationSummaryCards = [
+      {
+        label: "Last Valuation Date",
+        value: formatDateOrDash(latestSnapshot?.snapshotDate || investment?.lastValuationAt),
+        icon: mdiCalendarBlankOutline,
+      },
+      {
+        label: "Market Value",
+        value: formatInvestmentCurrency(latestSnapshot?.marketValue ?? effectiveCurrentValue),
+        icon: mdiTrendingUp,
+      },
+      {
+        label: "Source",
+        value: latestSnapshot?.source ? formatCodeLabel(latestSnapshot.source) : sourceLabel,
+        icon: mdiPencilOutline,
+      },
+      {
+        label: "Units",
+        value: formatValueOrDash(latestSnapshot?.units),
+        icon: mdiRepeat,
+      },
+      {
+        label: "Price",
+        value: latestSnapshot?.price != null ? formatInvestmentCurrency(latestSnapshot.price) : "—",
+        icon: mdiCash,
+      },
+    ];
+
+    return (
+      <Stack spacing={1.5} sx={{ height: "100%", minHeight: 0, pb: 0.5 }}>
+        <SectionCard
+          title={
+            <Typography component="span" variant="subtitle1" sx={{ fontWeight: 700 }}>
+              Valuation Summary
+            </Typography>
+          }
+          action={
+            <AppButton size="small" variant="outlined" onClick={handleOpenCreateSnapshot} sx={{ minWidth: 138 }}>
+              <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+                <Icon path={mdiPlus} size={0.85} />
+                Record Valuation
+              </Box>
+            </AppButton>
+          }
+          contentSx={{ pt: 0 }}
+        >
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: {
+                xs: "repeat(2, minmax(0, 1fr))",
+                md: "repeat(5, minmax(0, 1fr))",
+              },
+            }}
+          >
+            {valuationSummaryCards.map((item, idx) => (
+              <Box
+                key={item.label}
+                sx={(theme) => ({
+                  flex: 1,
+                  minWidth: 110,
+                  px: 1.75,
+                  borderLeft: idx > 0 ? `1px solid ${theme.palette.divider}` : "none",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  [theme.breakpoints.down("md")]: {
+                    borderLeft: "none",
+                  },
+                })}
+              >
+                <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.55, mb: 0.25 }}>
+                  <Icon path={item.icon} size={0.68} color="#2563eb" />
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ fontWeight: 500, lineHeight: 1.45, letterSpacing: 0.1, whiteSpace: "nowrap" }}
+                  >
+                    {item.label}
+                  </Typography>
+                </Box>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 700,
+                    lineHeight: 1.25,
+                    color: "text.primary",
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {item.value}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </SectionCard>
+
+        <SectionCard
+          title={
+            <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.85, flexWrap: "wrap" }}>
+              <Typography component="span" variant="subtitle1" sx={{ fontWeight: 700 }}>
+                Performance Chart
+              </Typography>
+              <Typography component="span" variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                ({investment?.performanceHistorySource === "investment_event" ? "Investment Events" : "Valuation History"})
+              </Typography>
+            </Box>
+          }
+          action={
+            <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {PERIOD_OPTIONS.map((period) => (
+                <Chip
+                  key={period}
+                  size="small"
+                  label={period}
+                  variant={valuationPeriod === period ? "filled" : "outlined"}
+                  color={valuationPeriod === period ? "primary" : "default"}
+                  onClick={() => setValuationPeriod(period)}
+                />
+              ))}
+            </Box>
+          }
+          contentSx={{ pt: 0 }}
+        >
+          {performanceHistoryData.length > 0 ? (
+            <InvestmentPerformanceChart points={performanceHistoryData} formatValue={formatInvestmentCurrency} />
+          ) : valuationSnapshots.length > 0 ? (
+            <Alert severity="info">No chartable performance series is available yet for this period.</Alert>
+          ) : (
+            <EmptyState text="No valuation history yet" subText="Record the first valuation to start tracking value, profit, and growth over time." actionLabel="Record Valuation" onAction={handleOpenCreateSnapshot} />
+          )}
+        </SectionCard>
+
+        <SectionBlock grow>
+          {valuationRows.length > 0 ? (
+            <DataTable
+              rows={valuationRows}
+              columns={valuationColumns}
+              disableColumnMenu
+              pageSizeOptions={[10, 25, 50]}
+              initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+              containerSx={{ height: "100%", minHeight: 320 }}
+              sx={{
+                "& .MuiDataGrid-row": { minHeight: 58 },
+                "& .MuiDataGrid-cell": { py: 0.5, alignItems: "center" },
+              }}
+            />
+          ) : (
+            <EmptyState text="No valuation history yet" subText="Record the first valuation to track market value over time." actionLabel="Record Valuation" onAction={handleOpenCreateSnapshot} />
+          )}
+        </SectionBlock>
+      </Stack>
+    );
+  };
+
+  const renderDetailsTab = () => (
+    <Stack spacing={1.5} sx={{ pb: 0.5 }}>
+      <SectionCard
+        title={
+          <Typography component="span" variant="subtitle1" sx={{ fontWeight: 700 }}>
+            Additional Information
+          </Typography>
+        }
+        subTitle="Lower-frequency metadata and configuration."
+      >
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: {
+              xs: "1fr",
+              md: "repeat(3, minmax(0, 1fr))",
+            },
+            rowGap: 1,
+            columnGap: 2,
+          }}
+        >
+          {[
+            { label: "Holding Mode", value: holdingMode },
+            { label: "Reference Number", value: formatValueOrDash(investment?.referenceNumber) },
+            { label: "Insurance Cover", value: formatValueOrDash(investment?.insuranceCover, formatInvestmentCurrency) },
+            { label: "Currency", value: formatValueOrDash(investment?.currency) },
+            { label: "Contribution Mode", value: holdingMode },
+            { label: "External Reference", value: formatValueOrDash(investment?.externalReference) },
+          ].map((item) => (
+            <Box
+              key={item.label}
+              sx={{
+                minWidth: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 1.25,
+              }}
+            >
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                {item.label}
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right", color: "text.primary" }}>
+                {item.value}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      </SectionCard>
+
+      <SectionCard
+        title={
+          <Typography component="span" variant="subtitle1" sx={{ fontWeight: 700 }}>
+            Notes
+          </Typography>
+        }
+      >
+        <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.6, color: investment?.notes ? "text.primary" : "text.secondary" }}>
+          {investment?.notes || "No notes added."}
+        </Typography>
+      </SectionCard>
+    </Stack>
+  );
+
+  const renderActiveTab = () => {
+    if (!investment) return null;
+    if (activeTab === "overview") return renderOverviewTab();
+    if (activeTab === "contribution") return renderContributionTab();
+    if (activeTab === "valuation") return renderValuationTab();
+    return renderDetailsTab();
+  };
+
   return (
     <AppDrawer
       open={open}
       onClose={onClose}
-      title={investment?.name || "Investment Details"}
-      subtitle="Review current value, dates, and notes."
-      width={760}
+      title={investment ? `Investment View — ${investment.name}` : "Investment View"}
+      titleExtra={investment ? <StatusChip label={investment.status} tone={getInvestmentStatusTone(investment.status)} /> : null}
+      width="min(899px, 96vw)"
       footer={footer}
     >
       {!investment ? (
-        <EmptyState
-          text="Investment not found"
-          subText="This investment no longer exists or the list changed."
-          actionLabel="Close"
-          onAction={onClose}
-        />
+        <EmptyState text="Investment not found" subText="This investment no longer exists or the list changed." actionLabel="Close" onAction={onClose} />
       ) : (
-        <Stack spacing={2}>
-          {/* Row 1: Overview & Contribution Plan */}
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", md: "repeat(2, 1fr)" },
-              gap: 2,
-            }}
-          >
-            <SectionCard
-              title="Overview"
-              subtitle={`${investment.institution} • ${investment.type}`}
-            >
-              <Stack spacing={1.5}>
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    py: 0.5,
-                    borderBottom: "1px solid",
-                    borderColor: "divider",
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ fontWeight: 600 }}
-                  >
-                    Total Invested
+        <Box sx={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column" }}>
+          <Box sx={{ px: { xs: 0, sm: 0.5 }, pb: 1.25, borderBottom: "1px solid", borderColor: "divider" }}>
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1 }}>
+              {[
+                { label: "Current Value", value: formatInvestmentCurrency(effectiveCurrentValue) },
+                { label: "Total Invested", value: formatInvestmentCurrency(effectiveTotalInvested) },
+                { label: "Profit / Loss", value: `${totalReturnValue >= 0 ? "+" : ""}${formatInvestmentCurrency(totalReturnValue)}`, color: totalReturnColor },
+                { label: "Return", value: effectiveTotalInvested > 0 ? `${totalReturnPercentage >= 0 ? "+" : ""}${totalReturnPercentage.toFixed(1)}%` : "—", color: totalReturnColor },
+              ].map((metric) => (
+                <Box key={metric.label} sx={{ minWidth: 0, px: 1.5, py: 1, borderRadius: 0.5, border: "1px solid", borderColor: "divider", bgcolor: "action.hover" }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: "block", mb: 0.2 }}>
+                    {metric.label}
                   </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {formatInvestmentCurrency(investment.totalInvested)}
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: metric.color || "text.primary", lineHeight: 1.3 }}>
+                    {metric.value}
                   </Typography>
                 </Box>
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    py: 0.5,
-                    borderBottom: "1px solid",
-                    borderColor: "divider",
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ fontWeight: 600 }}
-                  >
-                    Current Value
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                      {formatInvestmentCurrency(effectiveCurrentValue)}
-                  </Typography>
-                </Box>
-                  <Box
-                    sx={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                      gap: 1,
-                      pt: 0.5,
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        p: 1.25,
-                        borderRadius: 1,
-                        bgcolor: "#f8fafc",
-                        border: "1px solid",
-                        borderColor: "divider",
-                      }}
-                    >
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ fontWeight: 600, display: "block", mb: 0.5 }}
-                      >
-                        Invested Amount
-                      </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        {formatInvestmentCurrency(effectiveTotalInvested)}
-                      </Typography>
-                    </Box>
-                    <Box
-                      sx={{
-                        p: 1.25,
-                        borderRadius: 1,
-                        bgcolor: totalReturnValue >= 0 ? "#ecfdf5" : "#fef2f2",
-                        border: "1px solid",
-                        borderColor: totalReturnValue >= 0 ? "#a7f3d0" : "#fecaca",
-                      }}
-                    >
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ fontWeight: 600, display: "block", mb: 0.5 }}
-                      >
-                        Profit / Loss
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={{ fontWeight: 700, color: totalReturnColor }}
-                      >
-                        {totalReturnValue >= 0 ? "+" : ""}
-                        {formatInvestmentCurrency(totalReturnValue)}
-                      </Typography>
-                    </Box>
-                  </Box>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      py: 0.5,
-                    }}
-                  >
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ fontWeight: 600 }}
-                    >
-                      Return %
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        fontWeight: 700,
-                        color: totalReturnColor,
-                      }}
-                    >
-                      {effectiveTotalInvested > 0
-                        ? `${totalReturnPercentage.toFixed(2)}%`
-                        : "N/A"}
-                    </Typography>
-                  </Box>
-              </Stack>
-            </SectionCard>
-
-            {investment.activeContributionPlan && (
-              <SectionCard
-                title="Contribution Plan"
-                subtitle="Recurring investment schedule"
-              >
-                <Stack spacing={1.5}>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      py: 0.5,
-                      borderBottom: "1px solid",
-                      borderColor: "divider",
-                    }}
-                  >
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ fontWeight: 600 }}
-                    >
-                      Contribution Amount
-                    </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                      {formatInvestmentCurrency(
-                        investment.activeContributionPlan.amount,
-                      )}
-                    </Typography>
-                  </Box>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      py: 0.5,
-                      borderBottom: "1px solid",
-                      borderColor: "divider",
-                    }}
-                  >
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ fontWeight: 600 }}
-                    >
-                      Frequency
-                    </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                      {investment.activeContributionPlan.cadenceInterval > 1
-                        ? `Every ${investment.activeContributionPlan.cadenceInterval} `
-                        : ""}
-                      {investment.activeContributionPlan.cadenceUnit}
-                    </Typography>
-                  </Box>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      py: 0.5,
-                    }}
-                  >
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ fontWeight: 600 }}
-                    >
-                      Next Due Date
-                    </Typography>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        {formatInvestmentDate(
-                          investment.activeContributionPlan.nextDueDate,
-                        )}
-                      </Typography>
-                      {investment.activeContributionPlan.nextDueDate &&
-                        (() => {
-                          const daysUntil = dayjs(
-                            investment.activeContributionPlan.nextDueDate,
-                          )
-                            .startOf("day")
-                            .diff(dayjs().startOf("day"), "day");
-                          const isOverdue = daysUntil < 0;
-                          const isDueSoon = daysUntil >= 0 && daysUntil <= 7;
-                          return (
-                            <Chip
-                              size="small"
-                              label={
-                                isOverdue
-                                  ? "Overdue"
-                                  : isDueSoon
-                                    ? `In ${daysUntil}d`
-                                    : `In ${daysUntil}d`
-                              }
-                              color={
-                                isOverdue
-                                  ? "error"
-                                  : isDueSoon
-                                    ? "warning"
-                                    : "default"
-                              }
-                              sx={{ height: 20, fontSize: 11 }}
-                            />
-                          );
-                        })()}
-                    </Box>
-                  </Box>
-                </Stack>
-              </SectionCard>
-            )}
+              ))}
+            </Box>
           </Box>
 
-          {/* Row 2: Performance History (Full Width) */}
-          <Box>
-            <Box
+          <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column"}}>
+            <Tabs
+              value={activeTab}
+              onChange={(_event, value) => setActiveTab(value)}
+              variant="scrollable"
+              allowScrollButtonsMobile
               sx={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                mb: 2,
-              }}
-            >
-              <Box>
-                <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                  Performance History
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Account value growth, contributions, and returns over time.
-                </Typography>
-                {latestSnapshot ? (
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                      flexWrap: "wrap",
-                      mt: 1,
-                    }}
-                  >
-                    <Chip
-                      size="small"
-                      label={`${valuationSnapshots.length} snapshots`}
-                      sx={{ fontWeight: 600 }}
-                    />
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      label={`Latest ${formatInvestmentDate(latestSnapshot.snapshotDate)}`}
-                    />
-                  </Box>
-                ) : hasPerformanceHistory ? (
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                      flexWrap: "wrap",
-                      mt: 1,
-                    }}
-                  >
-                    <Chip
-                      size="small"
-                      label={`${performanceHistoryData.length} timeline points`}
-                      sx={{ fontWeight: 600 }}
-                    />
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      label={
-                        investment?.performanceHistorySource ===
-                        "investment_event"
-                          ? "Derived from investment events"
-                          : "Derived from valuation snapshots"
-                      }
-                    />
-                  </Box>
-                ) : null}
-              </Box>
-              <IconButton
-                size="small"
-                variant="contained"
-                onClick={handleOpenCreateSnapshot}
-                sx={{
-                  bgcolor: "#f3f4f6",
-                  "&:hover": { bgcolor: "#e5e7eb" },
-                }}
-                title="Record new valuation snapshot"
-              >
-                <Icon path={mdiPlus} size={1} />
-              </IconButton>
-            </Box>
-            <Box
-              sx={{
-                p: 2,
-                bgcolor: "background.paper",
-                borderRadius: 1,
-                border: "1px solid",
+                minHeight: 44,
+                borderBottom: "1px solid",
                 borderColor: "divider",
+                "& .MuiTab-root": {
+                  minHeight: 44,
+                  px: 1.5,
+                  textTransform: "none",
+                  fontWeight: 600,
+                },
               }}
             >
-              {hasValuationSnapshots || hasPerformanceHistory ? (
-                <Stack spacing={2.5}>
-                  <InvestmentPerformanceChart
-                    investment={investment}
-                    formatValue={formatInvestmentCurrency}
-                  />
+              <Tab value={DRAWER_TABS[0]} label="Overview" />
+              <Tab value={DRAWER_TABS[1]} label="Contribution" />
+              <Tab value={DRAWER_TABS[2]} label="Valuation" />
+              <Tab value={DRAWER_TABS[3]} label="Details" />
+            </Tabs>
 
-                  {hasValuationSnapshots ? (
-                    <Box>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 1,
-                        mb: 1.5,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <Box>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                          Snapshot History
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Maintain historical valuations without leaving the drawer.
-                        </Typography>
-                      </Box>
-                    </Box>
-
-                    <TableContainer
-                      sx={{
-                        border: "1px solid",
-                        borderColor: "divider",
-                        borderRadius: 1,
-                        overflowX: "auto",
-                      }}
-                    >
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
-                            <TableCell sx={{ fontWeight: 700 }}>Market Value</TableCell>
-                            <TableCell sx={{ fontWeight: 700 }}>Units</TableCell>
-                            <TableCell sx={{ fontWeight: 700 }}>Price</TableCell>
-                            <TableCell sx={{ fontWeight: 700 }}>Source</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 700 }}>
-                              Actions
-                            </TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {valuationSnapshots.map((snapshot) => (
-                            <TableRow key={snapshot.id} hover>
-                              <TableCell>
-                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                  {formatInvestmentDate(snapshot.snapshotDate)}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {dayjs(snapshot.snapshotDate).format("ddd")}
-                                </Typography>
-                              </TableCell>
-                              <TableCell>
-                                <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                                  {formatInvestmentCurrency(snapshot.marketValue)}
-                                </Typography>
-                              </TableCell>
-                              <TableCell>
-                                {snapshot.units ?? "-"}
-                              </TableCell>
-                              <TableCell>
-                                {snapshot.price != null
-                                  ? formatInvestmentCurrency(snapshot.price)
-                                  : "-"}
-                              </TableCell>
-                              <TableCell>
-                                <Chip
-                                  size="small"
-                                  variant="outlined"
-                                  label={snapshot.source || "manual"}
-                                  sx={{ textTransform: "capitalize" }}
-                                />
-                              </TableCell>
-                              <TableCell align="right">
-                                <Box
-                                  sx={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 0.5,
-                                  }}
-                                >
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => handleOpenEditSnapshot(snapshot)}
-                                    aria-label={`Edit valuation on ${formatInvestmentDate(snapshot.snapshotDate)}`}
-                                  >
-                                    <Icon path={mdiPencilOutline} size={0.8} />
-                                  </IconButton>
-                                  <IconButton
-                                    size="small"
-                                    color="error"
-                                    onClick={() => setDeleteSnapshotTarget(snapshot)}
-                                    aria-label={`Delete valuation on ${formatInvestmentDate(snapshot.snapshotDate)}`}
-                                  >
-                                    <Icon path={mdiDeleteOutline} size={0.8} />
-                                  </IconButton>
-                                </Box>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                    </Box>
-                  ) : (
-                    <Alert severity="info">
-                      No valuation snapshots available. Performance history is derived from confirmed investment events such as opening balance, opening income, contributions, and principal withdrawals.
-                    </Alert>
-                  )}
-                </Stack>
-              ) : (
-                <EmptyState
-                  text="No valuation history yet"
-                  subText="Record the first valuation snapshot to start tracking current value, profit, and growth over time."
-                  actionLabel="Record Valuation"
-                  onAction={handleOpenCreateSnapshot}
-                />
-              )}
+            <Box sx={{ flex: 1, minHeight: 0, overflow: "auto", pt: 2.5 }}>
+              {renderActiveTab()}
             </Box>
           </Box>
-
-          {/* Row 3: Common Information & Investment Details */}
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", md: "repeat(2, 1fr)" },
-              gap: 2,
-            }}
-          >
-            <SectionCard title="Common Information">
-              <Stack spacing={1.5}>
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    py: 0.5,
-                    borderBottom: "1px solid",
-                    borderColor: "divider",
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ fontWeight: 600 }}
-                  >
-                    Status
-                  </Typography>
-                  <StatusChip
-                    label={investment.status}
-                    tone={getInvestmentStatusTone(investment.status)}
-                  />
-                </Box>
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    py: 0.5,
-                    borderBottom: "1px solid",
-                    borderColor: "divider",
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ fontWeight: 600 }}
-                  >
-                    Category
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {getInvestmentCategoryLabel(
-                      investment.category,
-                      taxonomyNodes,
-                    )}
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    py: 0.5,
-                    borderBottom: "1px solid",
-                    borderColor: "divider",
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ fontWeight: 600 }}
-                  >
-                    Start Date
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {formatInvestmentDate(investment.startDate)}
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    py: 0.5,
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ fontWeight: 600 }}
-                  >
-                    Reference
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {investment.referenceNumber || "Not recorded"}
-                  </Typography>
-                </Box>
-              </Stack>
-            </SectionCard>
-
-            <SectionCard title="Investment Details">
-              <Stack spacing={1.5}>
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    py: 0.5,
-                    borderBottom: "1px solid",
-                    borderColor: "divider",
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ fontWeight: 600 }}
-                  >
-                    Asset Type
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {investment.type}
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    py: 0.5,
-                    borderBottom: "1px solid",
-                    borderColor: "divider",
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ fontWeight: 600 }}
-                  >
-                    Holding Mode
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {investment.holdingMode || "Not recorded"}
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    py: 0.5,
-                    borderBottom: "1px solid",
-                    borderColor: "divider",
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ fontWeight: 600 }}
-                  >
-                    Maturity Date
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {formatInvestmentDate(investment.maturityDate)}
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    py: 0.5,
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ fontWeight: 600 }}
-                  >
-                    Insurance Cover
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {formatInvestmentCurrency(investment.insuranceCover)}
-                  </Typography>
-                </Box>
-              </Stack>
-            </SectionCard>
-          </Box>
-
-          {investment.activeContributionPlan ? (
-            <SectionCard
-              title="Recurring Plan Management"
-              subtitle="Pause/resume schedule generation and update optional end date."
-            >
-              <Stack spacing={1.5}>
-                {planActionError ? (
-                  <Alert severity="error">{planActionError}</Alert>
-                ) : null}
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 1,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ fontWeight: 600 }}
-                  >
-                    Plan Status
-                  </Typography>
-                  <StatusChip
-                    label={String(
-                      investment.activeContributionPlan.status || "active",
-                    )}
-                    tone={
-                      String(
-                        investment.activeContributionPlan.status || "active",
-                      ).toLowerCase() === "active"
-                        ? "success"
-                        : "warning"
-                    }
-                  />
-                </Box>
-
-                <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-                  <AppButton
-                    variant="outlined"
-                    onClick={handlePausePlan}
-                    disabled={
-                      planActionLoading ||
-                      String(
-                        investment.activeContributionPlan.status || "",
-                      ).toLowerCase() === "paused"
-                    }
-                  >
-                    Pause Plan
-                  </AppButton>
-                  <AppButton
-                    variant="outlined"
-                    onClick={handleResumePlan}
-                    disabled={
-                      planActionLoading ||
-                      String(
-                        investment.activeContributionPlan.status || "",
-                      ).toLowerCase() === "active"
-                    }
-                  >
-                    Resume Plan
-                  </AppButton>
-                </Box>
-
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 1,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <TextField
-                    type="date"
-                    size="small"
-                    label="Plan End Date"
-                    value={planEndDateDraft}
-                    onChange={(event) =>
-                      setPlanEndDateDraft(event.target.value)
-                    }
-                    InputLabelProps={{ shrink: true }}
-                  />
-                  <AppButton
-                    variant="contained"
-                    onClick={handleSavePlanEndDate}
-                    disabled={planActionLoading}
-                  >
-                    Save End Date
-                  </AppButton>
-                </Box>
-              </Stack>
-            </SectionCard>
-          ) : null}
-
-          {/* Row 4: Documents & Notes */}
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", md: "repeat(2, 1fr)" },
-              gap: 2,
-            }}
-          >
-            <SectionCard
-              title="Documents"
-              subtitle="Stored as operational references in MVP."
-            >
-              <Typography variant="body2" sx={{ lineHeight: 1.7 }}>
-                {investment.documents || "No document references added"}
-              </Typography>
-            </SectionCard>
-
-            <SectionCard title="Notes">
-              <Typography variant="body2" sx={{ lineHeight: 1.7 }}>
-                {investment.notes || "No notes added"}
-              </Typography>
-            </SectionCard>
-          </Box>
-        </Stack>
+        </Box>
       )}
 
-      {/* Record Valuation Modal */}
-      <RecordValuationModal
-        open={recordValuationOpen}
-        onClose={handleCloseSnapshotModal}
-        investmentId={investment?.id}
-        investmentName={investment?.name}
-        snapshot={selectedSnapshot}
-      />
+      <RecordValuationModal open={recordValuationOpen} onClose={handleCloseSnapshotModal} investmentId={investment?.id} investmentName={investment?.name} snapshot={selectedSnapshot} />
 
       <ConfirmDialog
         open={Boolean(deleteSnapshotTarget)}
-        title="Delete valuation snapshot"
-        description={
-          deleteSnapshotTarget
-            ? `Remove the snapshot from ${formatInvestmentDate(deleteSnapshotTarget.snapshotDate)}? The investment current value will be recalculated from the latest remaining snapshot.`
-            : ""
-        }
+        title="Delete valuation"
+        description={deleteSnapshotTarget ? `Remove the valuation from ${formatInvestmentDate(deleteSnapshotTarget.snapshotDate)}? The investment current value will be recalculated from the latest remaining valuation.` : ""}
         confirmLabel="Delete"
         confirmColor="error"
         loading={snapshotActionLoading}

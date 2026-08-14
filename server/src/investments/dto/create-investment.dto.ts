@@ -1,8 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsDateString, IsDefined, IsIn, IsInt, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsDateString, IsDefined, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export const INVESTMENT_STATUS_VALUES = ['active', 'matured', 'closed'] as const;
+export const INVESTMENT_CONTRIBUTION_MODE_VALUES = ['ONE_TIME', 'RECURRING'] as const;
 
 export class CreateInvestmentDto {
   @ApiProperty()
@@ -11,11 +12,13 @@ export class CreateInvestmentDto {
   name: string;
 
   @ApiProperty()
+  @Transform(({ value }) => String(value ?? '').trim().toUpperCase())
   @IsString()
   @IsNotEmpty()
   assetType: string;
 
   @ApiProperty()
+  @Transform(({ value }) => String(value ?? '').trim().toUpperCase())
   @IsString()
   @IsNotEmpty()
   assetCategory: string;
@@ -33,11 +36,6 @@ export class CreateInvestmentDto {
   @IsInt()
   @Min(1)
   assetTaxonomyId?: number;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  holdingMode?: string;
 
   @ApiProperty()
   @IsString()
@@ -98,15 +96,12 @@ export class CreateInvestmentDto {
   @Min(0)
   insuranceCover?: number;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiProperty({ enum: INVESTMENT_CONTRIBUTION_MODE_VALUES })
+  @Transform(({ value }) => String(value ?? '').trim().toUpperCase())
+  @IsDefined()
   @IsString()
-  contributionMode?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsObject()
-  documentsMeta?: Record<string, unknown>;
+  @IsIn(INVESTMENT_CONTRIBUTION_MODE_VALUES)
+  contributionMode: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

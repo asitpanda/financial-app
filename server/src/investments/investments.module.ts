@@ -4,6 +4,7 @@ import { InvestmentContributionPlansModule } from '../investment-contribution-pl
 import { InvestmentEventsModule } from '../investment-events/investment-events.module';
 import { ValuationSnapshotsModule } from '../valuation-snapshots/valuation-snapshots.module';
 import { DatabaseModule } from '../database/database.module';
+import { InvestmentAssetTaxonomyModule } from '../investment-asset-taxonomy/investment-asset-taxonomy.module';
 import { InvestmentsController } from './investments.controller';
 import { InvestmentsService } from './investments.service';
 import { InvestmentMockRepository } from './repositories/investment.mock.repository';
@@ -12,7 +13,7 @@ import { InvestmentRepository } from './repositories/investment.repository';
 import { createProviderBackedBinding } from '../database/db-provider';
 
 @Module({
-  imports: [ConfigModule, DatabaseModule, InvestmentContributionPlansModule, InvestmentEventsModule, ValuationSnapshotsModule],
+  imports: [ConfigModule, DatabaseModule, InvestmentAssetTaxonomyModule, InvestmentContributionPlansModule, InvestmentEventsModule, ValuationSnapshotsModule],
   controllers: [InvestmentsController],
   providers: [
     InvestmentPrismaRepository,

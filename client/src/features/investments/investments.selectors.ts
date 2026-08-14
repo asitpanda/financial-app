@@ -24,6 +24,8 @@ export interface InvestmentAllocationSegment {
   label: string;
   value: number;
   investmentIds: InvestmentId[];
+  // parent assetType code; present only on category-level rows
+  assetType?: string;
 }
 
 export interface InvestmentSeriesPoint {
@@ -69,6 +71,8 @@ export interface InvestmentCategoryPerformanceRow {
   returnPercentage: number;
   sparkline: number[];
   investmentIds: InvestmentId[];
+  // parent assetType code; present only on category-level rows
+  assetType?: string;
 }
 
 export interface InvestmentMaturityBucket {

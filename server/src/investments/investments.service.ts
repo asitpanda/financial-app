@@ -6,7 +6,7 @@ import { ValuationSnapshotsService } from '../valuation-snapshots/valuation-snap
 import { CreateInvestmentDto } from './dto/create-investment.dto';
 import {
   InvestmentDashboardAnalyticsResponseDto,
-  InvestmentDashboardCategoryBreakdownItemDto,
+  InvestmentDashboardCategoryPerformanceRowDto,
   InvestmentDashboardSummaryDto,
   InvestmentValueSourceSummaryDto,
 } from './dto/dashboard-analytics-response.dto';
@@ -28,17 +28,107 @@ import type {
 } from './investment.types';
 import { UpdateInvestmentDto } from './dto/update-investment.dto';
 import { InvestmentRepository } from './repositories/investment.repository';
+import { AssetTaxonomyRepository } from '../investment-asset-taxonomy/repositories/asset-taxonomy.repository';
+import { PrismaService } from '../database/prisma.service';
 
 @Injectable()
 export class InvestmentsService {
   constructor(
     private readonly repository: InvestmentRepository,
+    private readonly assetTaxonomyRepository: AssetTaxonomyRepository,
     private readonly contributionPlansService: InvestmentContributionPlansService,
     private readonly investmentEventsService: InvestmentEventsService,
     private readonly valuationSnapshotsService: ValuationSnapshotsService,
+    private readonly prisma: PrismaService,
   ) {}
 
-  private assertInvestmentCrudRules(investment: InvestmentCrudRuleInput) {
+  private get appMetaConfigRefDelegate() {
+    return (this.prisma as any).appMetaConfigRef;
+  }
+
+  private async getInvestmentAssetTypeConfigByCode(assetType: string | null | undefined) {
+    const normalizedAssetType = String(assetType || '').trim().toUpperCase();
+    if (!normalizedAssetType) return null;
+
+    const assetTypeMeta = await this.appMetaConfigRefDelegate.findFirst({
+      where: {
+        module: 'INVESTMENT',
+        configType: 'ASSET_TYPE',
+        code: normalizedAssetType,
+        isActive: true,
+      },
+      orderBy: { sortOrder: 'asc' },
+    });
+
+    if (!assetTypeMeta) return null;
+
+    const categories = await this.appMetaConfigRefDelegate.findMany({
+      where: {
+        module: 'INVESTMENT',
+        configType: 'ASSET_CATEGORY',
+        parentId: assetTypeMeta.id,
+        isActive: true,
+      },
+      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+    });
+
+    return {
+      id: assetTypeMeta.id,
+      code: assetTypeMeta.code,
+      label: assetTypeMeta.label,
+      categories: categories.map((category) => ({
+        id: category.id,
+        code: category.code,
+        label: category.label,
+      })),
+    };
+  }
+
+  private async isValidInvestmentClassification(
+    assetType: string | null | undefined,
+    assetCategory: string | null | undefined,
+  ) {
+    const typeConfig = await this.getInvestmentAssetTypeConfigByCode(assetType);
+    if (!typeConfig) return false;
+
+    const normalizedAssetCategory = String(assetCategory || '').trim().toUpperCase();
+    return typeConfig.categories.some((categoryConfig) => categoryConfig.code === normalizedAssetCategory);
+  }
+
+  private async getInvestmentAssetTypeConfigsFromDb() {
+    const typeRows = await this.appMetaConfigRefDelegate.findMany({
+      where: {
+        module: 'INVESTMENT',
+        configType: 'ASSET_TYPE',
+        isActive: true,
+      },
+      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+    });
+
+    const categoryRows = await this.appMetaConfigRefDelegate.findMany({
+      where: {
+        module: 'INVESTMENT',
+        configType: 'ASSET_CATEGORY',
+        isActive: true,
+      },
+      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+    });
+
+    return typeRows.map((typeRow) => ({
+      id: typeRow.id,
+      code: typeRow.code,
+      label: typeRow.label,
+      categories: categoryRows
+        .filter((categoryRow) => categoryRow.parentId === typeRow.id)
+        .map((categoryRow) => ({
+          id: categoryRow.id,
+          code: categoryRow.code,
+          label: categoryRow.label,
+        })),
+    }));
+  }
+
+  private async assertInvestmentCrudRules(investment: InvestmentCrudRuleInput) {
     if (investment.accountId == null || Number(investment.accountId) < 1) {
       throw new BadRequestException({
         message: 'Account is required',
@@ -57,6 +147,28 @@ export class InvestmentsService {
       throw new BadRequestException({
         message: 'Investment type is required',
         field: 'assetType',
+      });
+    }
+
+    if (!String(investment.assetCategory || '').trim()) {
+      throw new BadRequestException({
+        message: 'Investment category is required',
+        field: 'assetCategory',
+      });
+    }
+
+    const assetTypeConfig = await this.getInvestmentAssetTypeConfigByCode(investment.assetType);
+    if (!assetTypeConfig) {
+      throw new BadRequestException({
+        message: 'Unsupported investment type',
+        field: 'assetType',
+      });
+    }
+
+    if (!(await this.isValidInvestmentClassification(investment.assetType, investment.assetCategory))) {
+      throw new BadRequestException({
+        message: 'Investment category is not valid for the selected type',
+        field: 'assetCategory',
       });
     }
 
@@ -98,14 +210,38 @@ export class InvestmentsService {
     });
   }
 
+  private async assertTaxonomyOwnership(
+    assetTaxonomyId: string | number | null | undefined,
+    userId: number,
+  ) {
+    if (assetTaxonomyId == null || assetTaxonomyId === '') {
+      return;
+    }
+
+    const taxonomyNode = await this.assetTaxonomyRepository.findOne(Number(assetTaxonomyId), userId);
+    if (!taxonomyNode) {
+      throw new BadRequestException({
+        message: 'Selected taxonomy bucket was not found for the current user',
+        field: 'assetTaxonomyId',
+      });
+    }
+  }
+
   async create(createInvestmentDto: CreateInvestmentDto, userId: number) {
-    this.assertInvestmentCrudRules(createInvestmentDto);
+    await this.assertInvestmentCrudRules(createInvestmentDto);
+    await this.assertTaxonomyOwnership(createInvestmentDto.assetTaxonomyId, userId);
     return this.repository.create(createInvestmentDto, userId);
+  }
+
+  async getMetadata() {
+    return {
+      asset_configs: await this.getInvestmentAssetTypeConfigsFromDb(),
+    };
   }
 
   private getCategoryKey(investment: InvestmentLike) {
     return String(
-      investment?.assetCategory || investment?.assetType || 'other',
+      investment?.assetType || investment?.assetCategory || 'OTHER',
     );
   }
 
@@ -875,33 +1011,56 @@ export class InvestmentsService {
     );
   }
 
-  private buildDashboardCategoryBreakdown(
+  private buildCategorySubPerformanceRows(
     investments: SummaryInvestment[],
-  ): InvestmentDashboardCategoryBreakdownItemDto[] {
-    const categoryBreakdown = investments.reduce<
-      Record<string, InvestmentDashboardCategoryBreakdownItemDto>
-    >((acc, investment) => {
-      const categoryKey = this.getCategoryKey(investment);
-      if (!acc[categoryKey]) {
-        acc[categoryKey] = {
-          key: categoryKey,
-          invested: 0,
-          currentValue: 0,
-          holdings: 0,
-          investmentIds: [],
-        };
+    snapshotsByInvestment: Map<string, SnapshotLike[]>,
+    months = 12,
+  ) {
+    const groups: Record<string, { typeKey: string; catKey: string; records: ResolvedAnalyticsRecord[] }> = {};
+    investments.forEach((investment) => {
+      const typeKey = this.getCategoryKey(investment);
+      const catKey = String(investment.assetCategory || '').trim().toUpperCase();
+      if (!catKey || catKey === typeKey) return;
+      const compositeKey = `${typeKey}::${catKey}`;
+      if (!groups[compositeKey]) {
+        groups[compositeKey] = { typeKey, catKey, records: [] };
       }
-
-      acc[categoryKey].invested += Number(investment.totalInvested || 0);
-      acc[categoryKey].currentValue += this.getEffectiveCurrentValue(investment);
-      acc[categoryKey].holdings += 1;
-      acc[categoryKey].investmentIds.push(investment.id);
-      return acc;
-    }, {});
-
-    return Object.values(categoryBreakdown)
-      .filter((item) => item.invested > 0 || item.currentValue > 0)
-      .sort((left, right) => right.currentValue - left.currentValue);
+      groups[compositeKey].records.push(
+        this.buildResolvedAnalyticsRecord(investment, snapshotsByInvestment.get(String(investment.id)) ?? []),
+      );
+    });
+    const startMonth = this.startOfMonth(new Date());
+    const monthPoints = Array.from({ length: Math.max(months, 1) }, (_, index) =>
+      this.endOfMonth(this.addMonths(startMonth, -(Math.max(months, 1) - 1 - index))),
+    );
+    return Object.entries(groups)
+      .map(([, { typeKey, catKey, records }]) => {
+        const invested = records.reduce((sum, r) => sum + r.investedAmount, 0);
+        const currentValue = records.reduce((sum, r) => sum + r.currentValue, 0);
+        const returnAmount = currentValue - invested;
+        const returnPercentage = invested > 0 ? (returnAmount / invested) * 100 : 0;
+        return {
+          key: catKey,
+          label: catKey,
+          assetType: typeKey,
+          holdings: records.length,
+          invested,
+          currentValue,
+          returnAmount,
+          returnPercentage,
+          investmentIds: records.map((r) => r.id),
+          sparkline: monthPoints.map((pointDate) =>
+            records.reduce(
+              (sum, item) =>
+                item.timelineStartDate.getTime() > pointDate.getTime()
+                  ? sum
+                  : sum + this.resolveInvestmentValueAtDate(item.investment, item.snapshots, pointDate).value,
+              0,
+            ),
+          ),
+        };
+      })
+      .sort((a, b) => b.currentValue - a.currentValue);
   }
 
   private buildDashboardSummary(
@@ -929,7 +1088,8 @@ export class InvestmentsService {
     const insuranceCover = records
       .filter(
         (record) =>
-          record.investment.status === 'active' && record.category === 'insurance',
+          record.investment.status === 'active' &&
+          String(record.investment.assetType || '').trim().toUpperCase() === 'INSURANCE',
       )
       .reduce(
         (sum, record) => sum + Number(record.investment.insuranceCover || 0),
@@ -969,12 +1129,11 @@ export class InvestmentsService {
       status: investment.status,
       maturityDate: this.toOptionalDateString(investment.maturityDate),
       currency: investment.currency ?? undefined,
-      holdingMode: investment.holdingMode ?? null,
+      contributionMode: investment.contributionMode ?? undefined,
       currentValueSource: investment.currentValueSource ?? null,
       lastValuationAt: this.toOptionalDateString(investment.lastValuationAt),
       insuranceCover: investment.insuranceCover ?? undefined,
       referenceNumber: investment.referenceNumber ?? null,
-      documentsMeta: investment.documentsMeta ?? null,
       notes: investment.notes ?? null,
       activeContributionPlan: this.mapActiveContributionPlan(activePlan),
       eventCount,
@@ -1096,7 +1255,6 @@ export class InvestmentsService {
 
     return {
       summary: this.buildDashboardSummary(investments, records),
-      categoryBreakdown: this.buildDashboardCategoryBreakdown(investments),
       upcoming,
       analytics: {
         portfolioGrowthData: this.buildPortfolioGrowthData(records),
@@ -1107,7 +1265,8 @@ export class InvestmentsService {
             return acc;
           }, {}),
         },
-        categoryPerformanceRows: this.buildCategoryPerformanceRows(records, 12),
+        categoryPerformance: this.buildCategoryPerformanceRows(records, 12),
+        categorySubPerformance: this.buildCategorySubPerformanceRows(investments, snapshotsByInvestment, 12),
       },
     };
   }
@@ -1158,10 +1317,15 @@ export class InvestmentsService {
       return null;
     }
 
-    this.assertInvestmentCrudRules({
+    await this.assertInvestmentCrudRules({
       ...existingInvestment,
       ...updateInvestmentDto,
     });
+
+    await this.assertTaxonomyOwnership(
+      updateInvestmentDto.assetTaxonomyId ?? existingInvestment.assetTaxonomyId,
+      userId,
+    );
 
     return this.repository.update(id, updateInvestmentDto, userId);
   }

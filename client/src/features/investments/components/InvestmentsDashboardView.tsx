@@ -26,10 +26,9 @@ import SourceOfValueCard from "./SourceOfValueCard";
 import TimeSeriesVisualization from "./TimeSeriesVisualization";
 import {
   formatInvestmentDate,
-  getInvestmentCategoryLabel,
+  getInvestmentTypeLabel,
 } from "../../../utils/investmentHelpers";
 import type { Investment } from "../types/investment.types";
-import type { InvestmentAssetTaxonomyNode } from "../types/investmentAssetTaxonomy.types";
 import type { GridColDef } from "@mui/x-data-grid";
 import type {
   InvestmentAllocationSegment,
@@ -53,10 +52,11 @@ interface InvestmentDashboardViewProps {
   categoryLabelMap: Record<string, string>;
   valueSourceSummary: InvestmentValueSourceSummary;
   categoryPerformanceRows: InvestmentCategoryPerformanceRow[];
+  categorySubBreakdown: InvestmentAllocationSegment[];
+  categoryPerformanceSubRows: InvestmentCategoryPerformanceRow[];
   topCurrentValueItems: Investment[];
   upcomingContributions: InvestmentContributionViewItem[];
   recentInvestments: Investment[];
-  taxonomyNodes: InvestmentAssetTaxonomyNode[];
   columns: readonly GridColDef<Investment>[];
   search: string;
   onSearchChange: (value: string) => void;
@@ -86,10 +86,11 @@ export default function InvestmentsDashboardView({
   categoryLabelMap,
   valueSourceSummary,
   categoryPerformanceRows,
+  categorySubBreakdown,
+  categoryPerformanceSubRows,
   topCurrentValueItems,
   upcomingContributions,
   recentInvestments,
-  taxonomyNodes,
   columns,
   search,
   onSearchChange,
@@ -136,6 +137,21 @@ export default function InvestmentsDashboardView({
     [categoryPerformanceRows],
   );
 
+  const allocationReturnSubBreakdown = useMemo(
+    () =>
+      categoryPerformanceSubRows
+        .filter((row) => Number(row.returnAmount || 0) !== 0)
+        .map((row) => ({
+          key: row.key,
+          label: row.label,
+          value: row.returnAmount,
+          investmentIds: row.investmentIds,
+          assetType: row.assetType,
+        }))
+        .sort((left, right) => Math.abs(right.value) - Math.abs(left.value)),
+    [categoryPerformanceSubRows],
+  );
+
   const focusedInvestments = useMemo(() => {
     if (!focusedAssetIds) {
       return investments;
@@ -157,8 +173,11 @@ export default function InvestmentsDashboardView({
 
       const matchesStatus =
         statusFilter === "all" || investment.status === statusFilter;
+      const investmentAssetType = String(
+        investment.assetType || investment.type || "OTHER",
+      );
       const matchesCategory =
-        categoryFilter === "all" || investment.category === categoryFilter;
+        categoryFilter === "all" || investmentAssetType === categoryFilter;
 
       return matchesSearch && matchesStatus && matchesCategory;
     });
@@ -365,24 +384,25 @@ export default function InvestmentsDashboardView({
         }}
       >
         <SectionCard
-          title="Category Performance"
-          subtitle="Compare invested base, current value, and 6-month trend by category."
+          title="Asset Type Performance"
+          subtitle="Compare invested base, current value, and 6-month trend by asset type."
           sx={widgetCardSx}
           contentSx={widgetContentSx}
           empty={categoryPerformanceRows.length === 0}
           emptyState={{
-            title: "No category performance yet",
-            description: "Add investments to compare category-level movement.",
+            title: "No asset type performance yet",
+            description: "Add investments to compare asset-type movement.",
           }}
         >
           <CategoryPerformanceTable
             rows={categoryPerformanceRows}
+            subRows={categoryPerformanceSubRows}
             formatValue={formatCurrency}
             onSelectRow={(row) =>
               focusAssets(
                 row.investmentIds,
-                `${row.label} Category`,
-                `Assets contributing to ${row.label} performance and trend.`,
+                `${row.label} Asset Type`,
+                `Assets contributing to ${row.label} asset-type performance and trend.`,
               )
             }
           />
@@ -424,13 +444,13 @@ export default function InvestmentsDashboardView({
       >
         <SectionCard
           title="Allocation Mix"
-          subtitle="Where the current invested base is concentrated."
+          subtitle="Where the current invested base is concentrated by asset type."
           sx={widgetCardSx}
           contentSx={widgetContentSx}
           empty={categoryBreakdown.length === 0}
           emptyState={{
             title: "No allocation data",
-            description: "Add investments to see category-level concentration.",
+            description: "Add investments to see asset-type concentration.",
             actionLabel: "Add Investment",
             onAction: onCreateInvestment,
           }}
@@ -442,16 +462,18 @@ export default function InvestmentsDashboardView({
               0,
             )}
             returnData={allocationReturnBreakdown}
+            subData={categorySubBreakdown}
+            subReturnData={allocationReturnSubBreakdown}
             formatValue={formatCurrency}
             onSelectSegment={(segment, mode) =>
               focusAssets(
                 segment.investmentIds,
                 mode === "return"
                   ? `${segment.label} Return Contribution`
-                  : `${segment.label} Allocation`,
+                  : `${segment.label} Asset Type Allocation`,
                 mode === "return"
                   ? `Assets contributing to the ${segment.label} gain or loss profile.`
-                  : `Assets contributing to the ${segment.label} allocation mix.`,
+                  : `Assets contributing to the ${segment.label} asset-type allocation mix.`,
               )
             }
           />
@@ -653,10 +675,10 @@ export default function InvestmentsDashboardView({
                       <Chip
                         size="small"
                         variant="outlined"
-                        label={getInvestmentCategoryLabel(
-                          item.category,
-                          taxonomyNodes as never[],
-                        )}
+                        label={
+                          categoryLabelMap[String(item.assetType || item.type || "")] ||
+                          getInvestmentTypeLabel(item.assetType || item.type)
+                        }
                       />
                     </Box>
                   </Box>

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import dayjs from 'dayjs';
+import type { InvestmentAssetTypeConfig } from '../features/investments/types/investment.types';
 
 export const STATUS_OPTIONS = [
   { value: 'all', label: 'All Status' },
@@ -12,7 +13,7 @@ export const createEmptyInvestmentForm = () => ({
   accountId: '',
   name: '',
   type: '',
-  category: 'other',
+  category: '',
   assetTaxonomyId: null,
   institution: '',
   totalInvested: '',
@@ -22,7 +23,6 @@ export const createEmptyInvestmentForm = () => ({
   maturityDate: null,
   referenceNumber: '',
   insuranceCover: '',
-  documents: '',
   notes: '',
 });
 
@@ -50,6 +50,14 @@ const slugifyLabel = (value) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
+
+const formatCodeLabel = (value) =>
+  String(value || '')
+    .trim()
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
 
 const getActiveNodes = (taxonomyNodes = []) => taxonomyNodes.filter((node) => node?.isActive !== false);
 
@@ -195,40 +203,40 @@ export const getInvestmentTypeMeta = (typeOrId, taxonomyNodes = []) => {
 };
 
 export const getInvestmentCategoryLabel = (categoryKey, taxonomyNodes = []) => {
-  return getInvestmentCategoryOptions(taxonomyNodes).find((option) => option.value === categoryKey)?.label || 'Other';
+  return getInvestmentCategoryOptions(taxonomyNodes).find((option) => option.value === categoryKey)?.label || formatCodeLabel(categoryKey) || 'Other';
 };
 
-const getDocumentsValue = (documentsMeta) => {
-  if (!documentsMeta) return '';
-  const documents = Array.isArray(documentsMeta.documents) ? documentsMeta.documents : [];
-  return documents.join(', ');
-};
+export const getInvestmentTypeLabel = (assetType) => formatCodeLabel(assetType) || 'Other';
 
-const buildDocumentsMeta = (documents) => {
-  const parsedDocuments = String(documents || '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
+export const buildAssetTypeLabelMap = (assetTypeConfigs: InvestmentAssetTypeConfig[] = []) =>
+  assetTypeConfigs.reduce<Record<string, string>>((acc, item) => {
+    acc[String(item.code)] = item.label;
+    return acc;
+  }, {});
 
-  return parsedDocuments.length > 0 ? { documents: parsedDocuments } : null;
-};
+export const buildAssetCategoryLabelMap = (assetTypeConfigs: InvestmentAssetTypeConfig[] = []) =>
+  assetTypeConfigs.reduce<Record<string, string>>((acc, item) => {
+    item.categories.forEach((cat) => {
+      acc[String(cat.code)] = cat.label;
+    });
+    return acc;
+  }, {});
 
 export const normalizeInvestmentForUi = (investment, taxonomyNodes = []) => {
   const taxonomyById = getTaxonomyById(taxonomyNodes);
   const taxonomyNode = investment.assetTaxonomyId ? taxonomyById[investment.assetTaxonomyId] : null;
   const lineage = buildTaxonomyLineage(taxonomyNode, taxonomyById);
   const categoryNode = lineage[0] || null;
-  const type = taxonomyNode?.label || investment.assetType || investment.type || '';
-  const typeMeta = getInvestmentTypeMeta(investment.assetTaxonomyId || type, taxonomyNodes);
+  const type = investment.assetType || investment.type || taxonomyNode?.label || '';
+  const typeMeta = getInvestmentTypeMeta(investment.assetTaxonomyId || taxonomyNode?.label || '', taxonomyNodes);
 
   return {
     ...investment,
     accountId: investment.accountId ?? null,
     type,
     assetTaxonomyId: investment.assetTaxonomyId || taxonomyNode?.id || null,
-    category: (categoryNode ? slugifyLabel(categoryNode.label) : null) || investment.assetCategory || investment.category || typeMeta.category,
+    category: investment.assetCategory || investment.category || (categoryNode ? slugifyLabel(categoryNode.label) : null) || typeMeta.category,
     institution: investment.institutionName || investment.institution || '',
-    documents: investment.documents || getDocumentsValue(investment.documentsMeta),
   };
 };
 
@@ -238,10 +246,10 @@ export const buildFormFromInvestment = (investment, taxonomyNodes = []) => {
   return {
     accountId: investment.accountId != null ? String(investment.accountId) : '',
     name: investment.name || '',
-    type: typeMeta.type || investment.type || '',
-    category: investment.category || typeMeta.category,
-    assetTaxonomyId: investment.assetTaxonomyId || typeMeta.id || null,
-    institution: investment.institution || '',
+    type: investment.assetType || investment.type || typeMeta.type || '',
+    category: investment.assetCategory || investment.category || '',
+    assetTaxonomyId: investment.assetTaxonomyId || null,
+    institution: investment.institutionName || investment.institution || '',
     totalInvested: investment.totalInvested ? String(investment.totalInvested) : '',
     currentValue: investment.currentValue ? String(investment.currentValue) : '',
     startDate: investment.startDate ? dayjs(investment.startDate) : dayjs(),
@@ -249,21 +257,19 @@ export const buildFormFromInvestment = (investment, taxonomyNodes = []) => {
     maturityDate: investment.maturityDate ? dayjs(investment.maturityDate) : null,
     referenceNumber: investment.referenceNumber || '',
     insuranceCover: investment.insuranceCover ? String(investment.insuranceCover) : '',
-    documents: investment.documents || '',
     notes: investment.notes || '',
   };
 };
 
 export const buildInvestmentFromForm = (form, existingId, taxonomyNodes = []) => {
-  const typeMeta = getInvestmentTypeMeta(form.assetTaxonomyId || form.type, taxonomyNodes);
   const parsedAccountId = form.accountId !== '' && form.accountId != null ? Number(form.accountId) : null;
 
   return {
     accountId: Number.isFinite(parsedAccountId) ? parsedAccountId : null,
-    assetTaxonomyId: form.assetTaxonomyId || typeMeta.id || null,
+    assetTaxonomyId: form.assetTaxonomyId || null,
     name: form.name.trim(),
-    assetType: typeMeta.type || form.type,
-    assetCategory: typeMeta.category,
+    assetType: String(form.type || '').trim(),
+    assetCategory: String(form.category || '').trim(),
     institutionName: form.institution.trim() || null,
     totalInvested: Number(form.totalInvested || 0),
     currentValue: form.currentValue ? Number(form.currentValue) : Number(form.totalInvested || 0),
@@ -271,12 +277,11 @@ export const buildInvestmentFromForm = (form, existingId, taxonomyNodes = []) =>
     status: form.status,
     maturityDate: normalizeDateValue(form.maturityDate),
     currency: 'INR',
-    holdingMode: null,
     currentValueSource: 'manual',
     lastValuationAt: normalizeDateValue(form.startDate),
     insuranceCover: form.insuranceCover ? Number(form.insuranceCover) : 0,
+    contributionMode: form.contributionType === 'recurring' ? 'RECURRING' : 'ONE_TIME',
     referenceNumber: form.referenceNumber.trim() || null,
-    documentsMeta: buildDocumentsMeta(form.documents),
     notes: form.notes.trim() || null,
   };
 };

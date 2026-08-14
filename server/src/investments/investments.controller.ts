@@ -4,6 +4,7 @@ import { InvestmentsService } from './investments.service';
 import { CreateInvestmentDto } from './dto/create-investment.dto';
 import { InvestmentDashboardAnalyticsResponseDto } from './dto/dashboard-analytics-response.dto';
 import { InvestmentDetailResponseDto } from './dto/investment-detail-response.dto';
+import { InvestmentMetadataResponseDto } from './dto/investment-metadata-response.dto';
 import { InvestmentPerformanceResponseDto } from './dto/investment-performance-response.dto';
 import { UpdateInvestmentDto } from './dto/update-investment.dto';
 import { CurrentUserId } from '../auth/current-user-id.decorator';
@@ -31,6 +32,13 @@ export class InvestmentsController {
   @ApiOkResponse({ type: InvestmentDashboardAnalyticsResponseDto })
   getDashboardAnalytics(@CurrentUserId() userId: number) {
     return this.investmentsService.getDashboardAnalytics(userId);
+  }
+
+  @Get('metadata')
+  @ApiOperation({ summary: 'Get investment metadata for classification and form configuration' })
+  @ApiOkResponse({ type: InvestmentMetadataResponseDto })
+  getMetadata() {
+    return this.investmentsService.getMetadata();
   }
 
   @Get(':id/performance')

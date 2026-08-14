@@ -2,10 +2,60 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateInvestmentAssetTaxonomyDto } from './dto/create-investment-asset-taxonomy.dto';
 import { UpdateInvestmentAssetTaxonomyDto } from './dto/update-investment-asset-taxonomy.dto';
 import { AssetTaxonomyRepository } from './repositories/asset-taxonomy.repository';
+import { PrismaService } from '../database/prisma.service';
 
 @Injectable()
 export class InvestmentAssetTaxonomyService {
-  constructor(private readonly repository: AssetTaxonomyRepository) {}
+  constructor(
+    private readonly repository: AssetTaxonomyRepository,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  private async getInvestmentAssetTypeConfigByCode(assetType: string | null | undefined) {
+    const normalizedAssetType = String(assetType || '').trim().toUpperCase();
+    if (!normalizedAssetType) return null;
+
+    const assetTypeMeta = await this.prisma.appMetaConfigRef.findFirst({
+      where: {
+        module: 'INVESTMENT',
+        configType: 'ASSET_TYPE',
+        code: normalizedAssetType,
+        isActive: true,
+      },
+    });
+
+    if (!assetTypeMeta) return null;
+
+    const categories = await this.prisma.appMetaConfigRef.findMany({
+      where: {
+        module: 'INVESTMENT',
+        configType: 'ASSET_CATEGORY',
+        parentId: assetTypeMeta.id,
+        isActive: true,
+      },
+      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+    });
+
+    return {
+      code: assetTypeMeta.code,
+      label: assetTypeMeta.label,
+      categories: categories.map((category) => ({
+        code: category.code,
+        label: category.label,
+      })),
+    };
+  }
+
+  private async isValidInvestmentClassification(
+    assetType: string | null | undefined,
+    assetCategory: string | null | undefined,
+  ) {
+    const typeConfig = await this.getInvestmentAssetTypeConfigByCode(assetType);
+    if (!typeConfig) return false;
+
+    const normalizedAssetCategory = String(assetCategory || '').trim().toUpperCase();
+    return typeConfig.categories.some((categoryConfig) => categoryConfig.code === normalizedAssetCategory);
+  }
 
   private async assertTaxonomyRules(
     payload: Partial<CreateInvestmentAssetTaxonomyDto>,
@@ -16,6 +66,8 @@ export class InvestmentAssetTaxonomyService {
     const normalizedLabel = String(payload.label || '').trim().toLowerCase();
     const resolvedParentId = payload.parentId == null ? null : Number(payload.parentId);
     const resolvedLevel = Number(payload.level);
+    const defaultAssetType = String(payload.defaultAssetType || '').trim().toUpperCase();
+    const defaultAssetCategory = String(payload.defaultAssetCategory || '').trim().toUpperCase();
 
     if (resolvedLevel > 1 && !resolvedParentId) {
       throw new BadRequestException({
@@ -62,6 +114,31 @@ export class InvestmentAssetTaxonomyService {
       throw new BadRequestException({
         message: 'Label already exists under the selected parent',
         field: 'label',
+      });
+    }
+
+    if (defaultAssetCategory && !defaultAssetType) {
+      throw new BadRequestException({
+        message: 'Default asset type is required when a default asset category is set',
+        field: 'defaultAssetType',
+      });
+    }
+
+    if (defaultAssetType && !(await this.getInvestmentAssetTypeConfigByCode(defaultAssetType))) {
+      throw new BadRequestException({
+        message: 'Unsupported default asset type',
+        field: 'defaultAssetType',
+      });
+    }
+
+    if (
+      defaultAssetType &&
+      defaultAssetCategory &&
+      !(await this.isValidInvestmentClassification(defaultAssetType, defaultAssetCategory))
+    ) {
+      throw new BadRequestException({
+        message: 'Default asset category is not valid for the selected default asset type',
+        field: 'defaultAssetCategory',
       });
     }
   }

@@ -1,9 +1,21 @@
 import type { InvestmentEventType } from '../../../types/investmentEventTypes';
 
 export type InvestmentStatus = "active" | "matured" | "closed";
+export type InvestmentContributionMode = "ONE_TIME" | "RECURRING";
 
-export interface InvestmentDocumentsMeta {
-	documents: string[];
+export interface InvestmentAssetCategoryConfig {
+	code: string;
+	label: string;
+}
+
+export interface InvestmentAssetTypeConfig {
+	code: string;
+	label: string;
+	categories: InvestmentAssetCategoryConfig[];
+}
+
+export interface InvestmentMetadataResponse {
+	asset_configs: InvestmentAssetTypeConfig[];
 }
 
 export interface InvestmentContributionPlan {
@@ -82,13 +94,11 @@ export interface InvestmentBase {
 	status: InvestmentStatus;
 	maturityDate?: string | null;
 	currency?: string;
-	holdingMode?: string | null;
+	contributionMode?: InvestmentContributionMode;
 	currentValueSource?: string | null;
 	lastValuationAt?: string | null;
 	insuranceCover?: number;
 	referenceNumber?: string | null;
-	documentsMeta?: InvestmentDocumentsMeta | null;
-	documents?: string;
 	notes?: string | null;
 	createdAt?: string;
 	updatedAt?: string;
@@ -143,13 +153,6 @@ export interface InvestmentDashboardSummaryPayload {
 	};
 }
 
-export interface InvestmentDashboardCategoryBreakdownItem {
-	key: string;
-	invested: number;
-	currentValue: number;
-	holdings: number;
-	investmentIds: Array<string | number>;
-}
 
 export interface InvestmentDashboardSeriesPoint {
 	label: string;
@@ -171,6 +174,7 @@ export interface InvestmentDashboardPortfolioGrowthPoint {
 
 export interface InvestmentDashboardCategoryPerformanceRow {
 	key: string;
+	assetType?: string;
 	label: string;
 	holdings: number;
 	invested: number;
@@ -194,12 +198,12 @@ export interface InvestmentDashboardAnalyticsPayload {
 		yearly: InvestmentDashboardSeriesPoint[];
 		monthlyByYear: Record<string, InvestmentDashboardSeriesPoint[]>;
 	};
-	categoryPerformanceRows: InvestmentDashboardCategoryPerformanceRow[];
+	categoryPerformance: InvestmentDashboardCategoryPerformanceRow[];
+	categorySubPerformance: InvestmentDashboardCategoryPerformanceRow[];
 }
 
 export interface InvestmentDashboardAnalyticsResponse {
 	summary: InvestmentDashboardSummaryPayload;
-	categoryBreakdown: InvestmentDashboardCategoryBreakdownItem[];
 	upcoming: InvestmentDashboardUpcomingPayload;
 	analytics: InvestmentDashboardAnalyticsPayload;
 }
@@ -226,12 +230,11 @@ export interface CreateInvestmentDto {
 	status: InvestmentStatus;
 	maturityDate?: string | null;
 	currency?: string;
-	holdingMode?: string | null;
+	contributionMode: InvestmentContributionMode;
 	currentValueSource?: string | null;
 	lastValuationAt?: string | null;
 	insuranceCover?: number;
 	referenceNumber?: string | null;
-	documentsMeta?: InvestmentDocumentsMeta | null;
 	notes?: string | null;
 }
 

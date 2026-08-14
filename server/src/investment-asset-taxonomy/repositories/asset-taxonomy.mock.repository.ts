@@ -38,6 +38,8 @@ export class AssetTaxonomyMockRepository implements IAssetTaxonomyDataSourcePort
       nodeType: data.nodeType,
       level: Number(data.level),
       parentId,
+      defaultAssetType: data.defaultAssetType ?? null,
+      defaultAssetCategory: data.defaultAssetCategory ?? null,
       sortOrder: Number(data.sortOrder ?? 0),
       isActive: data.isActive ?? true,
       createdAt: timestamp,

@@ -4,7 +4,7 @@ import type { SxProps, Theme } from '@mui/material/styles';
 import EmptyState from './EmptyState';
 
 interface SectionCardProps {
-  title?: string;
+  title?: React.ReactNode;
   subtitle?: string;
   action?: React.ReactNode;
   children: React.ReactNode;
@@ -34,7 +34,7 @@ export default function SectionCard({
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
           <Box>
             {title ? (
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
                 {title}
               </Typography>
             ) : null}

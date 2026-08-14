@@ -40,6 +40,11 @@ enum InvestmentEventType {
   WITHDRAWAL_PRINCIPAL
 }
 
+enum InvestmentContributionMode {
+  ONE_TIME
+  RECURRING
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   userId    String?  @unique @db.VarChar(30)
@@ -163,15 +168,38 @@ model FinancialAccount {
   @@map("financial_accounts")
 }
 
+model AppMetaConfigRef {
+  id          Int      @id @default(autoincrement())
+  module      String
+  configType  String
+  parentId    Int?
+  code        String   @unique
+  label       String
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent                        AppMetaConfigRef?         @relation("AppMetaConfigTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children                      AppMetaConfigRef[]        @relation("AppMetaConfigTree")
+  investmentsByAssetType        Investment[]              @relation("InvestmentAssetTypeRef")
+  investmentsByAssetCategory    Investment[]              @relation("InvestmentAssetCategoryRef")
+  taxonomyDefaultAssetTypes     InvestmentAssetTaxonomy[] @relation("InvestmentTaxonomyDefaultAssetTypeRef")
+  taxonomyDefaultAssetCategories InvestmentAssetTaxonomy[] @relation("InvestmentTaxonomyDefaultAssetCategoryRef")
+
+  @@index([module, configType])
+  @@index([parentId])
+  @@map("app_meta_config_ref")
+}
+
 model Investment {
   id                  Int      @id @default(autoincrement())
   userId              Int
   accountId           Int?
   assetTaxonomyId     Int?
+  assetTypeMetaId     Int
+  assetCategoryMetaId Int
   name                String
-  assetType           String
-  assetCategory       String
-  holdingMode         String?
   institutionName     String?
   referenceNumber     String?
   status              String
@@ -183,15 +211,16 @@ model Investment {
   currentValueSource  String?
   lastValuationAt     DateTime?
   insuranceCover      Float?
-  contributionMode    String?
+  contributionMode    InvestmentContributionMode @default(ONE_TIME)
   notes               String?
-  documentsMeta       Json?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   user               User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   primaryAccount     FinancialAccount?        @relation("PrimaryInvestmentAccount", fields: [accountId], references: [id], onDelete: SetNull)
   assetTaxonomy      InvestmentAssetTaxonomy? @relation(fields: [assetTaxonomyId], references: [id], onDelete: SetNull)
+  assetTypeRef       AppMetaConfigRef         @relation("InvestmentAssetTypeRef", fields: [assetTypeMetaId], references: [id], onDelete: Restrict)
+  assetCategoryRef   AppMetaConfigRef         @relation("InvestmentAssetCategoryRef", fields: [assetCategoryMetaId], references: [id], onDelete: Restrict)
   investmentEvents   InvestmentEvent[]
   contributionPlans  InvestmentContributionPlan[]
   valuationSnapshots ValuationSnapshot[]
@@ -199,6 +228,8 @@ model Investment {
   @@index([userId])
   @@index([accountId])
   @@index([assetTaxonomyId])
+  @@index([assetTypeMetaId])
+  @@index([assetCategoryMetaId])
   @@map("investments")
 }
 
@@ -209,6 +240,8 @@ model InvestmentAssetTaxonomy {
   nodeType    String
   level       Int
   parentId    Int?
+  defaultAssetTypeMetaId Int?
+  defaultAssetCategoryMetaId Int?
   sortOrder   Int      @default(0)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -217,12 +250,16 @@ model InvestmentAssetTaxonomy {
   user        User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   parent      InvestmentAssetTaxonomy?  @relation("InvestmentAssetTaxonomyTree", fields: [parentId], references: [id], onDelete: SetNull)
   children    InvestmentAssetTaxonomy[] @relation("InvestmentAssetTaxonomyTree")
+  defaultAssetTypeRef AppMetaConfigRef?  @relation("InvestmentTaxonomyDefaultAssetTypeRef", fields: [defaultAssetTypeMetaId], references: [id], onDelete: SetNull)
+  defaultAssetCategoryRef AppMetaConfigRef? @relation("InvestmentTaxonomyDefaultAssetCategoryRef", fields: [defaultAssetCategoryMetaId], references: [id], onDelete: SetNull)
   investments Investment[]
 
   @@index([userId])
   @@index([parentId])
   @@index([nodeType])
   @@index([level])
+  @@index([defaultAssetTypeMetaId])
+  @@index([defaultAssetCategoryMetaId])
   @@map("investment_asset_taxonomy")
 }
 

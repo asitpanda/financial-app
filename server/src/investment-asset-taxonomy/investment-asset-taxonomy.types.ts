@@ -7,6 +7,10 @@ export type InvestmentAssetTaxonomyRecord = {
   nodeType: string;
   parentId: number | null;
   level: number;
+  defaultAssetTypeMetaId?: number | null;
+  defaultAssetCategoryMetaId?: number | null;
+  defaultAssetType?: string | null;
+  defaultAssetCategory?: string | null;
   sortOrder: number;
   isActive: boolean;
   createdAt: Date;

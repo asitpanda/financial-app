@@ -7,10 +7,11 @@ export type InvestmentRecord = {
   userId: number;
   accountId: number | null;
   assetTaxonomyId: number | null;
+  assetTypeMetaId: number;
+  assetCategoryMetaId: number;
   name: string;
   assetType: string;
   assetCategory: string;
-  holdingMode: string | null;
   institutionName: string | null;
   referenceNumber: string | null;
   status: string;
@@ -22,9 +23,8 @@ export type InvestmentRecord = {
   currentValueSource: string | null;
   lastValuationAt: Date | null;
   insuranceCover: number | null;
-  contributionMode: string | null;
+  contributionMode: string;
   notes: string | null;
-  documentsMeta: Record<string, unknown> | null;
   createdAt: Date;
   updatedAt: Date;
 };

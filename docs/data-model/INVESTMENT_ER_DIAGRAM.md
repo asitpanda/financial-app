@@ -115,7 +115,6 @@ erDiagram
         string name
         string assetType
         string assetCategory
-        string holdingMode
         string institutionName
         string referenceNumber
         string status
@@ -128,7 +127,6 @@ erDiagram
         datetime lastValuationAt
         float insuranceCover
         string contributionMode
-        json documentsMeta
         string notes
         datetime createdAt
         datetime updatedAt

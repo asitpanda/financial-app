@@ -4,6 +4,7 @@ import type {
   InvestmentDashboardAnalyticsResponse,
   Investment,
   InvestmentDetailShell,
+  InvestmentMetadataResponse,
   InvestmentPerformancePayload,
   UpdateInvestmentDto,
 } from '../types/investment.types';
@@ -29,6 +30,11 @@ export const getInvestmentPerformanceById = async (
 
 export const getInvestmentDashboardAnalytics = async (): Promise<InvestmentDashboardAnalyticsResponse> => {
   const response = await apiClient.get('/investments/dashboard');
+  return response.data;
+};
+
+export const getInvestmentMetadata = async (): Promise<InvestmentMetadataResponse> => {
+  const response = await apiClient.get('/investments/metadata');
   return response.data;
 };
 
@@ -59,6 +65,7 @@ export const investmentApi = {
   getById: getInvestmentById,
   getPerformanceById: getInvestmentPerformanceById,
   getDashboardAnalytics: getInvestmentDashboardAnalytics,
+  getMetadata: getInvestmentMetadata,
   create: createInvestment,
   update: updateInvestment,
   delete: deleteInvestment,

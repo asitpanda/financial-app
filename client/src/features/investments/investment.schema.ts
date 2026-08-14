@@ -22,8 +22,8 @@ export const investmentSchema = z
       z.string().min(1, "Account is required")
     ),
     name: z.string().trim().min(1, "Investment name is required"),
-    type: z.string().optional(),
-    category: z.string().optional(),
+    type: z.string().trim().min(1, "Investment type is required"),
+    category: z.string().trim().min(1, "Investment category is required"),
     assetTaxonomyId: z.preprocess(
       (value) => (value === "" || value === undefined ? null : value),
       z.union([z.string(), z.number()]).nullable().optional()
@@ -51,18 +51,9 @@ export const investmentSchema = z
       (value) => (value === "" || value === null || value === undefined ? undefined : Number(value)),
       z.number().min(0, "Insurance cover cannot be negative").optional()
     ),
-    documents: z.string().optional(),
     notes: z.string().optional(),
   })
   .superRefine((values, ctx) => {
-    if (!values.assetTaxonomyId && !String(values.type || "").trim()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["type"],
-        message: "Investment type is required",
-      });
-    }
-
     if (
       values.startDate &&
       values.maturityDate &&

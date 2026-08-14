@@ -23,5 +23,6 @@ import { createProviderBackedBinding } from '../database/db-provider';
     AssetTaxonomyRepository,
     InvestmentAssetTaxonomyService,
   ],
+  exports: [AssetTaxonomyRepository],
 })
 export class InvestmentAssetTaxonomyModule {}

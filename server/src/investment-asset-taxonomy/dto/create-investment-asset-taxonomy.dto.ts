@@ -28,6 +28,16 @@ export class CreateInvestmentAssetTaxonomyDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
+  @IsString()
+  defaultAssetType?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  defaultAssetCategory?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)

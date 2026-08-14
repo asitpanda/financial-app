@@ -64,23 +64,6 @@ export class InvestmentDashboardSummaryDto {
   valueSourceSummary: InvestmentValueSourceSummaryDto;
 }
 
-export class InvestmentDashboardCategoryBreakdownItemDto {
-  @ApiProperty()
-  key: string;
-
-  @ApiProperty()
-  invested: number;
-
-  @ApiProperty()
-  currentValue: number;
-
-  @ApiProperty()
-  holdings: number;
-
-  @ApiProperty({ type: [String] })
-  investmentIds: Array<string | number>;
-}
-
 export class InvestmentDashboardUpcomingItemDto {
   @ApiProperty({ type: 'object', additionalProperties: true })
   item: Record<string, unknown>;
@@ -158,6 +141,9 @@ export class InvestmentDashboardCategoryPerformanceRowDto {
   @ApiProperty()
   key: string;
 
+  @ApiProperty({ required: false })
+  assetType?: string;
+
   @ApiProperty()
   label: string;
 
@@ -191,15 +177,15 @@ export class InvestmentDashboardAnalyticsDto {
   timeSeries: InvestmentDashboardTimeSeriesDto;
 
   @ApiProperty({ type: [InvestmentDashboardCategoryPerformanceRowDto] })
-  categoryPerformanceRows: InvestmentDashboardCategoryPerformanceRowDto[];
+  categoryPerformance: InvestmentDashboardCategoryPerformanceRowDto[];
+
+  @ApiProperty({ type: [InvestmentDashboardCategoryPerformanceRowDto] })
+  categorySubPerformance: InvestmentDashboardCategoryPerformanceRowDto[];
 }
 
 export class InvestmentDashboardAnalyticsResponseDto {
   @ApiProperty({ type: InvestmentDashboardSummaryDto })
   summary: InvestmentDashboardSummaryDto;
-
-  @ApiProperty({ type: [InvestmentDashboardCategoryBreakdownItemDto] })
-  categoryBreakdown: InvestmentDashboardCategoryBreakdownItemDto[];
 
   @ApiProperty({ type: InvestmentDashboardUpcomingDto })
   upcoming: InvestmentDashboardUpcomingDto;

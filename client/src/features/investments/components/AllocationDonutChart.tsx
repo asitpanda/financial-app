@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Box, Stack, Typography } from "@mui/material";
 import AppButton from "../../../components/common/AppButton";
+import Icon from "@mdi/react";
+import { mdiChevronLeft, mdiChevronRight } from "@mdi/js";
 import type { InvestmentAllocationSegment } from "../investments.selectors";
 
 const DONUT_PALETTE = [
@@ -26,6 +28,8 @@ interface AllocationDonutChartProps {
   total: number;
   formatValue: (value: number) => string;
   returnData?: InvestmentAllocationSegment[];
+  subData?: InvestmentAllocationSegment[];
+  subReturnData?: InvestmentAllocationSegment[];
   onSelectSegment?: (
     segment: InvestmentAllocationSegment,
     mode: AllocationMode,
@@ -37,10 +41,25 @@ export default function AllocationDonutChart({
   total,
   formatValue,
   returnData,
+  subData,
+  subReturnData,
   onSelectSegment,
 }: AllocationDonutChartProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [mode, setMode] = useState<AllocationMode>("invested");
+  const [drilledType, setDrilledType] = useState<string | null>(null);
+
+  const drilledTypeLabel = drilledType
+    ? (data.find((s) => s.key === drilledType)?.label ?? drilledType)
+    : null;
+
+  // resolve the active dataset based on drill state and mode
+  const resolvedData = drilledType
+    ? (subData ?? []).filter((s) => s.assetType === drilledType)
+    : data;
+  const resolvedReturnData = drilledType
+    ? (subReturnData ?? []).filter((s) => s.assetType === drilledType)
+    : returnData;
   const size = 200;
   const cx = size / 2;
   const cy = size / 2;
@@ -48,16 +67,26 @@ export default function AllocationDonutChart({
   const innerR = 50;
   const gap = 0.018;
 
-  const hasReturnMode = Array.isArray(returnData) && returnData.length > 0;
-  const dataset = mode === "return" && hasReturnMode ? returnData : data;
+  const hasReturnMode = Array.isArray(resolvedReturnData) && resolvedReturnData.length > 0;
+  const dataset = mode === "return" && hasReturnMode ? resolvedReturnData : resolvedData;
   const totalFromData = dataset.reduce(
     (sum, item) => sum + Math.abs(Number(item.value || 0)),
     0,
   );
   const resolvedTotal = Math.max(totalFromData || Math.abs(total) || 1, 1);
   const netReturn = hasReturnMode
-    ? returnData!.reduce((sum, item) => sum + Number(item.value || 0), 0)
+    ? resolvedReturnData!.reduce((sum, item) => sum + Number(item.value || 0), 0)
     : 0;
+
+  const handleSegmentClick = (segment: InvestmentAllocationSegment) => {
+    // top-level click: drill if sub-categories exist, otherwise focus
+    if (!drilledType && (subData ?? []).some((s) => s.assetType === segment.key)) {
+      setActiveIndex(null);
+      setDrilledType(segment.key);
+      return;
+    }
+    onSelectSegment?.(segment, mode);
+  };
   let cumAngle = -Math.PI / 2;
   let positiveIndex = 0;
   let negativeIndex = 0;
@@ -112,6 +141,23 @@ export default function AllocationDonutChart({
   return (
     <Stack spacing={2} sx={{ width: "100%", minWidth: 0, alignItems: "stretch" }}>
       <Stack spacing={1} sx={{ width: "100%", alignItems: "center" }}>
+        {drilledType ? (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, alignSelf: "flex-start" }}>
+            <AppButton
+              size="small"
+              variant="text"
+              onClick={() => { setDrilledType(null); setActiveIndex(null); }}
+              sx={{ minWidth: 0, px: 0.5 }}
+            >
+              <Icon path={mdiChevronLeft} size={0.75} />
+              Back
+            </AppButton>
+            <Icon path={mdiChevronRight} size={0.65} style={{ opacity: 0.4 }} />
+            <Typography variant="caption" sx={{ fontWeight: 600 }}>
+              {drilledTypeLabel}
+            </Typography>
+          </Box>
+        ) : null}
         {hasReturnMode ? (
           <Box
             sx={{
@@ -156,10 +202,10 @@ export default function AllocationDonutChart({
                 d={segment.d}
                 fill={segment.color}
                 opacity={activeIndex === null || activeIndex === index ? 1 : 0.35}
-                style={{ cursor: onSelectSegment ? "pointer" : "default", transition: "opacity 0.15s" }}
+                style={{ cursor: onSelectSegment || !drilledType ? "pointer" : "default", transition: "opacity 0.15s" }}
                 onMouseEnter={() => setActiveIndex(index)}
                 onMouseLeave={() => setActiveIndex(null)}
-                onClick={() => onSelectSegment?.(segment, mode)}
+                onClick={() => handleSegmentClick(segment)}
               />
             ))}
             <text
@@ -206,9 +252,11 @@ export default function AllocationDonutChart({
         }}
       >
         <Typography variant="caption" color="text.secondary">
-          {mode === "return"
-            ? "Return mode sizes categories by absolute gain or loss and colors them by contribution direction."
-            : "Invested mode shows how principal is distributed across categories."}
+          {drilledType
+            ? `${drilledTypeLabel} categories — click a segment to focus matching assets.`
+            : mode === "return"
+              ? "Return mode sizes asset types by absolute gain or loss and colors them by contribution direction."
+              : "Invested mode shows how principal is distributed across asset types."}
         </Typography>
         {segments.map((segment, index) => (
           <Box
@@ -223,13 +271,13 @@ export default function AllocationDonutChart({
               px: 1,
               py: 0.5,
               borderRadius: 1,
-              cursor: onSelectSegment ? "pointer" : "default",
+              cursor: onSelectSegment || !drilledType ? "pointer" : "default",
               opacity: activeIndex === null || activeIndex === index ? 1 : 0.45,
               transition: "opacity 0.15s",
               backgroundColor:
                 activeIndex === index ? "action.hover" : "transparent",
             }}
-            onClick={() => onSelectSegment?.(segment, mode)}
+            onClick={() => handleSegmentClick(segment)}
           >
             <Box
               sx={{
@@ -240,9 +288,14 @@ export default function AllocationDonutChart({
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ flex: 1, fontWeight: 600 }}>
-              {segment.label}
-            </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flex: 1, minWidth: 0 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {segment.label}
+              </Typography>
+              {!drilledType && (subData ?? []).some((s) => s.assetType === segment.key) && (
+                <Icon path={mdiChevronRight} size={0.6} style={{ opacity: 0.45, flexShrink: 0 }} />
+              )}
+            </Box>
             <Typography
               variant="body2"
               color="text.secondary"

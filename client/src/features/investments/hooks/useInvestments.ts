@@ -11,6 +11,8 @@ import { removeInvestment, saveInvestment } from '../service/investments.service
 import type {
   CreateInvestmentDto,
   InvestmentDashboardAnalyticsResponse,
+  InvestmentAssetTypeConfig,
+  InvestmentMetadataResponse,
   UpdateInvestmentDto,
 } from '../types/investment.types';
 import type { InvestmentAssetTaxonomyNode } from '../types/investmentAssetTaxonomy.types';
@@ -18,11 +20,25 @@ import type { InvestmentAssetTaxonomyNode } from '../types/investmentAssetTaxono
 interface InvestmentReferenceData {
   taxonomyNodes: InvestmentAssetTaxonomyNode[];
   accounts: FinancialAccountRecord[];
+  assetTypeConfigs: InvestmentAssetTypeConfig[];
 }
 
+const INVESTMENT_METADATA_QUERY_KEY = ['investments', 'metadata'] as const;
+
+const getMetadataQueryOptions = {
+  queryKey: INVESTMENT_METADATA_QUERY_KEY,
+  queryFn: () => investmentApi.getMetadata(),
+  staleTime: Infinity,
+  gcTime: Infinity,
+  refetchOnMount: false,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
+} as const;
+
 const invalidateInvestmentSummaryQueries = (queryClient: ReturnType<typeof useQueryClient>) => {
-  queryClient.invalidateQueries({ queryKey: ['investments'] });
-  queryClient.invalidateQueries({ queryKey: ['investments', 'dashboard'] });
+  queryClient.invalidateQueries({ queryKey: ['investments'], exact: true });
+  queryClient.invalidateQueries({ queryKey: ['investments', 'dashboard'], exact: true });
+  queryClient.invalidateQueries({ queryKey: ['investments', 'reference-data'], exact: true });
 };
 
 const invalidateInvestmentDetailQuery = (
@@ -96,20 +112,45 @@ export const useInvestmentDashboardAnalytics = (enabled = true) => {
   });
 };
 
+export const useInvestmentMetadata = (enabled = true) => {
+  return useQuery<InvestmentMetadataResponse>({
+    ...getMetadataQueryOptions,
+    enabled,
+  });
+};
+
 export const useInvestmentReferenceData = () => {
   const pushNotification = useNotificationStore((state) => state.pushNotification);
+  const queryClient = useQueryClient();
 
   const query = useQuery<InvestmentReferenceData>({
     queryKey: ['investments', 'reference-data'],
     queryFn: async () => {
-      const [taxonomyNodes, accounts] = await Promise.all([
+      const [taxonomyNodesResult, accountsResult, metadataResult] = await Promise.allSettled([
         investmentAssetTaxonomyApi.getAll(),
         getFinancialAccounts(),
+        queryClient.fetchQuery(getMetadataQueryOptions),
       ]);
 
+      const taxonomyNodes =
+        taxonomyNodesResult.status === 'fulfilled' && Array.isArray(taxonomyNodesResult.value)
+          ? taxonomyNodesResult.value
+          : [];
+      const accounts =
+        accountsResult.status === 'fulfilled' && Array.isArray(accountsResult.value)
+          ? accountsResult.value
+          : [];
+      const metadata =
+        metadataResult.status === 'fulfilled' ? metadataResult.value : undefined;
+      const assetConfigs =
+        (metadata as InvestmentMetadataResponse | undefined)?.asset_configs;
+
       return {
-        taxonomyNodes: Array.isArray(taxonomyNodes) ? taxonomyNodes : [],
-        accounts: Array.isArray(accounts) ? accounts : [],
+        taxonomyNodes,
+        accounts,
+        assetTypeConfigs: Array.isArray(assetConfigs)
+          ? assetConfigs
+          : [],
       };
     },
   });
@@ -122,6 +163,7 @@ export const useInvestmentReferenceData = () => {
   return {
     taxonomyNodes: query.data?.taxonomyNodes || [],
     accounts: query.data?.accounts || [],
+    assetTypeConfigs: query.data?.assetTypeConfigs || [],
     loading: query.isLoading,
     error: query.error,
     reload: query.refetch,

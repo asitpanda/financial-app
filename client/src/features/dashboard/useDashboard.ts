@@ -9,7 +9,7 @@ import { getInvestments } from '../investments/api/investments.api';
 import { getTransactions } from '../transactions/transactions.api';
 
 const loadDashboardPageData = async () => {
-  const [transactions, goals, categories, accounts, investments, taxonomyNodes] = await Promise.all([
+  const [transactionsResult, goalsResult, categoriesResult, accountsResult, investmentsResult, taxonomyNodesResult] = await Promise.allSettled([
     getTransactions(),
     getGoals(),
     getCategories(),
@@ -17,6 +17,18 @@ const loadDashboardPageData = async () => {
     getInvestments(),
     getInvestmentAssetTaxonomy(),
   ]);
+
+  const transactions =
+    transactionsResult.status === 'fulfilled' ? transactionsResult.value : [];
+  const goals = goalsResult.status === 'fulfilled' ? goalsResult.value : [];
+  const categories =
+    categoriesResult.status === 'fulfilled' ? categoriesResult.value : [];
+  const accounts =
+    accountsResult.status === 'fulfilled' ? accountsResult.value : [];
+  const investments =
+    investmentsResult.status === 'fulfilled' ? investmentsResult.value : [];
+  const taxonomyNodes =
+    taxonomyNodesResult.status === 'fulfilled' ? taxonomyNodesResult.value : [];
 
   return {
     transactions: Array.isArray(transactions) ? transactions : [],

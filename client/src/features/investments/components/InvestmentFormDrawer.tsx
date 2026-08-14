@@ -30,7 +30,6 @@ import {
   buildFormFromInvestment,
   createEmptyInvestmentForm,
   getInvestmentTypeDisplayLabel,
-  getInvestmentTypeMeta,
   getInvestmentTypeTreeItems,
   STATUS_OPTIONS,
 } from "../../../utils/investmentHelpers";
@@ -83,6 +82,7 @@ const getOpeningEventAmounts = (investment) => {
  *   onSubmit: (value: unknown) => unknown,
  *   initialValues?: InvestmentDrawerData | null,
  *   accounts?: unknown[],
+ *   assetTypeConfigs?: unknown[],
  *   taxonomyNodes?: unknown[],
  *   title?: string,
  *   submitLabel?: string,
@@ -95,6 +95,7 @@ export default function InvestmentFormDrawer({
   onSubmit,
   initialValues = null,
   accounts = [],
+  assetTypeConfigs = [],
   taxonomyNodes = [],
   title = "Add Investment",
   submitLabel = "Add",
@@ -210,26 +211,17 @@ export default function InvestmentFormDrawer({
   useEffect(() => {
     if (!open) return;
     setForm((current) => {
-      if (current.assetTaxonomyId || current.type) return current;
-      const firstType = taxonomyNodes
-        .filter((node) => node?.isActive !== false && Number(node.level) > 1)
-        .sort((left, right) => {
-          if (Number(left.level || 0) !== Number(right.level || 0))
-            return Number(left.level || 0) - Number(right.level || 0);
-          if (Number(left.sortOrder || 0) !== Number(right.sortOrder || 0))
-            return Number(left.sortOrder || 0) - Number(right.sortOrder || 0);
-          return left.label.localeCompare(right.label);
-        })[0];
-      if (!firstType) return current;
-      const firstTypeMeta = getInvestmentTypeMeta(firstType.id, taxonomyNodes);
+      if (current.type && current.category) return current;
+      const firstType = Array.isArray(assetTypeConfigs) ? assetTypeConfigs[0] : null;
+      const firstCategory = firstType?.categories?.[0] || null;
+      if (!firstType || !firstCategory) return current;
       return {
         ...current,
-        type: firstTypeMeta.type,
-        category: firstTypeMeta.category,
-        assetTaxonomyId: firstTypeMeta.id,
+        type: firstType.code,
+        category: firstCategory.code,
       };
     });
-  }, [open, taxonomyNodes]);
+  }, [assetTypeConfigs, open]);
 
   const investmentTypeTreeItems = useMemo(
     () => getInvestmentTypeTreeItems(taxonomyNodes),
@@ -265,11 +257,16 @@ export default function InvestmentFormDrawer({
   const handleFormChange = (field, value) => {
     setForm((current) => {
       const nextForm = { ...current, [field]: value };
-      if (field === "assetTaxonomyId" || field === "type") {
-        const nextTypeMeta = getInvestmentTypeMeta(value, taxonomyNodes);
-        nextForm.type = nextTypeMeta.type;
-        nextForm.category = nextTypeMeta.category;
-        nextForm.assetTaxonomyId = nextTypeMeta.id;
+      if (field === "type") {
+        const nextTypeConfig = assetTypeConfigs.find(
+          (typeConfig) => String(typeConfig.code) === String(value),
+        );
+        const nextCategoryCodes = (nextTypeConfig?.categories || []).map(
+          (categoryConfig) => String(categoryConfig.code),
+        );
+        if (!nextCategoryCodes.includes(String(current.category || ""))) {
+          nextForm.category = nextTypeConfig?.categories?.[0]?.code || "";
+        }
       }
       return nextForm;
     });
@@ -392,46 +389,50 @@ export default function InvestmentFormDrawer({
   const handleConfirmInvestmentType = () => {
     if (!pendingTypeNodeId) return;
 
-    const nextTypeMeta = getInvestmentTypeMeta(
-      pendingTypeNodeId,
-      taxonomyNodes,
-    );
-    if (!nextTypeMeta.id) return;
-
     setForm((current) => ({
       ...current,
-      type: nextTypeMeta.type,
-      category: nextTypeMeta.category,
-      assetTaxonomyId: nextTypeMeta.id,
+      assetTaxonomyId: pendingTypeNodeId,
     }));
-
-    setErrors((current) => {
-      if (!current.type) return current;
-      const nextErrors = { ...current };
-      delete nextErrors.type;
-      return nextErrors;
-    });
 
     setTypePickerOpen(false);
     setPendingTypeNodeId(null);
   };
 
-  const currentTypeMeta = getInvestmentTypeMeta(
-    form.assetTaxonomyId || form.type,
+  const selectedTypeConfig = assetTypeConfigs.find(
+    (typeConfig) => String(typeConfig.code) === String(form.type || ""),
+  );
+  const categoryOptions = [
+    { value: "", label: "Select category" },
+    ...(selectedTypeConfig?.categories || []).map((categoryConfig) => ({
+      value: categoryConfig.code,
+      label: categoryConfig.label,
+    })),
+  ];
+  const selectedCategoryConfig = (selectedTypeConfig?.categories || []).find(
+    (categoryConfig) =>
+      String(categoryConfig.code) === String(form.category || ""),
+  );
+  const currentBucketDisplayLabel = getInvestmentTypeDisplayLabel(
+    form.assetTaxonomyId,
     taxonomyNodes,
   );
-  const currentTypeDisplayLabel = getInvestmentTypeDisplayLabel(
-    form.assetTaxonomyId || form.type,
-    taxonomyNodes,
-  );
-  const isInsurance = currentTypeMeta.category === "insurance";
+  const isInsurance = String(form.type || "") === "INSURANCE";
   const referenceLabel = isInsurance
     ? "Policy Number"
-    : currentTypeMeta.type === "Mutual Fund"
+    : ["MUTUAL_FUND", "DEBT_MUTUAL_FUND", "INDEX_FUND"].includes(
+          String(form.category || ""),
+        )
       ? "Folio Number"
-      : currentTypeMeta.type === "Stocks"
+      : ["STOCK", "ETF"].includes(String(form.category || ""))
         ? "Demat / ISIN Reference"
         : "Account / Certificate Reference";
+  const assetTypeOptions = [
+    { value: "", label: "Select type" },
+    ...assetTypeConfigs.map((typeConfig) => ({
+      value: typeConfig.code,
+      label: typeConfig.label,
+    })),
+  ];
 
   const contributionChoices = [
     {
@@ -458,7 +459,6 @@ export default function InvestmentFormDrawer({
     recurringPlan.historicalImportMode === "OPENING_BALANCE";
   const showHistoricalModeSelector =
     isRecurring && pastInvestmentChoice === "yes";
-  const showHistoricalExplanation = false;
   const showOpeningInputs = showHistoricalModeSelector && isOpeningBalanceMode;
   const seedPrincipalAmount = Number(form.totalInvested || 0);
   const openingPrincipalAmount = Number(
@@ -559,60 +559,95 @@ export default function InvestmentFormDrawer({
           subtitle="Keep the drawer on one screen, but shape the top of the form like the wireframe so type and contribution decisions happen first."
         >
           <Stack spacing={2}>
-            {investmentTypeTreeItems.length ? (
-              <Paper
-                variant="outlined"
-                sx={{
-                  p: 1.75,
-                  borderRadius: 1,
-                  borderColor: errors.type ? "error.main" : "divider",
-                  background: (theme) =>
-                    currentTypeDisplayLabel
-                      ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${theme.palette.background.paper} 100%)`
-                      : theme.palette.background.paper,
-                }}
-              >
-                <Stack spacing={1.25}>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "flex-start",
-                      justifyContent: "space-between",
-                      gap: 1.5,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        Investment Type
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 1.75,
+                borderRadius: 1,
+                borderColor: errors.type ? "error.main" : "divider",
+                background: (theme) =>
+                  currentBucketDisplayLabel
+                    ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${theme.palette.background.paper} 100%)`
+                    : theme.palette.background.paper,
+              }}
+            >
+              <Stack spacing={1.5}>
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: {
+                      xs: "1fr",
+                      md: "repeat(2, minmax(0, 1fr))",
+                    },
+                    gap: 1.5,
+                  }}
+                >
+                  <LabeledSelectField
+                    labelText="Asset Type"
+                    value={form.type}
+                    onChange={(event) =>
+                      handleFormChange("type", event.target.value)
+                    }
+                    options={assetTypeOptions}
+                    errorMessage={errors.type}
+                    helperText={
+                      assetTypeOptions.length > 1
+                        ? "Server-owned investment types."
+                        : "No investment metadata loaded yet."
+                    }
+                  />
+                  <LabeledSelectField
+                    labelText="Asset Category"
+                    value={form.category}
+                    onChange={(event) =>
+                      handleFormChange("category", event.target.value)
+                    }
+                    options={categoryOptions}
+                    errorMessage={errors.category}
+                    helperText={
+                      selectedTypeConfig
+                        ? "Categories are filtered by the selected asset type."
+                        : "Select an asset type first."
+                    }
+                  />
+                </Box>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                    gap: 1.5,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      Bucket / Taxonomy
+                    </Typography>
+                    <Typography sx={{ fontWeight: 700, mt: 0.35 }}>
+                      {currentBucketDisplayLabel || "Optional organizational bucket"}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+                      {selectedTypeConfig && selectedCategoryConfig
+                        ? `${selectedTypeConfig.label} / ${selectedCategoryConfig.label} is the saved classification. Taxonomy is only an optional grouping bucket.`
+                        : "Select type and category first, then optionally attach a taxonomy bucket."}
+                    </Typography>
+                    {!investmentTypeTreeItems.length ? (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+                        No asset taxonomy is available yet. Type and category still work without it.
                       </Typography>
-                      <Typography sx={{ fontWeight: 700, mt: 0.35 }}>
-                        {currentTypeDisplayLabel || "Choose an asset node"}
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        color={errors.type ? "error.main" : "text.secondary"}
-                        sx={{ mt: 0.75 }}
-                      >
-                        {errors.type ||
-                          "Pick a node from the asset taxonomy tree instead of a flat dropdown."}
-                      </Typography>
-                    </Box>
-                    <AppButton
-                      variant="outlined"
-                      onClick={() => setTypePickerOpen(true)}
-                    >
-                      Select From Tree
-                    </AppButton>
+                    ) : null}
                   </Box>
-                </Stack>
-              </Paper>
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                No asset taxonomy is available yet. Add taxonomy records from
-                the asset tab first.
-              </Typography>
-            )}
+                  <AppButton
+                    variant="outlined"
+                    onClick={() => setTypePickerOpen(true)}
+                    disabled={!investmentTypeTreeItems.length}
+                  >
+                    Choose Bucket
+                  </AppButton>
+                </Box>
+              </Stack>
+            </Paper>
 
             <Box
               sx={{
@@ -1063,11 +1098,11 @@ export default function InvestmentFormDrawer({
           },
         }}
       >
-        <DialogTitle>Select Investment Type</DialogTitle>
+        <DialogTitle>Select Taxonomy Bucket</DialogTitle>
         <DialogContent dividers sx={{ p: 0 }}>
           <Box sx={{ px: 3, py: 2 }}>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Choose any non-root node from the asset taxonomy hierarchy.
+              Choose any non-root node from the asset taxonomy hierarchy. This does not change the saved asset type or category.
             </Typography>
             <Paper
               variant="outlined"
@@ -1122,7 +1157,7 @@ export default function InvestmentFormDrawer({
             onClick={handleConfirmInvestmentType}
             disabled={!pendingTypeNodeId}
           >
-            Use Selected Type
+            Use Selected Bucket
           </AppButton>
         </DialogActions>
       </Dialog>

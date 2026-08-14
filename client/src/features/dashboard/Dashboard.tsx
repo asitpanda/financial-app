@@ -15,6 +15,7 @@ import {
   createInvestment,
   getInvestments,
 } from "../investments/api/investments.api";
+import { useInvestmentMetadata } from "../investments/hooks/useInvestments";
 import {
   buildInvestmentFromForm,
   getInvestmentCategoryOptions,
@@ -107,6 +108,7 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
     loading,
     error: dashboardQueryError,
   } = useDashboard();
+  const metadataQuery = useInvestmentMetadata();
   const [error, setError] = useState("");
   const [showAddTx, setShowAddTx] = useState(false);
   const [showGoalDrawer, setShowGoalDrawer] = useState(false);
@@ -117,6 +119,14 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
   const [showInvestments, setShowInvestments] = useState(false);
   const pushNotification = useNotificationStore(
     (state) => state.pushNotification,
+  );
+
+  const assetTypeConfigs = useMemo(
+    () =>
+      Array.isArray(metadataQuery.data?.asset_configs)
+        ? metadataQuery.data.asset_configs
+        : [],
+    [metadataQuery.data],
   );
 
   useEffect(() => {
@@ -566,6 +576,7 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
         onSubmit={handleSaveInvestment}
         initialValues={null}
         accounts={accounts}
+        assetTypeConfigs={assetTypeConfigs}
         taxonomyNodes={taxonomyNodes}
         title="Add Investment"
         submitLabel="Add"

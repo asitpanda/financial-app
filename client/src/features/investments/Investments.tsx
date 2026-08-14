@@ -1,29 +1,26 @@
 // @ts-nocheck
 import React, { useMemo, useState } from "react";
-import Icon from "@mdi/react";
-import { mdiDeleteOutline, mdiEyeOutline, mdiPencilOutline } from "@mdi/js";
-import { Box, IconButton, Paper, Typography } from "@mui/material";
+import { Box, Paper, Typography } from "@mui/material";
 import dayjs from "dayjs";
 import { INVESTMENT_EVENT_TYPES, OPENING_INVESTMENT_EVENT_TYPES } from "../../types/investmentEventTypes";
 import InvestmentAssetTaxonomyFormDrawer from "./components/InvestmentAssetTaxonomyFormDrawer";
 import InvestmentFormDrawer from "./components/InvestmentFormDrawer";
 import RecurringOccurrencesReviewDialog from "./components/RecurringOccurrencesReviewDialog";
 import AppButton from "../../components/common/AppButton";
-import { EmptyState, StatusChip } from "../../components/common";
+import { EmptyState } from "../../components/common";
 import ConfirmDialog from "../../components/dialogs/ConfirmDialog";
 import { InvestmentViewDrawer } from "./components/InvestmentViewDrawer";
 import InvestmentsCalendarView from "./components/InvestmentsCalendarView";
 import InvestmentsDashboardView from "./components/InvestmentsDashboardView";
 import RecordContributionModal from "./components/RecordContributionModal";
+import { getInvestmentsTableColumns } from "./components/investmentsTableColumns";
 import { useHeaderAction } from "../../hooks/useHeaderAction";
 import { useNotificationStore } from "../../store/notificationStore";
 import {
   buildInvestmentFromForm,
   formatInvestmentCurrency,
-  formatInvestmentDate,
   getInvestmentCategoryLabel,
-  getInvestmentCategoryOptions,
-  getInvestmentStatusTone,
+  getInvestmentTypeLabel,
 } from "../../utils/investmentHelpers";
 import { getRuntimeErrorMessage } from "../../utils/errorMessage";
 import {
@@ -44,7 +41,6 @@ import {
 } from "./hooks/useInvestmentAssetTaxonomy";
 import {
   getInvestmentCalendarGroups,
-  getInvestmentCategoryBreakdown,
   getInvestmentCategoryPerformanceRows,
   getInvestmentCategoryLabelMap,
   getInvestmentDashboardKpis,
@@ -67,40 +63,6 @@ const VIEW_OPTIONS = [
   { value: "dashboard", label: "Dashboard" },
   { value: "calendar", label: "Investment Activity" },
 ];
-
-const getCadenceLabel = (cadenceUnit, cadenceInterval) => {
-  const interval = Math.max(Number(cadenceInterval) || 1, 1);
-
-  if (interval === 1) {
-    if (cadenceUnit === "week") return "Weekly";
-    if (cadenceUnit === "month") return "Monthly";
-    if (cadenceUnit === "quarter") return "Quarterly";
-    if (cadenceUnit === "year") return "Yearly";
-  }
-
-  if (cadenceUnit === "month") {
-    return `Every ${interval} months`;
-  }
-
-  return `Every ${interval} ${cadenceUnit}${interval === 1 ? "" : "s"}`;
-};
-
-const getInvestmentReturnMetrics = (investment) => {
-  const investedValue = Number(investment?.totalInvested || 0);
-  const currentValue = Number(investment?.currentValue || 0);
-
-  if (currentValue <= 0 || investedValue <= 0) {
-    return null;
-  }
-
-  const returnAmount = currentValue - investedValue;
-  const returnPercentage = (returnAmount / investedValue) * 100;
-
-  return {
-    returnAmount,
-    returnPercentage,
-  };
-};
 
 export const mapFrequencyToCadence = (frequency) => {
   if (frequency === "weekly")
@@ -278,7 +240,7 @@ const buildRecurringReviewState = ({
         },
         {
           label: 'Asset Class',
-          value: formatReviewValue(formValues.type),
+          value: formatReviewValue(getInvestmentTypeLabel(formValues.type)),
         },
         {
           label: 'Funding Account',
@@ -420,6 +382,7 @@ export default function Investments() {
   const {
     taxonomyNodes,
     accounts,
+    assetTypeConfigs,
     loading: referenceDataLoading,
     error: referenceDataError,
     reload: reloadReferenceData,
@@ -535,49 +498,91 @@ export default function Investments() {
     summaryInvestments.length === 0 && !hasInvestmentFilters;
 
   const localDashboardKpis = getInvestmentDashboardKpis(summaryInvestments);
-
-  const localCategoryBreakdown = useMemo(
-    () => getInvestmentCategoryBreakdown(summaryInvestments, taxonomyNodes),
-    [summaryInvestments, taxonomyNodes],
-  );
-
-  const categoryOptions = getInvestmentCategoryOptions(taxonomyNodes);
+  const localValueSourceSummary = getInvestmentValueSourceSummary(summaryInvestments);
 
   const categoryLabelMap = getInvestmentCategoryLabelMap(taxonomyNodes);
-  const localValueSourceSummary = useMemo(
-    () => getInvestmentValueSourceSummary(summaryInvestments),
+  const assetTypeLabelMap = useMemo(() => {
+    const map = {};
+    (Array.isArray(assetTypeConfigs) ? assetTypeConfigs : []).forEach((config) => {
+      map[String(config.code)] = config.label;
+    });
+    return map;
+  }, [assetTypeConfigs]);
+  const assetCategoryLabelMap = useMemo(() => {
+    const map = {};
+    (Array.isArray(assetTypeConfigs) ? assetTypeConfigs : []).forEach((config) => {
+      (config.categories || []).forEach((cat) => {
+        map[String(cat.code)] = cat.label;
+      });
+    });
+    return map;
+  }, [assetTypeConfigs]);
+  const assetTypeOptions = useMemo(
+    () => [
+      { value: "all", label: "All Asset Types" },
+      ...(Array.isArray(assetTypeConfigs) ? assetTypeConfigs : []).map((config) => ({
+        value: String(config.code),
+        label: config.label,
+      })),
+    ],
+    [assetTypeConfigs],
+  );
+  const investmentsByAssetType = useMemo(
+    () =>
+      summaryInvestments.map((investment) => ({
+        ...investment,
+        category: String(investment.assetType || investment.type || investment.category || "OTHER"),
+      })),
     [summaryInvestments],
   );
   const dashboardAnalytics = dashboardAnalyticsQuery.data?.analytics;
-  const categoryPerformanceRows = useMemo(() => {
-    if (Array.isArray(dashboardAnalytics?.categoryPerformanceRows)) {
-      return dashboardAnalytics.categoryPerformanceRows.map((item) => ({
-        ...item,
-        label: categoryLabelMap[item.key] || item.label || item.key,
-        sparkline: Array.isArray(item.sparkline) ? item.sparkline : [],
-        investmentIds: Array.isArray(item.investmentIds) ? item.investmentIds : [],
-      }));
-    }
-
-    return getInvestmentCategoryPerformanceRows(
-      summaryInvestments,
-      categoryLabelMap,
-      12,
-    );
-  }, [dashboardAnalytics, summaryInvestments, categoryLabelMap]);
+  const categoryPerformanceRows = useMemo(
+    () =>
+      (dashboardAnalytics?.categoryPerformance ?? []).map((row) => ({
+        ...row,
+        label: assetTypeLabelMap[row.key] || row.label || row.key,
+      })),
+    [assetTypeLabelMap, dashboardAnalytics],
+  );
+  const categoryPerformanceSubRows = useMemo(
+    () =>
+      (dashboardAnalytics?.categorySubPerformance ?? []).map((row) => ({
+        ...row,
+        label: assetCategoryLabelMap[row.key] || row.label || row.key,
+      })),
+    [assetCategoryLabelMap, dashboardAnalytics],
+  );
+  const categoryBreakdown = useMemo(
+    () =>
+      categoryPerformanceRows.map((row) => ({
+        key: row.key,
+        label: row.label,
+        value: row.invested,
+        investmentIds: row.investmentIds,
+      })),
+    [categoryPerformanceRows],
+  );
+  const categorySubBreakdown = useMemo(
+    () =>
+      categoryPerformanceSubRows.map((row) => ({
+        key: row.key,
+        label: row.label,
+        value: row.invested,
+        investmentIds: row.investmentIds,
+        assetType: row.assetType,
+      })),
+    [categoryPerformanceSubRows],
+  );
 
   const timeSeriesData = useMemo(() => {
-    const timeSeries = dashboardAnalytics?.timeSeries;
-
     if (selectedYearForDrill) {
       return (
-        timeSeries?.monthlyByYear?.[selectedYearForDrill] ||
-        getInvestmentTimeSeriesData(summaryInvestments, selectedYearForDrill)
+        getInvestmentTimeSeriesData(investmentsByAssetType, selectedYearForDrill)
       );
     }
 
-    return timeSeries?.yearly || getInvestmentTimeSeriesData(summaryInvestments, null);
-  }, [dashboardAnalytics, summaryInvestments, selectedYearForDrill]);
+    return getInvestmentTimeSeriesData(investmentsByAssetType, null);
+  }, [investmentsByAssetType, selectedYearForDrill]);
 
   const portfolioGrowthData = useMemo(
     () =>
@@ -614,15 +619,6 @@ export default function Investments() {
 
   const valueSourceSummary =
     dashboardAnalyticsQuery.data?.summary?.valueSourceSummary || localValueSourceSummary;
-
-  const categoryBreakdown = Array.isArray(dashboardAnalyticsQuery.data?.categoryBreakdown)
-    ? dashboardAnalyticsQuery.data.categoryBreakdown.map((item) => ({
-        key: item.key,
-        label: categoryLabelMap[item.key] || item.key,
-        value: Number(item.invested || 0),
-        investmentIds: Array.isArray(item.investmentIds) ? item.investmentIds : [],
-      }))
-    : localCategoryBreakdown;
 
   const topCurrentValueItems =
     dashboardAnalyticsQuery.data?.upcoming?.topCurrentValueItems ||
@@ -914,246 +910,16 @@ export default function Investments() {
     void removeAssetTaxonomy();
   };
 
-  const columns = [
-    {
-      field: "name",
-      headerName: "Name",
-      flex: 1.4,
-      minWidth: 220,
-      renderCell: ({ row }) => (
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 0.5,
-            height: "100%",
-            justifyContent: "center",
-            py: 1,
-          }}
-        >
-          <Typography variant="body2" sx={{ fontWeight: 700 }}>
-            {row.name}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {[row.type, row.institution].filter(Boolean).join(" • ")}
-          </Typography>
-        </Box>
-      ),
-    },
-    {
-      field: "contributionType",
-      headerName: "Plan Type",
-      flex: 1,
-      minWidth: 170,
-      renderCell: ({ row }) => (
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 0.5,
-            height: "100%",
-            justifyContent: "center",
-            py: 1,
-          }}
-        >
-          <Typography variant="body2" sx={{ fontWeight: 700 }}>
-            {row.activeContributionPlan ? "Recurring" : "One-time"}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {row.activeContributionPlan
-              ? getCadenceLabel(
-                  row.activeContributionPlan.cadenceUnit,
-                  row.activeContributionPlan.cadenceInterval,
-                )
-              : "No active schedule"}
-          </Typography>
-        </Box>
-      ),
-    },
-    {
-      field: "totalInvested",
-      headerName: "Invested",
-      width: 150,
-      renderCell: ({ row }) => (
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 0.5,
-            height: "100%",
-            justifyContent: "center",
-            py: 1,
-          }}
-        >
-          <Typography variant="body2" sx={{ fontWeight: 700 }}>
-            {formatInvestmentCurrency(row.totalInvested)}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {row.currentValue
-              ? `Current ${formatInvestmentCurrency(row.currentValue)}`
-              : "No current value"}
-          </Typography>
-        </Box>
-      ),
-    },
-    {
-      field: "category",
-      headerName: "Category",
-      flex: 1,
-      minWidth: 145,
-      renderCell: ({ row }) => (
-        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
-          <Typography variant="body2">
-            {getInvestmentCategoryLabel(row.category, taxonomyNodes)}
-          </Typography>
-        </Box>
-      ),
-    },
-    {
-      field: "return",
-      headerName: "Return",
-      flex: 1,
-      minWidth: 190,
-      sortable: false,
-      renderCell: ({ row }) => {
-        const metrics = getInvestmentReturnMetrics(row);
-        const returnTone =
-          metrics == null
-            ? "text.secondary"
-            : metrics.returnAmount > 0
-              ? "success.main"
-              : metrics.returnAmount < 0
-                ? "error.main"
-                : "text.primary";
-
-        return (
-          <Box
-            sx={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 0.5,
-              height: "100%",
-              justifyContent: "center",
-              py: 1,
-            }}
-          >
-            <Typography variant="body2" sx={{ fontWeight: 700, color: returnTone }}>
-              {metrics
-                ? formatInvestmentCurrency(metrics.returnAmount)
-                : "Not available"}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {metrics
-                ? `${metrics.returnPercentage >= 0 ? "+" : ""}${metrics.returnPercentage.toFixed(1)}% vs invested`
-                : "Waiting for cost and value"}
-            </Typography>
-          </Box>
-        );
-      },
-    },
-    {
-      field: "upcomingContribution",
-      headerName: "Upcoming Contribution",
-      flex: 1,
-      minWidth: 175,
-      sortable: false,
-      renderCell: ({ row }) => (
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 0.5,
-            height: "100%",
-            justifyContent: "center",
-            py: 1,
-          }}
-        >
-          <Typography variant="body2" sx={{ fontWeight: 700 }}>
-            {row.activeContributionPlan?.nextDueDate
-              ? formatInvestmentDate(row.activeContributionPlan.nextDueDate)
-              : "Not scheduled"}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {row.activeContributionPlan
-              ? `Amount ${formatInvestmentCurrency(row.activeContributionPlan.amount || 0)}`
-              : "No recurring plan"}
-          </Typography>
-        </Box>
-      ),
-    },
-    {
-      field: "maturityDate",
-      headerName: "Maturity",
-      flex: 1,
-      minWidth: 160,
-      sortable: false,
-      renderCell: ({ row }) => (
-        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
-          <Typography variant="body2">
-            {formatInvestmentDate(row.maturityDate)}
-          </Typography>
-        </Box>
-      ),
-    },
-    {
-      field: "status",
-      headerName: "Status",
-      width: 120,
-      renderCell: ({ row }) => (
-        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
-          <StatusChip
-            label={row.status}
-            tone={getInvestmentStatusTone(row.status)}
-          />
-        </Box>
-      ),
-    },
-    {
-      field: "actions",
-      headerName: "Actions",
-      sortable: false,
-      filterable: false,
-      flex: 0.8,
-      minWidth: 160,
-      renderCell: ({ row }) => (
-        <Box
-          sx={{ display: "flex", alignItems: "center", gap: 1, height: "100%" }}
-        >
-          <IconButton
-            size="small"
-            variant="contained"
-            disableElevation
-            onClick={() => openViewDrawer(row)}
-            aria-label={`View ${row.name}`}
-            sx={{ minWidth: 36, width: 36, height: 36, p: 0 }}
-          >
-            <Icon path={mdiEyeOutline} size={0.8} />
-          </IconButton>
-          <IconButton
-            size="small"
-            variant="contained"
-            disableElevation
-            onClick={() => openEditDrawer(row)}
-            aria-label={`Edit ${row.name}`}
-            sx={{ minWidth: 36, width: 36, height: 36, p: 0 }}
-          >
-            <Icon path={mdiPencilOutline} size={0.8} />
-          </IconButton>
-          <IconButton
-            size="small"
-            variant="contained"
-            disableElevation
-            color="error"
-            onClick={() => setDeleteTarget(row)}
-            aria-label={`Delete ${row.name}`}
-            sx={{ minWidth: 36, width: 36, height: 36, p: 0 }}
-          >
-            <Icon path={mdiDeleteOutline} size={0.8} />
-          </IconButton>
-        </Box>
-      ),
-    },
-  ];
+  const columns = useMemo(
+    () =>
+      getInvestmentsTableColumns({
+        onView: openViewDrawer,
+        onEdit: openEditDrawer,
+        onDelete: (investment) => setDeleteTarget(investment),
+        assetTypeConfigs,
+      }),
+    [assetTypeConfigs],
+  );
 
   const renderDashboardView = () => (
     <InvestmentsDashboardView
@@ -1165,13 +931,14 @@ export default function Investments() {
       onResetDrill={() => setSelectedYearForDrill(null)}
       dashboardKpis={dashboardKpis}
       categoryBreakdown={categoryBreakdown}
-      categoryLabelMap={categoryLabelMap}
+      categoryLabelMap={assetTypeLabelMap}
       valueSourceSummary={valueSourceSummary}
       categoryPerformanceRows={categoryPerformanceRows}
+      categorySubBreakdown={categorySubBreakdown}
+      categoryPerformanceSubRows={categoryPerformanceSubRows}
       topCurrentValueItems={topCurrentValueItems}
       upcomingContributions={upcomingContributions}
       recentInvestments={recentInvestments}
-      taxonomyNodes={taxonomyNodes}
       columns={columns}
       search={search}
       onSearchChange={setSearch}
@@ -1179,7 +946,7 @@ export default function Investments() {
       onStatusFilterChange={setStatusFilter}
       categoryFilter={categoryFilter}
       onCategoryFilterChange={setCategoryFilter}
-      categoryOptions={categoryOptions}
+      categoryOptions={assetTypeOptions}
       onResetFilters={handleResetFilters}
       onCreateInvestment={openCreateDrawer}
       onRecordContribution={openRecordContributionModal}
@@ -1313,6 +1080,7 @@ export default function Investments() {
         onSubmit={handleSaveInvestment}
         initialValues={drawerMode === "edit" ? selectedInvestment : null}
         accounts={accounts}
+        assetTypeConfigs={assetTypeConfigs}
         taxonomyNodes={taxonomyNodes}
         title={drawerMode === "edit" ? "Edit Investment" : "Add Investment"}
         submitLabel={drawerMode === "edit" ? "Update" : "Add"}
@@ -1335,6 +1103,7 @@ export default function Investments() {
         onClose={closeAssetTaxonomyDrawer}
         onSubmit={handleSaveAssetTaxonomy}
         onDelete={handleDeleteAssetTaxonomy}
+        assetTypeConfigs={assetTypeConfigs}
         taxonomyNodes={taxonomyNodes}
         submitError={taxonomyFormError}
       />

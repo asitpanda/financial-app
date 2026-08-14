@@ -90,7 +90,7 @@ export class InvestmentDetailResponseDto {
   currency?: string;
 
   @ApiPropertyOptional()
-  holdingMode?: string | null;
+  contributionMode?: string;
 
   @ApiPropertyOptional()
   currentValueSource?: string | null;
@@ -103,9 +103,6 @@ export class InvestmentDetailResponseDto {
 
   @ApiPropertyOptional()
   referenceNumber?: string | null;
-
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
-  documentsMeta?: Record<string, unknown> | null;
 
   @ApiPropertyOptional()
   notes?: string | null;

@@ -46,6 +46,8 @@ const createEmptyForm = () => ({
   nodeType: "category",
   level: "1",
   parentId: "",
+  defaultAssetType: "",
+  defaultAssetCategory: "",
   sortOrder: "0",
   isActive: "true",
 });
@@ -55,6 +57,8 @@ const createFormFromNode = (node) => ({
   nodeType: node.nodeType || "category",
   level: String(node.level || 1),
   parentId: node.parentId ? String(node.parentId) : "",
+  defaultAssetType: node.defaultAssetType || "",
+  defaultAssetCategory: node.defaultAssetCategory || "",
   sortOrder: String(node.sortOrder ?? 0),
   isActive: String(node.isActive !== false),
 });
@@ -66,6 +70,8 @@ const createChildFormFromNode = (node) => {
     nodeType: DEFAULT_NODE_TYPE_BY_LEVEL[nextLevel] || "node",
     level: String(nextLevel),
     parentId: String(node.id),
+    defaultAssetType: node.defaultAssetType || "",
+    defaultAssetCategory: node.defaultAssetCategory || "",
     sortOrder: "0",
     isActive: "true",
   };
@@ -216,6 +222,7 @@ export default function InvestmentAssetTaxonomyFormDrawer({
   onClose,
   onSubmit,
   onDelete,
+  assetTypeConfigs = [],
   taxonomyNodes = [],
   submitError = "",
 }) {
@@ -283,6 +290,29 @@ export default function InvestmentAssetTaxonomyFormDrawer({
         .join("|"),
     [sortedTaxonomyNodes],
   );
+  const assetTypeOptions = useMemo(
+    () => [
+      { value: "", label: "No default type" },
+      ...(Array.isArray(assetTypeConfigs) ? assetTypeConfigs : []).map((typeConfig) => ({
+        value: typeConfig.code,
+        label: typeConfig.label,
+      })),
+    ],
+    [assetTypeConfigs],
+  );
+  const defaultCategoryOptions = useMemo(() => {
+    const selectedType = (Array.isArray(assetTypeConfigs) ? assetTypeConfigs : []).find(
+      (typeConfig) => String(typeConfig.code) === String(form.defaultAssetType || ""),
+    );
+
+    return [
+      { value: "", label: "No default category" },
+      ...(selectedType?.categories || []).map((categoryConfig) => ({
+        value: categoryConfig.code,
+        label: categoryConfig.label,
+      })),
+    ];
+  }, [assetTypeConfigs, form.defaultAssetType]);
 
   useEffect(() => {
     if (!open) {
@@ -374,6 +404,19 @@ export default function InvestmentAssetTaxonomyFormDrawer({
         }
       }
 
+      if (field === "defaultAssetType") {
+        const selectedType = (Array.isArray(assetTypeConfigs) ? assetTypeConfigs : []).find(
+          (typeConfig) => String(typeConfig.code) === String(value),
+        );
+        const validCategoryCodes = new Set(
+          (selectedType?.categories || []).map((categoryConfig) => String(categoryConfig.code)),
+        );
+
+        if (!validCategoryCodes.has(String(next.defaultAssetCategory || ""))) {
+          next.defaultAssetCategory = "";
+        }
+      }
+
       return next;
     });
 
@@ -402,6 +445,8 @@ export default function InvestmentAssetTaxonomyFormDrawer({
       nodeType: form.nodeType.trim(),
       level: Number(form.level),
       parentId: form.parentId ? Number(form.parentId) : undefined,
+      defaultAssetType: form.defaultAssetType || undefined,
+      defaultAssetCategory: form.defaultAssetCategory || undefined,
       sortOrder: Number(form.sortOrder || 0),
       isActive: form.isActive === "true",
     });
@@ -733,6 +778,30 @@ export default function InvestmentAssetTaxonomyFormDrawer({
                   }
                   errorMessage={errors.sortOrder}
                   placeholder="0"
+                />
+                <LabeledSelectField
+                  labelText="Default Asset Type"
+                  value={form.defaultAssetType}
+                  onChange={(event) =>
+                    handleFormChange("defaultAssetType", event.target.value)
+                  }
+                  options={assetTypeOptions}
+                  errorMessage={errors.defaultAssetType}
+                  helperText="Optional hint only. This does not override saved investment classification."
+                />
+                <LabeledSelectField
+                  labelText="Default Asset Category"
+                  value={form.defaultAssetCategory}
+                  onChange={(event) =>
+                    handleFormChange("defaultAssetCategory", event.target.value)
+                  }
+                  options={defaultCategoryOptions}
+                  errorMessage={errors.defaultAssetCategory}
+                  helperText={
+                    form.defaultAssetType
+                      ? "Optional category hint scoped to the selected default type."
+                      : "Select a default asset type first."
+                  }
                 />
                 <LabeledSelectField
                   labelText="Status"

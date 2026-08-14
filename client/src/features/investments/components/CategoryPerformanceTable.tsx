@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { Box, Stack, Typography } from "@mui/material";
 import AppButton from "../../../components/common/AppButton";
+import Icon from "@mdi/react";
+import { mdiChevronLeft, mdiChevronRight } from "@mdi/js";
 import type { InvestmentCategoryPerformanceRow } from "../investments.selectors";
 
 interface CategoryPerformanceTableProps {
   rows: InvestmentCategoryPerformanceRow[];
+  subRows?: InvestmentCategoryPerformanceRow[];
   formatValue: (value: number) => string;
   onSelectRow?: (row: InvestmentCategoryPerformanceRow) => void;
 }
@@ -33,18 +36,56 @@ const createSparklinePath = (values: number[], width: number, height: number) =>
 
 export default function CategoryPerformanceTable({
   rows,
+  subRows,
   formatValue,
   onSelectRow,
 }: CategoryPerformanceTableProps) {
   const [trendWindow, setTrendWindow] = useState<(typeof TREND_OPTIONS)[number]["value"]>("6m");
+  const [drilledType, setDrilledType] = useState<string | null>(null);
   const selectedTrend = TREND_OPTIONS.find((option) => option.value === trendWindow) || TREND_OPTIONS[1];
+
+  const drilledTypeLabel = drilledType
+    ? (rows.find((r) => r.key === drilledType)?.label ?? drilledType)
+    : null;
+
+  const visibleRows = drilledType
+    ? (subRows ?? []).filter((r) => r.assetType === drilledType)
+    : rows.slice(0, 6);
+
+  const handleRowClick = (row: InvestmentCategoryPerformanceRow) => {
+    if (!drilledType && subRows?.some((r) => r.assetType === row.key)) {
+      setDrilledType(row.key);
+      return;
+    }
+    onSelectRow?.(row);
+  };
 
   return (
     <Stack spacing={1}>
       <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
-        <Typography variant="caption" color="text.secondary">
-          Click a category row to focus matching assets.
-        </Typography>
+        {drilledType ? (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <AppButton
+              size="small"
+              variant="text"
+              onClick={() => setDrilledType(null)}
+              sx={{ minWidth: 0, px: 0.5 }}
+            >
+              <Icon path={mdiChevronLeft} size={0.75} />
+              Back
+            </AppButton>
+            <Icon path={mdiChevronRight} size={0.65} style={{ opacity: 0.4 }} />
+            <Typography variant="caption" sx={{ fontWeight: 600 }}>
+              {drilledTypeLabel}
+            </Typography>
+          </Box>
+        ) : (
+          <Typography variant="caption" color="text.secondary">
+            {subRows && subRows.length > 0
+              ? "Click an asset type to see its categories."
+              : "Click an asset type row to focus matching assets."}
+          </Typography>
+        )}
         <Box sx={{ display: "inline-flex", gap: 0.5, p: 0.5, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
           {TREND_OPTIONS.map((option) => {
             const selected = option.value === trendWindow;
@@ -64,14 +105,15 @@ export default function CategoryPerformanceTable({
         </Box>
       </Box>
 
-      {rows.slice(0, 6).map((row) => {
+      {visibleRows.map((row) => {
         const sparklineValues = row.sparkline.slice(-selectedTrend.months);
         const sparklinePath = createSparklinePath(sparklineValues, 96, 28);
+        const hasDrillChildren = !drilledType && subRows?.some((r) => r.assetType === row.key);
 
         return (
           <Box
             key={row.key}
-            onClick={() => onSelectRow?.(row)}
+            onClick={() => handleRowClick(row)}
             sx={{
               display: "grid",
               gridTemplateColumns: { xs: "1fr", md: "1.3fr 0.9fr 0.9fr 0.8fr" },
@@ -81,9 +123,9 @@ export default function CategoryPerformanceTable({
               borderRadius: 1,
               border: "1px solid",
               borderColor: "divider",
-              cursor: onSelectRow ? "pointer" : "default",
+              cursor: onSelectRow || hasDrillChildren ? "pointer" : "default",
               transition: "border-color 0.15s, background-color 0.15s",
-              '&:hover': onSelectRow
+              '&:hover': onSelectRow || hasDrillChildren
                 ? {
                     borderColor: "rgba(15, 118, 110, 0.4)",
                     backgroundColor: "rgba(15, 118, 110, 0.04)",
@@ -92,7 +134,12 @@ export default function CategoryPerformanceTable({
             }}
           >
             <Box>
-              <Typography sx={{ fontWeight: 700 }}>{row.label}</Typography>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                <Typography sx={{ fontWeight: 700 }}>{row.label}</Typography>
+                {hasDrillChildren && (
+                  <Icon path={mdiChevronRight} size={0.65} style={{ opacity: 0.5 }} />
+                )}
+              </Box>
               <Typography variant="caption" color="text.secondary">
                 {row.holdings} holding{row.holdings === 1 ? "" : "s"}
               </Typography>

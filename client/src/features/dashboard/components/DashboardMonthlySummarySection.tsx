@@ -1,6 +1,7 @@
 import React from "react";
 import { SectionCard } from "../../../components/common";
 import type { DashboardMonthlySummary } from "../dashboard.types";
+import { getProfitLossHexColor } from "../../../colors";
 
 interface DashboardMonthlySummarySectionProps {
   summary: DashboardMonthlySummary;
@@ -74,7 +75,8 @@ export default function DashboardMonthlySummarySection({
             {summary.savingsRate.toFixed(1)}%
           </div>
           <div
-            className={`mt-1 text-sm ${summary.savingsRate >= 0 ? "text-emerald-600" : "text-rose-500"}`}
+            className="mt-1 text-sm"
+            style={{ color: getProfitLossHexColor(summary.savingsRate, "gain") }}
           >
             Avg expense {formatCurrency(summary.averageExpense)}
           </div>

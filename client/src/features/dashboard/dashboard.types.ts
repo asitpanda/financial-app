@@ -55,6 +55,7 @@ export interface DashboardAccountRecord {
   name?: string;
   displayName?: string;
   institutionName?: string;
+  openingBalance?: number;
 }
 
 export interface DashboardPageData {
@@ -68,10 +69,8 @@ export interface DashboardPageData {
 
 export interface DashboardAccountOverviewRow {
   name: string;
-  currentBalance: number;
-  periodChange: number;
+  balance: number;
   transactions: number;
-  periodTransactions: number;
 }
 
 export interface DashboardCategoryPieItem {
@@ -91,10 +90,6 @@ export interface DashboardMonthlySummary {
 
 export interface DashboardInvestmentSummary {
   activeCount: number;
-  totalInvested: number;
-  currentValue: number;
-  unrealisedGain: number;
-  unrealisedGainPct: number;
   periodTotalInvested: number;
   periodCurrentValue: number;
   periodUnrealisedGain: number;

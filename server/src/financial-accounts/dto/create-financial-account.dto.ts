@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreateFinancialAccountDto {
   @ApiProperty()
@@ -36,4 +36,9 @@ export class CreateFinancialAccountDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiProperty({ required: false, default: 0, description: 'Money already present in the account when it was added; not an INCOME transaction' })
+  @IsOptional()
+  @IsNumber()
+  openingBalance?: number;
 }

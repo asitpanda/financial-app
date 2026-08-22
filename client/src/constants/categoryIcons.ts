@@ -12,6 +12,11 @@ import {
   mdiMedicalBag,
   mdiBookOpenVariant,
   mdiGift,
+  mdiChartLine,
+  mdiTrendingUp,
+  mdiChartAreaspline,
+  mdiCurrencyBtc,
+  mdiCreditCard,
 } from "@mdi/js";
 
 export const CATEGORY_ICON_OPTIONS = [
@@ -27,6 +32,11 @@ export const CATEGORY_ICON_OPTIONS = [
   { value: "medical", label: "Medical", path: mdiMedicalBag },
   { value: "book", label: "Book", path: mdiBookOpenVariant },
   { value: "gift", label: "Gift", path: mdiGift },
+  { value: "chart-line", label: "Chart Line", path: mdiChartLine },
+  { value: "trending-up", label: "Trending Up", path: mdiTrendingUp },
+  { value: "chart-area", label: "Chart Area", path: mdiChartAreaspline },
+  { value: "bitcoin", label: "Bitcoin", path: mdiCurrencyBtc },
+  { value: "credit-card", label: "Credit Card", path: mdiCreditCard },
 ];
 
 export const CATEGORY_ICON_KEYS = CATEGORY_ICON_OPTIONS.map((item) => item.value);

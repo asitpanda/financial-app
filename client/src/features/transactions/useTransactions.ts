@@ -111,7 +111,7 @@ export const useRemoveTransaction = () => {
   });
 };
 
-export const useTransactionsByType = (type: "income" | "expense") => {
+export const useTransactionsByType = (type: TransactionRecord["type"]) => {
   return useQuery({
     queryKey: ["transactions", "type", type],
     queryFn: () => transactionApi.getByType(type),

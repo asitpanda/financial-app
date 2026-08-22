@@ -18,7 +18,6 @@ type PrismaInvestmentEventRow = {
   id: number;
   investmentId: number;
   recurringPlanId: number | null;
-  sourceAccountId: number | null;
   linkedTransactionId: number | null;
   eventType: InvestmentEventType;
   dueDate: Date | null;
@@ -74,7 +73,7 @@ export class EventPrismaRepository implements IEventDataSourcePort {
     tx: Prisma.TransactionClient,
     investmentId: number,
   ) {
-    const [contributionAgg, withdrawalAgg] =
+    const [contributionAgg, withdrawalAgg, incomeAgg, latestConfirmedEvent] =
       await Promise.all([
         tx.investmentEvent.aggregate({
           where: {
@@ -92,16 +91,41 @@ export class EventPrismaRepository implements IEventDataSourcePort {
           },
           _sum: { amount: true },
         }),
+        tx.investmentEvent.aggregate({
+          where: {
+            investmentId,
+            status: 'CONFIRMED',
+            eventType: {
+              in: [
+                InvestmentEventType.OPENING_INCOME_CREDIT,
+                InvestmentEventType.INCOME_CREDIT,
+              ],
+            },
+          },
+          _sum: { amount: true },
+        }),
+        tx.investmentEvent.findFirst({
+          where: {
+            investmentId,
+            status: 'CONFIRMED',
+          },
+          orderBy: [{ eventDate: 'desc' }, { id: 'desc' }],
+        }),
       ]);
 
     const contributionTotal = contributionAgg._sum.amount?.toNumber() ?? 0;
     const withdrawalTotal = withdrawalAgg._sum.amount?.toNumber() ?? 0;
+    const incomeTotal = incomeAgg._sum.amount?.toNumber() ?? 0;
     const principalTotal = contributionTotal - withdrawalTotal;
+    const currentValue = principalTotal + incomeTotal;
 
     await tx.investment.update({
       where: { id: investmentId },
       data: {
         totalInvested: principalTotal,
+        currentValue,
+        currentValueSource: latestConfirmedEvent ? 'manual' : null,
+        lastValuationAt: latestConfirmedEvent?.eventDate ?? null,
       },
     });
   }
@@ -112,7 +136,6 @@ export class EventPrismaRepository implements IEventDataSourcePort {
         ...data,
         investmentId: Number(data.investmentId),
         recurringPlanId: normalizeNullableNumber(data.recurringPlanId),
-        sourceAccountId: normalizeNullableNumber(data.sourceAccountId),
         linkedTransactionId: normalizeNullableNumber(data.linkedTransactionId),
         eventType: data.eventType,
         dueDate: parseOptionalDateInput(data.dueDate, 'dueDate'),
@@ -176,7 +199,6 @@ export class EventPrismaRepository implements IEventDataSourcePort {
         ...data,
         investmentId: data.investmentId !== undefined ? Number(data.investmentId) : undefined,
         recurringPlanId: data.recurringPlanId !== undefined ? normalizeNullableNumber(data.recurringPlanId) : undefined,
-        sourceAccountId: data.sourceAccountId !== undefined ? normalizeNullableNumber(data.sourceAccountId) : undefined,
         linkedTransactionId: data.linkedTransactionId !== undefined ? normalizeNullableNumber(data.linkedTransactionId) : undefined,
         eventType: data.eventType !== undefined ? data.eventType : undefined,
         dueDate: data.dueDate !== undefined ? parseOptionalDateInput(data.dueDate, 'dueDate') : undefined,

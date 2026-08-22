@@ -1,5 +1,4 @@
 import dayjs, { type Dayjs } from "dayjs";
-import type { PageDateFilterMode } from "../../store/pageDateFilterStore";
 import type { GoalProgressFilter, GoalRecord } from "./goal.types";
 
 export interface GoalHealth {
@@ -23,15 +22,6 @@ interface GoalFilterInput {
   search: string;
   progressFilter: GoalProgressFilter;
   dateRange: [Dayjs | null, Dayjs | null];
-  periodMode: PageDateFilterMode;
-  selectedYear: number;
-  selectedMonth: number;
-  matchesPageDateFilter: (
-    date: Date,
-    mode: PageDateFilterMode,
-    year: number,
-    month: number,
-  ) => boolean;
 }
 
 const getGoalDeadline = (goal: GoalRecord) =>
@@ -68,15 +58,28 @@ export const getGoalHealth = (goal: GoalRecord): GoalHealth => {
     if (daysLeft <= 7) {
       return { label: "Due Soon", tone: "warning" };
     }
+
+    // Pace-based: compare actual progress to expected progress by elapsed time
+    const start = dayjs(goal.startDate || goal.createdAt).startOf("day");
+    const totalDays = deadlineDay.diff(start, "day");
+    if (totalDays > 0) {
+      const elapsedFraction = Math.min(1, today.diff(start, "day") / totalDays);
+      const expectedProgress = elapsedFraction * 100;
+
+      if (progress === 0 && elapsedFraction <= 0.1) {
+        return { label: "Not Started", tone: "neutral" };
+      }
+      if (progress >= expectedProgress) {
+        return { label: "On Track", tone: "info" };
+      }
+      return { label: "At Risk", tone: "warning" };
+    }
   }
 
-  if (progress > 0 && progress < 40) {
-    return { label: "At Risk", tone: "warning" };
-  }
-  if (progress >= 40) {
-    return { label: "On Track", tone: "info" };
-  }
-  return { label: "Not Started", tone: "neutral" };
+  // Fallback when no deadline is set — flat threshold only
+  if (progress === 0) return { label: "Not Started", tone: "neutral" };
+  if (progress >= 40) return { label: "On Track", tone: "info" };
+  return { label: "At Risk", tone: "warning" };
 };
 
 export const getGoalProgressBucket = (
@@ -108,33 +111,14 @@ export const matchesGoalProgressFilter = (
 
 export const getFilteredGoals = (
   goals: GoalRecord[],
-  {
-    search,
-    progressFilter,
-    dateRange,
-    periodMode,
-    selectedYear,
-    selectedMonth,
-    matchesPageDateFilter,
-  }: GoalFilterInput,
+  { search, progressFilter, dateRange }: GoalFilterInput,
 ): GoalRecord[] => {
   const [from, to] = dateRange;
 
   return goals.filter((goal: GoalRecord) => {
     const deadlineDate = goal.deadline ? dayjs(goal.deadline) : null;
-    const goalFilterDate = goal.deadline || goal.startDate || goal.createdAt;
-    const pageDate = goalFilterDate ? new Date(goalFilterDate) : null;
 
     if (!matchesGoalProgressFilter(goal, progressFilter)) return false;
-
-    if (
-      pageDate &&
-      !matchesPageDateFilter(pageDate, periodMode, selectedYear, selectedMonth)
-    ) {
-      return false;
-    }
-
-    if (!pageDate) return false;
 
     if (from && (!deadlineDate || deadlineDate.isBefore(from.startOf("day")))) {
       return false;

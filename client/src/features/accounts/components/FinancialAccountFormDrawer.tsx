@@ -22,6 +22,7 @@ const accountSchema = z.object({
   accountNumberMasked: z.string().trim().optional(),
   currency: z.string().trim().min(3, 'Currency is required'),
   isActive: z.boolean().default(true),
+  openingBalance: z.coerce.number().default(0),
 });
 
 const defaultValues = {
@@ -32,6 +33,7 @@ const defaultValues = {
   accountNumberMasked: '',
   currency: 'INR',
   isActive: true,
+  openingBalance: 0,
 };
 
 const accountTypeOptions = [
@@ -57,6 +59,7 @@ const toFormState = (account) => {
     accountNumberMasked: account.accountNumberMasked || '',
     currency: account.currency || 'INR',
     isActive: account.isActive !== false,
+    openingBalance: account.openingBalance ?? 0,
   };
 };
 
@@ -105,6 +108,7 @@ export default function FinancialAccountFormDrawer({
       };
 
       if (isEdit) {
+        delete payload.openingBalance; // create-only; PATCH must never send it
         await updateFinancialAccount(initialValues.id, payload);
       } else {
         await createFinancialAccount(payload);
@@ -211,6 +215,16 @@ export default function FinancialAccountFormDrawer({
           placeholder="INR"
           errorMessage={errors.currency?.message}
         />
+
+        {!isEdit ? (
+          <LabeledTextField
+            labelText="Opening Balance"
+            type="number"
+            {...register('openingBalance')}
+            placeholder="0"
+            errorMessage={errors.openingBalance?.message}
+          />
+        ) : null}
       </Stack>
     </AppDrawer>
   );

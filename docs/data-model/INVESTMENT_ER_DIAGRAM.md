@@ -22,8 +22,12 @@ erDiagram
     FINANCIAL_ACCOUNT ||--o{ TRANSACTION : source_account
     FINANCIAL_ACCOUNT ||--o{ TRANSACTION : destination_account
     FINANCIAL_ACCOUNT o|--o{ INVESTMENT : primary_account
-    FINANCIAL_ACCOUNT o|--o{ INVESTMENT_EVENT : funds_event
-    FINANCIAL_ACCOUNT o|--o{ INVESTMENT_CONTRIBUTION_PLAN : funds_plan
+
+    APP_META_CONFIG_REF ||--o{ APP_META_CONFIG_REF : parent_child
+    APP_META_CONFIG_REF ||--o{ INVESTMENT : asset_type
+    APP_META_CONFIG_REF ||--o{ INVESTMENT : asset_category
+    APP_META_CONFIG_REF o|--o{ INVESTMENT_ASSET_TAXONOMY : default_asset_type
+    APP_META_CONFIG_REF o|--o{ INVESTMENT_ASSET_TAXONOMY : default_asset_category
 
     INVESTMENT_ASSET_TAXONOMY ||--o{ INVESTMENT_ASSET_TAXONOMY : parent_child
     INVESTMENT_ASSET_TAXONOMY o|--o{ INVESTMENT : categorizes
@@ -34,7 +38,6 @@ erDiagram
     INVESTMENT_CONTRIBUTION_PLAN o|--o{ INVESTMENT_EVENT : schedules
 
     TRANSACTION o|--o{ INVESTMENT_EVENT : linkedTransactionId
-    INVESTMENT_EVENT o|--o{ TRANSACTION : linkedInvestmentEventId
 
     USER {
         int id PK
@@ -69,6 +72,7 @@ erDiagram
         string accountNumberMasked
         string currency
         boolean isActive
+        decimal openingBalance
         datetime createdAt
         datetime updatedAt
     }
@@ -93,16 +97,27 @@ erDiagram
         int id PK
         int userId FK
         string type
-        string transactionKind
         int categoryId FK
         int goalId FK
         int sourceAccountId FK
         int destinationAccountId FK
-        int linkedInvestmentEventId FK
         float amount
         string categoryLabelSnapshot
         datetime date
         string notes
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    APP_META_CONFIG_REF {
+        int id PK
+        string module
+        string configType
+        int parentId FK
+        string code
+        string label
+        boolean isActive
+        int sortOrder
         datetime createdAt
         datetime updatedAt
     }
@@ -112,9 +127,9 @@ erDiagram
         int userId FK
         int accountId FK
         int assetTaxonomyId FK
+        int assetTypeMetaId FK
+        int assetCategoryMetaId FK
         string name
-        string assetType
-        string assetCategory
         string institutionName
         string referenceNumber
         string status
@@ -139,6 +154,8 @@ erDiagram
         string nodeType
         int level
         int parentId FK
+        int defaultAssetTypeMetaId FK
+        int defaultAssetCategoryMetaId FK
         int sortOrder
         boolean isActive
         datetime createdAt
@@ -149,7 +166,6 @@ erDiagram
         int id PK
         int investmentId FK
         int recurringPlanId FK
-        int sourceAccountId FK
         int linkedTransactionId FK
         string eventType
         datetime dueDate
@@ -170,7 +186,6 @@ erDiagram
     INVESTMENT_CONTRIBUTION_PLAN {
         int id PK
         int investmentId FK
-        int sourceAccountId FK
         string status
         decimal amount
         string cadenceUnit
@@ -202,7 +217,11 @@ erDiagram
 
 ## Sync Notes
 
-- This ERD reflects the current table and foreign-key structure in [server/prisma/sql/core_schema.sql](/Users/asitpanda/asitprojects/mine/my-financial/server/prisma/sql/core_schema.sql).
+- This ERD reflects the current table and foreign-key structure in [server/prisma/sql/core_schema.sql](/Users/asitpanda/asitprojects/mine/my-financial/server/prisma/sql/core_schema.sql) and [server/prisma/schema.prisma](/Users/asitpanda/asitprojects/mine/my-financial/server/prisma/schema.prisma).
 - Child-side optionality in the relationships above follows nullable foreign keys in the SQL schema.
-- The transaction and investment-event cross-link is shown as two nullable references because `core_schema.sql` defines both foreign keys independently and does not add a uniqueness constraint.
+- `investment.assetType`/`assetCategory` free-text fields have been replaced by `assetTypeMetaId`/`assetCategoryMetaId`, both required FKs into the shared `app_meta_config_ref` table (self-referencing tree of `ASSET_TYPE`/`ASSET_CATEGORY` rows scoped by `module`/`configType`).
+- `investment_asset_taxonomy` nodes can optionally carry `defaultAssetTypeMetaId`/`defaultAssetCategoryMetaId` hints into `app_meta_config_ref`; taxonomy remains an organizational bucket, not the source of truth for asset classification.
+- `linkedTransactionId` on `investment_event` is a single, unique, nullable FK back to `transaction`; there is no reverse FK on the transaction side.
+- `financial_accounts` do not directly fund `investment_event`/`investment_contribution_plan` rows; account linkage for investments is only via `investment.accountId` (primary account).
+- `investments.status` also carries a DB-level `CHECK` constraint restricting values to `active`, `matured`, `closed` (not expressed by Prisma's type system).
 - Recurring scheduler uniqueness is enforced at DB level on `(recurringPlanId, dueDate, eventType)`.

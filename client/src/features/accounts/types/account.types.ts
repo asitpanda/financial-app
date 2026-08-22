@@ -8,6 +8,8 @@ export interface FinancialAccountRecord {
 	accountNumberMasked?: string | null;
 	currency: string;
 	isActive: boolean;
+	openingBalance: number;
+	currentBalance: number;
 	createdAt?: string;
 	updatedAt?: string;
 }
@@ -20,6 +22,7 @@ export interface CreateFinancialAccountDto {
 	accountNumberMasked?: string;
 	currency: string;
 	isActive: boolean;
+	openingBalance?: number;
 }
 
-export type UpdateFinancialAccountDto = Partial<CreateFinancialAccountDto>;
+export type UpdateFinancialAccountDto = Partial<Omit<CreateFinancialAccountDto, 'openingBalance'>>;

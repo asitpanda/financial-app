@@ -7,11 +7,6 @@ export class PreviewRecurringContributionPlanDto {
   @IsString()
   investmentId?: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  sourceAccountId?: string;
-
   @ApiProperty({ minimum: 0.01 })
   @IsNumber()
   @Min(0.01)

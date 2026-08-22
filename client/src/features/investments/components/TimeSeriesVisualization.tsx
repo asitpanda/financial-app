@@ -2,19 +2,12 @@ import { useState } from "react";
 import { Box, Stack, Typography } from "@mui/material";
 import AppButton from "../../../components/common/AppButton";
 import type { InvestmentSeriesPoint } from "../investments.selectors";
-
-const DONUT_PALETTE = [
-  "#0f766e",
-  "#14b8a6",
-  "#0ea5e9",
-  "#6366f1",
-  "#f59e0b",
-  "#ef4444",
-  "#8b5cf6",
-  "#10b981",
-  "#f97316",
-  "#ec4899",
-];
+import {
+  INVESTMENT_CHART_SERIES_COLORS,
+  PROFIT_LOSS_COLORS,
+  getStableSeriesColorMap,
+  getProfitLossHexColor,
+} from "../../../colors";
 
 interface TimeSeriesVisualizationProps {
   data: InvestmentSeriesPoint[];
@@ -104,12 +97,22 @@ export default function TimeSeriesVisualization({
     );
   }
 
-  const categoryColors: Record<string, string> = {};
-  if (data[0]) {
-    Object.keys(data[0].investedBreakdown).forEach((category, idx) => {
-      categoryColors[category] = DONUT_PALETTE[idx % DONUT_PALETTE.length];
-    });
-  }
+  const categoryKeys = [
+    ...new Set(
+      data.flatMap((point) => [
+        ...Object.keys(point.investedBreakdown),
+        ...Object.keys(point.returnBreakdown),
+      ]),
+    ),
+  ];
+  const categoryColorMap = getStableSeriesColorMap(
+    categoryKeys,
+    "investments-timeseries-category",
+  );
+  const categoryColors = Object.fromEntries(categoryColorMap) as Record<
+    string,
+    string
+  >;
 
   return (
     <Stack spacing={2}>
@@ -179,13 +182,13 @@ export default function TimeSeriesVisualization({
             <path
               d={linePathInvested}
               fill="none"
-              stroke="#3b82f6"
+              stroke={INVESTMENT_CHART_SERIES_COLORS.investedAltHex}
               strokeWidth="2.5"
             />
             <path
               d={linePathReturn}
               fill="none"
-              stroke="#10b981"
+              stroke={PROFIT_LOSS_COLORS.gainHex}
               strokeWidth="2.5"
               strokeDasharray="4,4"
             />
@@ -238,7 +241,7 @@ export default function TimeSeriesVisualization({
                     cx={point.x}
                     cy={point.yInvested}
                     r={hoveredIndex === point.idx ? 6 : 4}
-                    fill="#3b82f6"
+                    fill={INVESTMENT_CHART_SERIES_COLORS.investedAltHex}
                     opacity={hoveredIndex === point.idx ? 1 : 0.8}
                     onClick={() => !isDrillMode && onDrill(point.label)}
                     style={{
@@ -250,7 +253,7 @@ export default function TimeSeriesVisualization({
                     cx={point.x}
                     cy={point.yReturn}
                     r={hoveredIndex === point.idx ? 6 : 4}
-                    fill="#10b981"
+                    fill={PROFIT_LOSS_COLORS.gainHex}
                     opacity={hoveredIndex === point.idx ? 1 : 0.8}
                     onClick={() => !isDrillMode && onDrill(point.label)}
                     style={{
@@ -291,7 +294,7 @@ export default function TimeSeriesVisualization({
                         textAnchor="end"
                         style={{
                           fontSize: 10,
-                          fill: "#3b82f6",
+                          fill: INVESTMENT_CHART_SERIES_COLORS.investedAltHex,
                           fontWeight: 700,
                         }}
                       >
@@ -310,7 +313,7 @@ export default function TimeSeriesVisualization({
                         textAnchor="end"
                         style={{
                           fontSize: 10,
-                          fill: "#10b981",
+                          fill: getProfitLossHexColor(point.return, "gain"),
                           fontWeight: 700,
                         }}
                       >
@@ -349,7 +352,7 @@ export default function TimeSeriesVisualization({
                 variant="caption"
                 sx={{
                   fontWeight: 700,
-                  color: "#3b82f6",
+                  color: INVESTMENT_CHART_SERIES_COLORS.investedAltHex,
                   display: "block",
                   mb: 1,
                 }}
@@ -405,7 +408,7 @@ export default function TimeSeriesVisualization({
                 variant="caption"
                 sx={{
                   fontWeight: 700,
-                  color: "#10b981",
+                  color: PROFIT_LOSS_COLORS.gainHex,
                   display: "block",
                   mb: 1,
                 }}
@@ -452,7 +455,7 @@ export default function TimeSeriesVisualization({
                           sx={{
                             fontWeight: 600,
                             flexShrink: 0,
-                            color: value >= 0 ? "#10b981" : "#ef4444",
+                            color: getProfitLossHexColor(value, "gain"),
                           }}
                         >
                           {formatValue(value)} ({returnPct}%)
@@ -488,7 +491,13 @@ export default function TimeSeriesVisualization({
 
       <Box sx={{ display: "flex", justifyContent: "center", gap: 3, pt: 1 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Box sx={{ width: 24, height: 2, backgroundColor: "#3b82f6" }} />
+          <Box
+            sx={{
+              width: 24,
+              height: 2,
+              backgroundColor: INVESTMENT_CHART_SERIES_COLORS.investedAltHex,
+            }}
+          />
           <Typography variant="caption" sx={{ fontWeight: 600 }}>
             Invested
           </Typography>
@@ -498,9 +507,9 @@ export default function TimeSeriesVisualization({
             sx={{
               width: 24,
               height: 2,
-              backgroundColor: "#10b981",
+              backgroundColor: PROFIT_LOSS_COLORS.gainHex,
               backgroundImage:
-                "repeating-linear-gradient(90deg, #10b981 0px, #10b981 4px, transparent 4px, transparent 8px)",
+                `repeating-linear-gradient(90deg, ${PROFIT_LOSS_COLORS.gainHex} 0px, ${PROFIT_LOSS_COLORS.gainHex} 4px, transparent 4px, transparent 8px)`,
             }}
           />
           <Typography variant="caption" sx={{ fontWeight: 600 }}>

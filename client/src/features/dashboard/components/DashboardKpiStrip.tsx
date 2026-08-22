@@ -1,6 +1,10 @@
 import React from "react";
 import { KpiCard } from "../../../components/common";
 import type { DashboardInvestmentSummary } from "../dashboard.types";
+import {
+  PROFIT_LOSS_COLORS,
+  getProfitLossHexColor,
+} from "../../../colors";
 
 interface DashboardKpiStripProps {
   balance: number;
@@ -32,13 +36,17 @@ export default function DashboardKpiStrip({
       <KpiCard
         title="Income"
         value={
-          <span style={{ color: "#16a34a" }}>{formatCurrency(income)}</span>
+          <span style={{ color: PROFIT_LOSS_COLORS.gainHex }}>
+            {formatCurrency(income)}
+          </span>
         }
       />
       <KpiCard
         title="Expenses"
         value={
-          <span style={{ color: "#dc2626" }}>{formatCurrency(expense)}</span>
+          <span style={{ color: PROFIT_LOSS_COLORS.lossHex }}>
+            {formatCurrency(expense)}
+          </span>
         }
       />
       <KpiCard
@@ -49,11 +57,11 @@ export default function DashboardKpiStrip({
               style={{
                 fontSize: "18px",
                 fontWeight: "600",
-                color:
-                  investmentSummary.periodCurrentValue >=
-                  investmentSummary.periodTotalInvested
-                    ? "#16a34a"
-                    : "#dc2626",
+                color: getProfitLossHexColor(
+                  investmentSummary.periodCurrentValue -
+                    investmentSummary.periodTotalInvested,
+                  "gain",
+                ),
               }}
             >
               {formatCurrency(investmentSummary.periodCurrentValue)}
@@ -64,7 +72,7 @@ export default function DashboardKpiStrip({
       <KpiCard
         title="Investment"
         value={
-          <span style={{ color: "#dc2626" }}>
+          <span style={{ color: PROFIT_LOSS_COLORS.lossHex }}>
             {formatCurrency(investmentSummary.periodTotalInvested)}
           </span>
         }
@@ -77,10 +85,10 @@ export default function DashboardKpiStrip({
               style={{
                 fontSize: "18px",
                 fontWeight: "600",
-                color:
-                  investmentSummary.periodUnrealisedGainPct >= 0
-                    ? "#16a34a"
-                    : "#dc2626",
+                color: getProfitLossHexColor(
+                  investmentSummary.periodUnrealisedGain,
+                  "gain",
+                ),
               }}
             >
               {formatCurrency(investmentSummary.periodUnrealisedGain)} (

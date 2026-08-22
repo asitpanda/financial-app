@@ -1,14 +1,13 @@
 import { Injectable } from '@nestjs/common';
+import type { TransactionType } from '@prisma/client';
 import { ITransactionDataSourcePort } from './transaction.datasource.port';
 import { CreateTransactionDto } from '../dto/create-transaction.dto';
 import { UpdateTransactionDto } from '../dto/update-transaction.dto';
-import { mockTransactionsData } from '../../mockdata';
+import { mockTransactionsStore as mockTransactions } from '../../mockdata/transactions';
 import { mockGoalsStore } from '../../mockdata/goals';
 import type { TransactionRecord } from '../transaction.types';
 import type { TransactionGoalDeltaSource } from '../transaction.types';
 
-// Mock data store
-let mockTransactions = [...mockTransactionsData];
 const nextTransactionId = () => (mockTransactions.length ? Math.max(...mockTransactions.map((transaction) => transaction.id)) + 1 : 1);
 const normalizeNullableNumber = (value?: string | number | null) =>
   value === undefined || value === null || value === '' ? null : Number(value);
@@ -16,7 +15,7 @@ const normalizeNullableNumber = (value?: string | number | null) =>
 const resolveGoalDelta = (transaction: TransactionGoalDeltaSource) => {
   if (!transaction?.goalId) return 0;
   const amount = Number(transaction.amount || 0);
-  return transaction.type === 'expense' ? -amount : amount;
+  return transaction.type === 'EXPENSE' ? -amount : amount;
 };
 
 const applyGoalDelta = (goalId: number | null | undefined, delta: number, userId: number) => {
@@ -41,15 +40,13 @@ export class TransactionMockRepository implements ITransactionDataSourcePort {
     const newTransaction: TransactionRecord = {
       id: nextTransactionId(),
       userId,
-      categoryId: Number(data.categoryId),
+      categoryId: normalizeNullableNumber(data.categoryId),
       goalId: normalizeNullableNumber(data.goalId),
       sourceAccountId: normalizeNullableNumber(data.sourceAccountId),
       destinationAccountId: normalizeNullableNumber(data.destinationAccountId),
-      linkedInvestmentEventId: normalizeNullableNumber(data.linkedInvestmentEventId),
       type: data.type,
-      transactionKind: data.transactionKind,
       amount: data.amount,
-      categoryLabelSnapshot: data.categoryLabelSnapshot,
+      categoryLabelSnapshot: data.categoryLabelSnapshot ?? null,
       date: new Date(data.date),
       notes: data.notes ?? null,
       createdAt: new Date(),
@@ -70,11 +67,10 @@ export class TransactionMockRepository implements ITransactionDataSourcePort {
       mockTransactions[index] = {
         ...previousTransaction,
         ...data,
-        categoryId: data.categoryId !== undefined ? Number(data.categoryId) : previousTransaction.categoryId,
+        categoryId: data.categoryId !== undefined ? normalizeNullableNumber(data.categoryId) : previousTransaction.categoryId,
         goalId: data.goalId !== undefined ? normalizeNullableNumber(data.goalId) : previousTransaction.goalId,
         sourceAccountId: data.sourceAccountId !== undefined ? normalizeNullableNumber(data.sourceAccountId) : previousTransaction.sourceAccountId,
         destinationAccountId: data.destinationAccountId !== undefined ? normalizeNullableNumber(data.destinationAccountId) : previousTransaction.destinationAccountId,
-        linkedInvestmentEventId: data.linkedInvestmentEventId !== undefined ? normalizeNullableNumber(data.linkedInvestmentEventId) : previousTransaction.linkedInvestmentEventId,
         notes: data.notes !== undefined ? data.notes ?? null : previousTransaction.notes,
         date: data.date ? new Date(data.date) : previousTransaction.date,
         updatedAt: new Date(),
@@ -97,15 +93,13 @@ export class TransactionMockRepository implements ITransactionDataSourcePort {
   }
 
   async delete(id: number, userId: number): Promise<void> {
-    const existingTransaction = mockTransactions.find(
+    const index = mockTransactions.findIndex(
       (t) => t.id === id && t.userId === userId,
     );
-    mockTransactions = mockTransactions.filter(
-      (t) => !(t.id === id && t.userId === userId),
-    );
-    if (existingTransaction) {
-      applyGoalDelta(existingTransaction.goalId, -resolveGoalDelta(existingTransaction), userId);
-    }
+    if (index === -1) return;
+
+    const [existingTransaction] = mockTransactions.splice(index, 1);
+    applyGoalDelta(existingTransaction.goalId, -resolveGoalDelta(existingTransaction), userId);
   }
 
   async findByDateRange(userId: number, startDate: Date, endDate: Date): Promise<TransactionRecord[]> {
@@ -115,7 +109,7 @@ export class TransactionMockRepository implements ITransactionDataSourcePort {
     );
   }
 
-  async findByType(userId: number, type: string): Promise<TransactionRecord[]> {
+  async findByType(userId: number, type: TransactionType): Promise<TransactionRecord[]> {
     return mockTransactions.filter(
       (t) => t.userId === userId && t.type === type,
     );

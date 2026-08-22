@@ -26,6 +26,8 @@ export interface InvestmentAllocationSegment {
   investmentIds: InvestmentId[];
   // parent assetType code; present only on category-level rows
   assetType?: string;
+  // parent assetCategory code; present only on holding-level rows
+  assetCategory?: string;
 }
 
 export interface InvestmentSeriesPoint {
@@ -73,6 +75,8 @@ export interface InvestmentCategoryPerformanceRow {
   investmentIds: InvestmentId[];
   // parent assetType code; present only on category-level rows
   assetType?: string;
+  // parent assetCategory code; present only on holding-level rows
+  assetCategory?: string;
 }
 
 export interface InvestmentMaturityBucket {
@@ -607,6 +611,50 @@ export const getInvestmentCategoryPerformanceRows = (
       };
     })
     .sort((left, right) => right.currentValue - left.currentValue);
+};
+
+// Derives one performance row per individual investment for the 3rd drill level.
+export const getInvestmentHoldingPerformanceRows = (
+  investments: Investment[],
+  months = 12,
+): InvestmentCategoryPerformanceRow[] => {
+  const records = getResolvedInvestmentRecords(investments);
+  const trendMonths = Math.max(months, 1);
+  const monthPoints = Array.from({ length: trendMonths }, (_, index) =>
+    dayjs()
+      .startOf('month')
+      .subtract(trendMonths - 1 - index, 'month')
+      .endOf('month'),
+  );
+
+  return records.map((record) => {
+    const invested = record.investedAmount;
+    const currentValue = record.currentValue;
+    const returnAmount = currentValue - invested;
+    const returnPercentage = invested > 0 ? (returnAmount / invested) * 100 : 0;
+    const assetTypeKey = String(
+      record.investment.assetType || record.investment.type || record.investment.category || 'OTHER',
+    ).trim().toUpperCase();
+    const rawCat = String(record.investment.assetCategory || '').trim().toUpperCase();
+
+    return {
+      key: String(record.id),
+      label: record.investment.name || String(record.id),
+      holdings: 1,
+      invested,
+      currentValue,
+      returnAmount,
+      returnPercentage,
+      investmentIds: [record.id],
+      assetType: assetTypeKey,
+      assetCategory: rawCat || undefined,
+      sparkline: monthPoints.map((pointDate) =>
+        record.timelineStartDate.isAfter(pointDate)
+          ? 0
+          : getInvestmentCurrentValueAtDate(record.investment, pointDate),
+      ),
+    };
+  });
 };
 
 export const getInvestmentMaturityLadderData = (

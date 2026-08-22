@@ -12,6 +12,7 @@ import {
   getInvestmentTypeLabel,
 } from "../../../utils/investmentHelpers";
 import type { Investment, InvestmentAssetTypeConfig } from "../types/investment.types";
+import { getProfitLossMuiColor } from "../../../colors";
 
 const getCadenceLabel = (cadenceUnit?: string, cadenceInterval?: number | string) => {
   const interval = Math.max(Number(cadenceInterval) || 1, 1);
@@ -189,11 +190,7 @@ export const getInvestmentsTableColumns = ({
       const returnTone =
         metrics == null
           ? "text.secondary"
-          : metrics.returnAmount > 0
-            ? "success.main"
-            : metrics.returnAmount < 0
-              ? "error.main"
-              : "text.primary";
+          : getProfitLossMuiColor(metrics.returnAmount);
 
       return (
         <Box

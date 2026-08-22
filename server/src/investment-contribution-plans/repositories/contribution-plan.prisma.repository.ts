@@ -27,7 +27,6 @@ type PrismaEventRow = {
   id: number;
   investmentId: number;
   recurringPlanId: number | null;
-  sourceAccountId: number | null;
   linkedTransactionId: number | null;
   eventType: InvestmentEventType;
   dueDate: Date | null;
@@ -90,7 +89,7 @@ export class ContributionPlanPrismaRepository
     tx: Prisma.TransactionClient,
     investmentId: number,
   ) {
-    const [contributionAgg, withdrawalAgg] =
+    const [contributionAgg, withdrawalAgg, incomeAgg, latestConfirmedEvent] =
       await Promise.all([
         tx.investmentEvent.aggregate({
           where: {
@@ -108,16 +107,41 @@ export class ContributionPlanPrismaRepository
           },
           _sum: { amount: true },
         }),
+        tx.investmentEvent.aggregate({
+          where: {
+            investmentId,
+            status: 'CONFIRMED',
+            eventType: {
+              in: [
+                InvestmentEventType.OPENING_INCOME_CREDIT,
+                InvestmentEventType.INCOME_CREDIT,
+              ],
+            },
+          },
+          _sum: { amount: true },
+        }),
+        tx.investmentEvent.findFirst({
+          where: {
+            investmentId,
+            status: 'CONFIRMED',
+          },
+          orderBy: [{ eventDate: 'desc' }, { id: 'desc' }],
+        }),
       ]);
 
     const contributionTotal = toNumber(contributionAgg._sum.amount) ?? 0;
     const withdrawalTotal = toNumber(withdrawalAgg._sum.amount) ?? 0;
+    const incomeTotal = toNumber(incomeAgg._sum.amount) ?? 0;
     const principalTotal = contributionTotal - withdrawalTotal;
+    const currentValue = principalTotal + incomeTotal;
 
     await tx.investment.update({
       where: { id: investmentId },
       data: {
         totalInvested: principalTotal,
+        currentValue,
+        currentValueSource: latestConfirmedEvent ? 'manual' : null,
+        lastValuationAt: latestConfirmedEvent?.eventDate ?? null,
       },
     });
   }
@@ -126,7 +150,6 @@ export class ContributionPlanPrismaRepository
     const createData: Prisma.InvestmentContributionPlanUncheckedCreateInput = {
       ...data,
       investmentId: Number(data.investmentId),
-      sourceAccountId: normalizeNullableNumber(data.sourceAccountId),
       reminderDaysBefore: normalizeNullableNumber(data.reminderDaysBefore),
       amount: normalizeDecimal(data.amount) ?? undefined,
       historicalImportMode: data.historicalImportMode as HistoricalImportMode | undefined,
@@ -194,7 +217,6 @@ export class ContributionPlanPrismaRepository
     const updateData: Prisma.InvestmentContributionPlanUncheckedUpdateInput = {
       ...data,
       investmentId: data.investmentId !== undefined ? Number(data.investmentId) : undefined,
-      sourceAccountId: data.sourceAccountId !== undefined ? normalizeNullableNumber(data.sourceAccountId) : undefined,
       reminderDaysBefore:
         data.reminderDaysBefore !== undefined ? normalizeNullableNumber(data.reminderDaysBefore) : undefined,
       amount: data.amount !== undefined ? normalizeDecimal(data.amount) : undefined,
@@ -239,8 +261,6 @@ export class ContributionPlanPrismaRepository
   ): Promise<CreatePlanWithHistoricalEventsResult> {
     const { investmentId, userId, planPayload, selectedHistoricalItems } = data;
     const investmentIdNum = Number(investmentId);
-    const sourceAccountId = normalizeNullableNumber(planPayload.sourceAccountId);
-
     return this.prisma.$transaction(async (tx) => {
       const investment = await tx.investment.findFirst({
         where: { id: investmentIdNum, userId },
@@ -248,15 +268,6 @@ export class ContributionPlanPrismaRepository
 
       if (!investment) {
         throw new Error('Investment not found');
-      }
-
-      if (sourceAccountId) {
-        const account = await tx.financialAccount.findFirst({
-          where: { id: sourceAccountId, userId },
-        });
-        if (!account) {
-          throw new Error('Source account not found or ownership mismatch');
-        }
       }
 
       if (String(planPayload.status || '').toLowerCase() === 'active') {
@@ -275,7 +286,6 @@ export class ContributionPlanPrismaRepository
       const createdPlan = await tx.investmentContributionPlan.create({
         data: {
           investmentId: investmentIdNum,
-          sourceAccountId,
           status: planPayload.status || 'active',
           amount: normalizeDecimal(planPayload.amount),
           cadenceUnit: String(planPayload.cadenceUnit),
@@ -319,7 +329,6 @@ export class ContributionPlanPrismaRepository
           data: {
             investmentId: investmentIdNum,
             recurringPlanId: createdPlan.id,
-            sourceAccountId,
             linkedTransactionId: null,
             eventType,
             dueDate,
@@ -415,7 +424,6 @@ export class ContributionPlanPrismaRepository
             data: {
               investmentId: investmentIdNum,
               recurringPlanId: planIdNum,
-              sourceAccountId: plan.sourceAccountId,
               linkedTransactionId: null,
               eventType: InvestmentEventType.CONTRIBUTION,
               dueDate,
@@ -487,7 +495,6 @@ export class ContributionPlanPrismaRepository
             data: {
               investmentId: plan.investmentId,
               recurringPlanId: plan.id,
-              sourceAccountId: plan.sourceAccountId,
               linkedTransactionId: null,
               eventType: InvestmentEventType.CONTRIBUTION,
               dueDate: nextDueDate,

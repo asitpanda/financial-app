@@ -16,16 +16,12 @@ import {
   IconButton,
   Typography,
 } from "@mui/material";
+import { useHeaderAction } from "../../hooks/useHeaderAction";
+import { useViewportTableHeight } from "../../hooks/useViewportTableHeight";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import dayjs from "dayjs";
-import { useHeaderAction } from "../../hooks/useHeaderAction";
-import { useViewportTableHeight } from "../../hooks/useViewportTableHeight";
-import {
-  matchesPageDateFilter,
-  usePageDateFilterStore,
-} from "../../store/pageDateFilterStore";
 import GoalFormDrawer from "./components/GoalFormDrawer";
 import {
   DataTable,
@@ -57,6 +53,7 @@ import {
   getGoalInsights,
   getGoalProgressChart,
   getGoalRows,
+  getProgress,
   getTableGoals,
 } from "./goals.selectors";
 import type { GoalProgressFilter } from "./goal.types";
@@ -105,10 +102,6 @@ export default function Goals() {
     page: 0,
     pageSize: 25,
   });
-  const periodMode = usePageDateFilterStore((state) => state.mode);
-  const selectedYear = usePageDateFilterStore((state) => state.selectedYear);
-  const selectedMonth = usePageDateFilterStore((state) => state.selectedMonth);
-
   const openAddDrawer = () => {
     openDrawer({ type: "goal", mode: "create", step: "form" });
   };
@@ -161,30 +154,13 @@ export default function Goals() {
 
   const applyDateRangeShortcut = (shortcut) => {
     setDateRangeShortcut(shortcut);
-
-    if (shortcut === "all") {
-      setDateRange([null, null]);
-      return;
-    }
-
+    if (shortcut === "all") { setDateRange([null, null]); return; }
     if (shortcut === "custom") return;
-
     const now = dayjs();
-    if (shortcut === "last7") {
-      setDateRange([now.subtract(6, "day"), now]);
-      return;
-    }
-    if (shortcut === "last30") {
-      setDateRange([now.subtract(29, "day"), now]);
-      return;
-    }
-    if (shortcut === "thisMonth") {
-      setDateRange([now.startOf("month"), now.endOf("month")]);
-      return;
-    }
-    if (shortcut === "thisYear") {
-      setDateRange([now.startOf("year"), now.endOf("year")]);
-    }
+    if (shortcut === "last7") { setDateRange([now.subtract(6, "day"), now]); return; }
+    if (shortcut === "last30") { setDateRange([now.subtract(29, "day"), now]); return; }
+    if (shortcut === "thisMonth") { setDateRange([now.startOf("month"), now.endOf("month")]); return; }
+    if (shortcut === "thisYear") { setDateRange([now.startOf("year"), now.endOf("year")]); }
   };
 
   const focusGoalTable = useCallback(() => {
@@ -218,19 +194,12 @@ export default function Goals() {
         search,
         progressFilter,
         dateRange,
-        periodMode,
-        selectedYear,
-        selectedMonth,
-        matchesPageDateFilter,
       }),
     [
       goals,
       search,
       progressFilter,
       dateRange,
-      periodMode,
-      selectedYear,
-      selectedMonth,
     ],
   );
 
@@ -623,7 +592,7 @@ export default function Goals() {
                 </Box>
 
                 <Box sx={{ display: "grid", gap: 1.25 }}>
-                  {goalProgressChart.segments.map((segment) => (
+                  {goalProgressChart.segments.filter((s) => s.count > 0).map((segment) => (
                     <Box
                       key={segment.key}
                       sx={{
@@ -803,9 +772,7 @@ export default function Goals() {
                     <MenuItem value="all">Date Range: All Time</MenuItem>
                     <MenuItem value="last7">Date Range: Last 7 Days</MenuItem>
                     <MenuItem value="last30">Date Range: Last 30 Days</MenuItem>
-                    <MenuItem value="thisMonth">
-                      Date Range: This Month
-                    </MenuItem>
+                    <MenuItem value="thisMonth">Date Range: This Month</MenuItem>
                     <MenuItem value="thisYear">Date Range: This Year</MenuItem>
                     <MenuItem value="custom">Date Range: Custom</MenuItem>
                   </Select>
@@ -818,9 +785,7 @@ export default function Goals() {
                         setDateRange([value, dateRange[1]]);
                         setDateRangeShortcut("custom");
                       }}
-                      slotProps={{
-                        textField: { size: "small", fullWidth: true },
-                      }}
+                      slotProps={{ textField: { size: "small", fullWidth: true } }}
                     />
                   </LocalizationProvider>
 
@@ -832,9 +797,7 @@ export default function Goals() {
                         setDateRange([dateRange[0], value]);
                         setDateRangeShortcut("custom");
                       }}
-                      slotProps={{
-                        textField: { size: "small", fullWidth: true },
-                      }}
+                      slotProps={{ textField: { size: "small", fullWidth: true } }}
                     />
                   </LocalizationProvider>
                 </FilterBar>

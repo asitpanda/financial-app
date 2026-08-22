@@ -8,6 +8,7 @@ export type FinancialAccountRecord = {
   accountNumberMasked: string | null;
   currency: string;
   isActive: boolean;
+  openingBalance: number;
   createdAt: Date;
   updatedAt: Date;
 };

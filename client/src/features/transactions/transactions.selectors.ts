@@ -1,7 +1,7 @@
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import type { TransactionRecord } from "./transaction.types";
-import type { PageDateFilterMode } from "../../store/pageDateFilterStore";
+import type { GlobalDateFilterState } from "../../store/pageDateFilterStore";
 
 interface TransactionFilterInput {
   dateRange: [Dayjs | null, Dayjs | null];
@@ -26,6 +26,7 @@ interface TransactionTableRow {
   dateLabel: string;
   category: string;
   source: string;
+  destination: string;
   type: string;
   amount: number;
   notes: string;
@@ -33,25 +34,13 @@ interface TransactionTableRow {
 
 export const getSortedTransactions = (
   transactions: TransactionRecord[],
-  periodMode: PageDateFilterMode,
-  selectedYear: number,
-  selectedMonth: number,
-  matchesPageDateFilter: (
-    date: Date,
-    mode: PageDateFilterMode,
-    year: number,
-    month: number,
-  ) => boolean,
+  filterState: GlobalDateFilterState,
+  matchesGlobalDateFilter: (date: Date, state: GlobalDateFilterState) => boolean,
 ) => {
   const pageFilteredTransactions = transactions.filter(
     (tx: TransactionRecord) => {
       const transactionDate = new Date(tx.date || tx.createdAt || Date.now());
-      return matchesPageDateFilter(
-        transactionDate,
-        periodMode,
-        selectedYear,
-        selectedMonth,
-      );
+      return matchesGlobalDateFilter(transactionDate, filterState);
     },
   );
 
@@ -110,7 +99,7 @@ export const getTransactionInsights = (
   const summary = filteredTransactions.reduce(
     (acc: Omit<TransactionInsights, "net">, tx: TransactionRecord) => {
       const amount = Number(tx.amount || 0);
-      const isExpense = tx.type === "expense";
+      const isExpense = tx.type === "EXPENSE";
 
       if (isExpense) {
         acc.totalExpense += amount;
@@ -152,6 +141,11 @@ export const getTransactionRows = (
         (tx.sourceAccountId != null
           ? String(tx.sourceAccountId)
           : "Unknown source"),
+      destination:
+        accountNameById[Number(tx.destinationAccountId)] ||
+        (tx.destinationAccountId != null
+          ? String(tx.destinationAccountId)
+          : "No destination"),
       type: tx.type || "unknown",
       amount: Number(tx.amount || 0),
       notes: tx.notes || "",

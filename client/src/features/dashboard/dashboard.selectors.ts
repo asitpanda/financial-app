@@ -1,5 +1,6 @@
-import { PAGE_MONTH_OPTIONS, FISCAL_YEAR_START_MONTH, type PageDateFilterMode } from '../../store/pageDateFilterStore';
+import { PAGE_MONTH_OPTIONS, FISCAL_YEAR_START_MONTH, type GlobalDateFilterState } from '../../store/pageDateFilterStore';
 import { getInvestmentCategoryOptions, normalizeInvestmentForUi } from '../../utils/investmentHelpers';
+import { getStableSeriesColorMap } from '../../colors';
 import type { CategoryRecord } from '../categories/categories.types';
 import type { GoalRecord } from '../goals/goal.types';
 import type { TransactionRecord } from '../transactions/transaction.types';
@@ -52,8 +53,18 @@ const summarizeSources = (
   );
 };
 
-export const getDashboardPeriodLabel = (periodMode: PageDateFilterMode, selectedYear: number, selectedMonth: number) => {
-  if (periodMode === 'monthly') {
+export const getDashboardPeriodLabel = (filterState: GlobalDateFilterState) => {
+  if (filterState.scopeMode === 'tillNow') return 'Till Now';
+
+  if (filterState.scopeMode === 'range') {
+    if (!filterState.rangeStart || !filterState.rangeEnd) return 'Custom Range';
+    const start = new Date(filterState.rangeStart).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    const end = new Date(filterState.rangeEnd).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    return `${start} – ${end}`;
+  }
+
+  const { selectedYear, selectedMonth } = filterState;
+  if (filterState.mode === 'monthly') {
     const fiscalYear = selectedMonth >= FISCAL_YEAR_START_MONTH ? selectedYear : selectedYear + 1;
     return `${PAGE_MONTH_OPTIONS[selectedMonth]} ${fiscalYear}`;
   }
@@ -63,25 +74,27 @@ export const getDashboardPeriodLabel = (periodMode: PageDateFilterMode, selected
 
 export const getDashboardFilteredTransactions = (
   transactions: TransactionRecord[],
-  periodMode: PageDateFilterMode,
-  selectedYear: number,
-  selectedMonth: number,
-  matchesPageDateFilter: (date: Date, mode: PageDateFilterMode, year: number, month: number) => boolean,
+  filterState: GlobalDateFilterState,
+  matchesGlobalDateFilter: (date: Date, state: GlobalDateFilterState) => boolean,
 ) => {
   return transactions.filter((transaction) => {
     const date = getTransactionDate(transaction);
-    return matchesPageDateFilter(date, periodMode, selectedYear, selectedMonth);
+    return matchesGlobalDateFilter(date, filterState);
   });
 };
 
 export const getDashboardAccountOverviewRows = (
   accounts: DashboardPageData['accounts'],
-  lifetimeBankSummaries: ReturnType<typeof summarizeSources>,
   periodBankSummaries: ReturnType<typeof summarizeSources>,
 ) => {
+  const openingBalanceByName = accounts.reduce<Record<string, number>>((acc, account) => {
+    const name = account.displayName || account.institutionName || account.name;
+    if (name) acc[name] = Number(account.openingBalance) || 0;
+    return acc;
+  }, {});
+
   const allSources = new Set([
     ...accounts.map((account) => account.displayName || account.institutionName || account.name),
-    ...Object.keys(lifetimeBankSummaries),
     ...Object.keys(periodBankSummaries),
   ]);
 
@@ -90,14 +103,12 @@ export const getDashboardAccountOverviewRows = (
   return sourceNames
     .map<DashboardAccountOverviewRow>((name) => ({
       name,
-      currentBalance: lifetimeBankSummaries[name]?.balance || 0,
-      periodChange: periodBankSummaries[name]?.balance || 0,
-      transactions: lifetimeBankSummaries[name]?.transactions || 0,
-      periodTransactions: periodBankSummaries[name]?.transactions || 0,
+      // account balance = opening balance + net of transactions within the selected period
+      balance: (openingBalanceByName[name] || 0) + (periodBankSummaries[name]?.balance || 0),
+      transactions: periodBankSummaries[name]?.transactions || 0,
     }))
     .sort((left, right) => {
-      if (right.currentBalance !== left.currentBalance) return right.currentBalance - left.currentBalance;
-      if (right.periodChange !== left.periodChange) return right.periodChange - left.periodChange;
+      if (right.balance !== left.balance) return right.balance - left.balance;
       return right.transactions - left.transactions;
     });
 };
@@ -110,12 +121,17 @@ export const getDashboardCategoryPieData = (filteredTransactions: TransactionRec
     return acc;
   }, {});
 
-  const palette = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
-  const items = Object.entries(byCategory)
-    .map(([name, value], index) => ({
+  const categoryEntries = Object.entries(byCategory);
+  const colorByCategory = getStableSeriesColorMap(
+    categoryEntries.map(([name]) => name),
+    'dashboard-category-pie',
+  );
+
+  const items = categoryEntries
+    .map(([name, value]) => ({
       name,
       value,
-      color: palette[index % palette.length],
+      color: colorByCategory.get(name) ?? '#94a3b8',
     }))
     .sort((left, right) => right.value - left.value);
 
@@ -197,12 +213,22 @@ export const getDashboardMonthlySummary = (
   } satisfies DashboardMonthlySummary;
 };
 
-export const getDashboardInvestmentPeriodBounds = (
-  periodMode: PageDateFilterMode,
-  selectedYear: number,
-  selectedMonth: number,
-) => {
-  if (periodMode === 'monthly') {
+export const getDashboardInvestmentPeriodBounds = (filterState: GlobalDateFilterState) => {
+  // Far-future/epoch bounds effectively mean "no restriction" for tillNow/open range ends.
+  if (filterState.scopeMode === 'tillNow') {
+    return { start: new Date(0), end: new Date(8640000000000000) };
+  }
+
+  if (filterState.scopeMode === 'range') {
+    const start = filterState.rangeStart ? new Date(filterState.rangeStart) : new Date(0);
+    const end = filterState.rangeEnd
+      ? new Date(new Date(filterState.rangeEnd).setHours(23, 59, 59, 999))
+      : new Date(8640000000000000);
+    return { start, end };
+  }
+
+  const { selectedYear, selectedMonth } = filterState;
+  if (filterState.mode === 'monthly') {
     return {
       start: new Date(selectedYear, selectedMonth, 1),
       end: new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59, 999),
@@ -223,6 +249,9 @@ export const getDashboardInvestmentSummary = (
   const { start: periodStart, end: periodEnd } = investmentPeriodBounds;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  // "Overdue"/"stale" are judged as of the selected period's end, capped at today so a
+  // future-dated period end (e.g. the current fiscal month) doesn't hide real overdue items.
+  const referenceDate = periodEnd < today ? periodEnd : today;
 
   const allActiveInvestments = investments.filter((investment) => investment.status === 'active');
   const periodInvestments = allActiveInvestments.filter((investment) => {
@@ -241,18 +270,7 @@ export const getDashboardInvestmentSummary = (
   const periodUnrealisedGain = periodCurrentValue - periodTotalInvested;
   const periodUnrealisedGainPct = periodTotalInvested > 0 ? (periodUnrealisedGain / periodTotalInvested) * 100 : 0;
 
-  const totalInvested = allActiveInvestments.reduce(
-    (sum, investment) => sum + (Number(investment.totalInvested) || 0),
-    0,
-  );
-  const currentValue = allActiveInvestments.reduce(
-    (sum, investment) => sum + (Number(investment.currentValue || investment.totalInvested) || 0),
-    0,
-  );
-  const unrealisedGain = currentValue - totalInvested;
-  const unrealisedGainPct = totalInvested > 0 ? (unrealisedGain / totalInvested) * 100 : 0;
-
-  const categoryTotals = allActiveInvestments.reduce<Record<string, number>>((acc, investment) => {
+  const categoryTotals = periodInvestments.reduce<Record<string, number>>((acc, investment) => {
     const key = investment.assetCategory || investment.category || 'other';
     acc[key] = (acc[key] || 0) + (Number(investment.totalInvested) || 0);
     return acc;
@@ -262,7 +280,7 @@ export const getDashboardInvestmentSummary = (
       key,
       label: categoryLabelMap[key] || key,
       value,
-      pct: totalInvested > 0 ? (value / totalInvested) * 100 : 0,
+      pct: periodTotalInvested > 0 ? (value / periodTotalInvested) * 100 : 0,
     }))
     .sort((left, right) => right.value - left.value);
 
@@ -296,7 +314,7 @@ export const getDashboardInvestmentSummary = (
       }
       const due = new Date(investment.activeContributionPlan.nextDueDate);
       due.setHours(0, 0, 0, 0);
-      return due < today;
+      return due < referenceDate;
     })
     .sort(
       (left, right) =>
@@ -312,10 +330,10 @@ export const getDashboardInvestmentSummary = (
     })
     .sort((left, right) => new Date(left.maturityDate!).valueOf() - new Date(right.maturityDate!).valueOf());
 
-  const ninetyDaysAgo = new Date(today);
+  const ninetyDaysAgo = new Date(referenceDate);
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-  const staleValuationCount = allActiveInvestments.filter((investment) => {
+  const staleValuationCount = periodActionInvestments.filter((investment) => {
     const startDate = investment.startDate ? new Date(investment.startDate) : null;
     const isEstablished = !startDate || startDate < ninetyDaysAgo;
     if (!isEstablished) return false;
@@ -355,10 +373,6 @@ export const getDashboardInvestmentSummary = (
 
   return {
     activeCount: allActiveInvestments.length,
-    totalInvested,
-    currentValue,
-    unrealisedGain,
-    unrealisedGainPct,
     periodTotalInvested,
     periodCurrentValue,
     periodUnrealisedGain,

@@ -59,7 +59,6 @@ export interface InvestmentEvent {
 	id: string | number;
 	investmentId: string | number;
 	recurringPlanId?: string | number | null;
-	sourceAccountId?: string | number | null;
 	linkedTransactionId?: string | number | null;
 	eventType: InvestmentEventType;
 	dueDate?: string | null;

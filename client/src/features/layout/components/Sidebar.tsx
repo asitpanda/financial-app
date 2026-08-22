@@ -196,7 +196,17 @@ export default function Sidebar({ onNavigate, children, activeRoute }) {
       </Drawer>
       <Box
         component="main"
-        sx={{ flexGrow: 1, minWidth: 0, pl: 2, pr: 2, pb: 2, height: "100%" }}
+        sx={{
+          flexGrow: 1,
+          minWidth: 0,
+          pl: 2,
+          pr: 2,
+          pb: 2,
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
       >
         {children}
       </Box>

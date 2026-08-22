@@ -3,7 +3,6 @@ import { InvestmentEventType } from '@prisma/client';
 import { mockInvestmentContributionPlansData } from '../../mockdata';
 import { mockInvestmentEventsData } from '../../mockdata/investmentEvents';
 import { mockInvestmentsData } from '../../mockdata/investments';
-import { mockFinancialAccountsData } from '../../mockdata/financialAccounts';
 import type { InvestmentContributionPlanRecord } from '../investment-contribution-plan.types';
 import type { InvestmentEventRecord } from '../../investment-events/investment-event.types';
 import {
@@ -45,11 +44,22 @@ const syncInvestmentDerivedValues = (investmentId: number) => {
     )
     .reduce((sum, event) => sum + Number(event.amount || 0), 0);
 
+  const incomeCredits = mockInvestmentEvents
+    .filter(
+      (event) =>
+        event.investmentId === investmentId &&
+        event.status === 'CONFIRMED' &&
+        (event.eventType === InvestmentEventType.OPENING_INCOME_CREDIT ||
+          event.eventType === InvestmentEventType.INCOME_CREDIT),
+    )
+    .reduce((sum, event) => sum + Number(event.amount || 0), 0);
+
   const investmentIndex = mockInvestmentsData.findIndex((inv) => inv.id === investmentId);
   if (investmentIndex < 0) return;
 
   const principalTotal = principalIn - principalOut;
   mockInvestmentsData[investmentIndex].totalInvested = principalTotal;
+  mockInvestmentsData[investmentIndex].currentValue = principalTotal + incomeCredits;
 };
 
 @Injectable()
@@ -60,7 +70,6 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
       id: nextPlanId(),
       ...data,
       investmentId: Number(data.investmentId),
-      sourceAccountId: normalizeNullableNumber(data.sourceAccountId),
       amount: Number(data.amount),
       reminderDaysBefore: normalizeNullableNumber(data.reminderDaysBefore),
       anchorDate: new Date(data.anchorDate),
@@ -129,7 +138,6 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
       ...mockInvestmentContributionPlans[index],
       ...data,
       investmentId: data.investmentId !== undefined ? Number(data.investmentId) : mockInvestmentContributionPlans[index].investmentId,
-      sourceAccountId: data.sourceAccountId !== undefined ? normalizeNullableNumber(data.sourceAccountId) : mockInvestmentContributionPlans[index].sourceAccountId,
       amount: data.amount !== undefined ? Number(data.amount) : mockInvestmentContributionPlans[index].amount,
       reminderDaysBefore:
         data.reminderDaysBefore !== undefined
@@ -169,18 +177,10 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
   ): Promise<CreatePlanWithHistoricalEventsResult> {
     const { investmentId, userId, planPayload, selectedHistoricalItems } = data;
     const investmentIdNum = Number(investmentId);
-    const sourceAccountId = normalizeNullableNumber(planPayload.sourceAccountId);
 
     const investment = mockInvestmentsData.find((inv) => inv.id === investmentIdNum && inv.userId === userId);
     if (!investment) {
       throw new Error('Investment not found');
-    }
-
-    if (sourceAccountId) {
-      const account = mockFinancialAccountsData.find((acc) => acc.id === sourceAccountId && acc.userId === userId);
-      if (!account) {
-        throw new Error('Source account not found or ownership mismatch');
-      }
     }
 
     if (String(planPayload.status || '').toLowerCase() === 'active') {
@@ -196,7 +196,6 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
     const newPlan: InvestmentContributionPlanRecord = {
       id: nextPlanId(),
       investmentId: investmentIdNum,
-      sourceAccountId,
       status: planPayload.status || 'active',
       amount: Number(planPayload.amount),
       cadenceUnit: String(planPayload.cadenceUnit),
@@ -239,7 +238,6 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
         id: mockInvestmentEvents.length ? Math.max(...mockInvestmentEvents.map((event) => event.id)) + 1 : 1,
         investmentId: investmentIdNum,
         recurringPlanId: newPlan.id,
-        sourceAccountId,
         linkedTransactionId: null,
         eventType,
         dueDate,
@@ -322,7 +320,6 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
         id: mockInvestmentEvents.length ? Math.max(...mockInvestmentEvents.map((event) => event.id)) + 1 : 1,
         investmentId: investmentIdNum,
         recurringPlanId: planIdNum,
-        sourceAccountId: plan.sourceAccountId,
         linkedTransactionId: null,
         eventType: InvestmentEventType.CONTRIBUTION,
         dueDate,
@@ -388,7 +385,6 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
             id: mockInvestmentEvents.length ? Math.max(...mockInvestmentEvents.map((event) => event.id)) + 1 : 1,
             investmentId: plan.investmentId,
             recurringPlanId: plan.id,
-            sourceAccountId: plan.sourceAccountId,
             linkedTransactionId: null,
             eventType: InvestmentEventType.CONTRIBUTION,
             dueDate: new Date(nextDueDate),

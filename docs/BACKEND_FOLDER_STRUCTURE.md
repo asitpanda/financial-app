@@ -21,7 +21,7 @@ server/
     investment-asset-taxonomy/
     investment-contribution-plans/
     investment-events/
-    investment-goal-allocations/
+    investment-goal-allocations/  # scaffolded only, not yet registered in app.module.ts
     transactions/
     valuation-snapshots/
     database/

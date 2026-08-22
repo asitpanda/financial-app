@@ -17,8 +17,8 @@ export interface Goal {
 
 export interface CreateGoalDto {
   name: string;
-  category: string;
-  categoryId?: string | null;
+  categoryId: number;
+  categoryLabelSnapshot: string;
   description?: string;
   icon?: string;
   targetAmount: number;

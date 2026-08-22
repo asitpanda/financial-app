@@ -6,6 +6,6 @@ export { mockInvestmentAssetTaxonomyData } from './investmentAssetTaxonomy';
 export { mockInvestmentsData } from './investments';
 export { mockInvestmentEventsData } from './investmentEvents';
 export { mockInvestmentContributionPlansData } from './investmentContributionPlans';
-export { mockTransactionsData } from './transactions';
+export { mockTransactionsData, mockTransactionsStore } from './transactions';
 export { mockGoalsData } from './goals';
 export { mockValuationSnapshotsData } from './valuationSnapshots';

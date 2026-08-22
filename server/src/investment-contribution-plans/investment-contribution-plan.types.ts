@@ -5,7 +5,6 @@ import type { InvestmentEventRecord } from '../investment-events/investment-even
 export type InvestmentContributionPlanRecord = {
   id: number;
   investmentId: number;
-  sourceAccountId: number | null;
   status: string;
   amount: number;
   cadenceUnit: string;

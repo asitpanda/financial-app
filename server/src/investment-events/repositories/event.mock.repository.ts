@@ -33,11 +33,22 @@ const syncInvestmentDerivedValues = (investmentId: number) => {
     )
     .reduce((sum, event) => sum + Number(event.amount || 0), 0);
 
+  const incomeCredits = mockInvestmentEvents
+    .filter(
+      (event) =>
+        event.investmentId === investmentId &&
+        event.status === 'CONFIRMED' &&
+        (event.eventType === InvestmentEventType.OPENING_INCOME_CREDIT ||
+          event.eventType === InvestmentEventType.INCOME_CREDIT),
+    )
+    .reduce((sum, event) => sum + Number(event.amount || 0), 0);
+
   const investmentIndex = mockInvestmentsData.findIndex((investment) => investment.id === investmentId);
   if (investmentIndex < 0) return;
 
   const principalTotal = principalIn - principalOut;
   mockInvestmentsData[investmentIndex].totalInvested = principalTotal;
+  mockInvestmentsData[investmentIndex].currentValue = principalTotal + incomeCredits;
 };
 
 @Injectable()
@@ -49,7 +60,6 @@ export class EventMockRepository implements IEventDataSourcePort {
       ...data,
       investmentId: Number(data.investmentId),
       recurringPlanId: normalizeNullableNumber(data.recurringPlanId),
-      sourceAccountId: normalizeNullableNumber(data.sourceAccountId),
       linkedTransactionId: normalizeNullableNumber(data.linkedTransactionId),
       eventType: data.eventType,
       dueDate: normalizeDate(data.dueDate),
@@ -101,7 +111,6 @@ export class EventMockRepository implements IEventDataSourcePort {
       ...data,
       investmentId: data.investmentId !== undefined ? Number(data.investmentId) : mockInvestmentEvents[index].investmentId,
       recurringPlanId: data.recurringPlanId !== undefined ? normalizeNullableNumber(data.recurringPlanId) : mockInvestmentEvents[index].recurringPlanId,
-      sourceAccountId: data.sourceAccountId !== undefined ? normalizeNullableNumber(data.sourceAccountId) : mockInvestmentEvents[index].sourceAccountId,
       linkedTransactionId: data.linkedTransactionId !== undefined ? normalizeNullableNumber(data.linkedTransactionId) : mockInvestmentEvents[index].linkedTransactionId,
       eventType: data.eventType !== undefined ? data.eventType : mockInvestmentEvents[index].eventType,
       dueDate: data.dueDate !== undefined ? normalizeDate(data.dueDate) : mockInvestmentEvents[index].dueDate,

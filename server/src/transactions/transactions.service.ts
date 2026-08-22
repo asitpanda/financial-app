@@ -4,26 +4,23 @@ import {
   InvestmentEventStatus,
   InvestmentEventType,
 } from '@prisma/client';
+import type { TransactionType } from '@prisma/client';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { RecordContributionDto } from './dto/record-contribution.dto';
+import { RecordWithdrawalDto } from './dto/record-withdrawal.dto';
 import { InvestmentEventsService } from '../investment-events/investment-events.service';
 import { InvestmentContributionPlansService } from '../investment-contribution-plans/investment-contribution-plans.service';
-import { CategoriesService } from '../categories/categories.service';
-import { mockFinancialAccountsData } from '../mockdata';
 import { TransactionRepository } from './repositories/transaction.repository';
 import { InvestmentRepository } from '../investments/repositories/investment.repository';
 import { FinancialAccountsService } from '../financial-accounts/financial-accounts.service';
 
 @Injectable()
 export class TransactionsService {
-  private static readonly CONTRIBUTION_CATEGORY_NAME = 'Investment Contribution';
-
   constructor(
     private readonly repository: TransactionRepository,
     private readonly investmentEventsService: InvestmentEventsService,
     private readonly contributionPlansService: InvestmentContributionPlansService,
-    private readonly categoriesService: CategoriesService,
     private readonly investmentRepository: InvestmentRepository,
     private readonly financialAccountsService: FinancialAccountsService,
   ) {}
@@ -68,27 +65,30 @@ export class TransactionsService {
     return this.repository.findByDateRange(userId, startDate, endDate);
   }
 
-  async findByType(userId: number, type: string) {
+  async findByType(userId: number, type: TransactionType) {
     return this.repository.findByType(userId, type);
   }
 
   async recordContribution(recordContributionDto: RecordContributionDto, userId: number) {
-    await this.ensureOwnedInvestment(recordContributionDto.investmentId, userId);
-    const sourceAccountId = this.resolveSourceAccountId(recordContributionDto.sourceAccountId);
-    await this.ensureOwnedSourceAccount(sourceAccountId, userId);
+    const investment = await this.ensureOwnedInvestment(recordContributionDto.investmentId, userId);
+    if (investment.accountId == null) {
+      throw new BadRequestException(
+        'Investment must have a linked funding account before recording a contribution.',
+      );
+    }
+
+    const sourceAccountId = Number(investment.accountId);
     const contributionPlanId = await this.resolveContributionPlanId(recordContributionDto, userId);
-    const contributionCategoryId = await this.resolveContributionCategoryId(userId);
 
     // 1. Create Transaction
     const transactionDto: CreateTransactionDto = {
-      type: 'expense',
-      transactionKind: 'investment-contribution',
-      categoryId: contributionCategoryId,
+      type: 'INVESTMENT',
+      categoryId: null,
       goalId: null,
       sourceAccountId,
       destinationAccountId: null,
       amount: recordContributionDto.amount,
-      categoryLabelSnapshot: TransactionsService.CONTRIBUTION_CATEGORY_NAME,
+      categoryLabelSnapshot: null,
       date: recordContributionDto.transactionDate,
       notes: recordContributionDto.notes || `Contribution for investment ${recordContributionDto.investmentId}`,
     };
@@ -100,7 +100,6 @@ export class TransactionsService {
     // 2. Create InvestmentEvent
     const investmentEventDto = {
       investmentId: String(recordContributionDto.investmentId),
-      sourceAccountId: String(sourceAccountId),
       linkedTransactionId: String(transaction.id),
       eventType: InvestmentEventType.CONTRIBUTION,
       status: InvestmentEventStatus.CONFIRMED,
@@ -116,11 +115,11 @@ export class TransactionsService {
 
     const investmentEvent = await this.investmentEventsService.create(investmentEventDto, userId);
 
-    // 3. Link them by updating transaction
-    await this.repository.update(transaction.id, { linkedInvestmentEventId: investmentEvent.id }, userId);
-
-    // 4. Update ContributionPlan's nextDueDate
-    await this.contributionPlansService.advanceNextDueDate(contributionPlanId);
+    // 3. Advance recurring plan's next due date only when a plan was resolved.
+    // InvestmentEvent creation synchronizes the principal total.
+    if (contributionPlanId != null) {
+      await this.contributionPlansService.advanceNextDueDate(contributionPlanId);
+    }
 
     return {
       transaction,
@@ -129,34 +128,57 @@ export class TransactionsService {
     };
   }
 
-  private resolveSourceAccountId(rawSource: string): number {
-    const trimmedSource = String(rawSource || '').trim();
-    const numericSourceId = Number(trimmedSource);
-    if (!Number.isNaN(numericSourceId) && numericSourceId > 0) {
-      return numericSourceId;
-    }
+  async recordWithdrawal(recordWithdrawalDto: RecordWithdrawalDto, userId: number) {
+    const investment = await this.ensureOwnedInvestment(recordWithdrawalDto.investmentId, userId);
+    const amount = Number(recordWithdrawalDto.amount);
+    const totalInvested = Number(investment.totalInvested || 0);
 
-    const normalizedSource = trimmedSource.toLowerCase();
-    const matchedAccount = mockFinancialAccountsData.find((account) => {
-      const candidates = [account.institutionName, account.displayName, account.name]
-        .filter(Boolean)
-        .map((value) => String(value).toLowerCase());
-      return candidates.includes(normalizedSource);
-    });
-
-    if (!matchedAccount) {
+    if (amount > totalInvested) {
       throw new BadRequestException(
-        'Invalid sourceAccountId. Pass a numeric account id or a valid bank/account name.',
+        `Withdrawal exceeds invested principal. Available: ${totalInvested.toFixed(2)}, requested: ${amount.toFixed(2)}.`,
       );
     }
 
-    return matchedAccount.id;
+    const transaction = await this.repository.create(
+      {
+        type: 'INCOME',
+        categoryId: null,
+        categoryLabelSnapshot: null,
+        goalId: null,
+        sourceAccountId: null,
+        destinationAccountId: investment.accountId ?? null,
+        amount,
+        date: recordWithdrawalDto.transactionDate,
+        notes: recordWithdrawalDto.notes || `Withdrawal from investment ${recordWithdrawalDto.investmentId}`,
+      },
+      userId,
+    );
+
+    const investmentEvent = await this.investmentEventsService.create(
+      {
+        investmentId: recordWithdrawalDto.investmentId,
+        linkedTransactionId: String(transaction.id),
+        eventType: InvestmentEventType.WITHDRAWAL_PRINCIPAL,
+        status: InvestmentEventStatus.CONFIRMED,
+        eventSource: InvestmentEventSource.MANUAL,
+        eventDate: recordWithdrawalDto.transactionDate,
+        amount,
+        units: null,
+        pricePerUnit: null,
+        netAmount: amount,
+        notes: `Linked to transaction ${transaction.id}`,
+        meta: { linkedTransactionId: transaction.id },
+      },
+      userId,
+    );
+
+    return { transaction, investmentEvent, message: 'Withdrawal recorded successfully' };
   }
 
   private async resolveContributionPlanId(
     recordContributionDto: RecordContributionDto,
     userId: number,
-  ): Promise<number> {
+  ): Promise<number | null> {
     const rawPlanId = String(recordContributionDto.contributionPlanId ?? '').trim();
     const parsedPlanId = Number(rawPlanId);
 
@@ -191,55 +213,19 @@ export class TransactionsService {
       (plan) => String(plan.status || '').trim().toLowerCase() === 'active',
     );
 
-    if (!activePlan) {
-      throw new BadRequestException(
-        `No active contribution plan found for investmentId ${recordContributionDto.investmentId}`,
-      );
-    }
-
-    return Number(activePlan.id);
+    // No active plan — allow ad-hoc contribution without advancing any schedule
+    return activePlan ? Number(activePlan.id) : null;
   }
 
-  private async ensureOwnedInvestment(investmentId: string, userId: number): Promise<void> {
+  private async ensureOwnedInvestment(investmentId: string, userId: number) {
     const investment = await this.investmentRepository.findOne(Number(investmentId), userId);
     if (!investment) {
       throw new BadRequestException(
         `Invalid investmentId ${investmentId}. Investment does not exist for this user.`,
       );
     }
-  }
 
-  private async ensureOwnedSourceAccount(sourceAccountId: number, userId: number): Promise<void> {
-    const account = await this.financialAccountsService.findOne(sourceAccountId, userId);
-    if (!account) {
-      throw new BadRequestException(
-        `Invalid sourceAccountId ${sourceAccountId}. Account does not exist for this user.`,
-      );
-    }
-  }
-
-  private async resolveContributionCategoryId(userId: number): Promise<number> {
-    const categories = await this.categoriesService.findAll(userId);
-    const existingCategory = categories.find((category) =>
-      String(category?.name || '').trim().toLowerCase() ===
-      TransactionsService.CONTRIBUTION_CATEGORY_NAME.toLowerCase(),
-    );
-
-    if (existingCategory) {
-      return Number(existingCategory.id);
-    }
-
-    const createdCategory = await this.categoriesService.create(
-      {
-        name: TransactionsService.CONTRIBUTION_CATEGORY_NAME,
-        type: 'expense',
-        icon: 'chart-line',
-        color: '#8B5CF6',
-      },
-      userId,
-    );
-
-    return Number(createdCategory.id);
+    return investment;
   }
 
   private async validateExpenseSourceBalance(
@@ -247,21 +233,21 @@ export class TransactionsService {
     userId: number,
     excludeTransactionId?: number,
   ): Promise<void> {
-    if (createTransactionDto.type !== 'expense') return;
+    if (createTransactionDto.type !== 'EXPENSE') return;
 
     const sourceAccountId = Number(createTransactionDto.sourceAccountId);
     if (!Number.isFinite(sourceAccountId) || sourceAccountId <= 0) return;
 
-    const accountTransactions = (await this.repository.findAll(userId)).filter(
-      (transaction) =>
-        Number(transaction.sourceAccountId) === sourceAccountId &&
-        (!excludeTransactionId || Number(transaction.id) !== excludeTransactionId),
-    );
+    const account = await this.financialAccountsService.findOne(sourceAccountId, userId);
+    if (!account) return;
 
-    const availableBalance = accountTransactions.reduce((sum, transaction) => {
-      const amount = Number(transaction.amount || 0);
-      return transaction.type === 'income' ? sum + amount : sum - amount;
-    }, 0);
+    let availableBalance = account.currentBalance;
+    if (excludeTransactionId) {
+      const excluded = await this.repository.findOne(excludeTransactionId, userId);
+      if (excluded && Number(excluded.sourceAccountId) === sourceAccountId && excluded.type === 'EXPENSE') {
+        availableBalance += Number(excluded.amount || 0);
+      }
+    }
 
     const requestedAmount = Number(createTransactionDto.amount || 0);
     if (requestedAmount <= 0) return;

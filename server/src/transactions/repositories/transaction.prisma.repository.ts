@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import type { TransactionType } from '@prisma/client';
 import type { TransactionRecord } from '../transaction.types';
 import { ITransactionDataSourcePort } from './transaction.datasource.port';
 import { CreateTransactionDto } from '../dto/create-transaction.dto';
@@ -47,18 +48,20 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
     userId: number,
     data: TransactionReferenceCheckInput,
   ): Promise<void> {
-    const categoryId = Number(data.categoryId);
-    if (!Number.isInteger(categoryId) || categoryId <= 0) {
-      throw new BadRequestException('Invalid categoryId.');
-    }
+    if (data.categoryId !== null && data.categoryId !== undefined) {
+      const categoryId = Number(data.categoryId);
+      if (!Number.isInteger(categoryId) || categoryId <= 0) {
+        throw new BadRequestException('Invalid categoryId.');
+      }
 
-    const category = await tx.category.findFirst({
-      where: { id: categoryId, userId },
-    });
-    if (!category) {
-      throw new BadRequestException(
-        `Invalid categoryId ${categoryId}. Category does not exist for this user.`,
-      );
+      const category = await tx.category.findFirst({
+        where: { id: categoryId, userId },
+      });
+      if (!category) {
+        throw new BadRequestException(
+          `Invalid categoryId ${categoryId}. Category does not exist for this user.`,
+        );
+      }
     }
 
     if (data.goalId !== null && data.goalId !== undefined) {
@@ -97,17 +100,6 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
       }
     }
 
-    if (data.linkedInvestmentEventId !== null && data.linkedInvestmentEventId !== undefined) {
-      const linkedInvestmentEventId = Number(data.linkedInvestmentEventId);
-      const linkedEvent = await tx.investmentEvent.findUnique({
-        where: { id: linkedInvestmentEventId },
-      });
-      if (!linkedEvent) {
-        throw new BadRequestException(
-          `Invalid linkedInvestmentEventId ${linkedInvestmentEventId}. Event does not exist.`,
-        );
-      }
-    }
   }
 
   private resolveGoalDelta(transaction: TransactionGoalDeltaSource) {
@@ -138,7 +130,6 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
         goalId: this.normalizeOptionalInt(data.goalId, 'goalId'),
         sourceAccountId: this.normalizeOptionalInt(data.sourceAccountId, 'sourceAccountId'),
         destinationAccountId: this.normalizeOptionalInt(data.destinationAccountId, 'destinationAccountId'),
-        linkedInvestmentEventId: this.normalizeOptionalInt(data.linkedInvestmentEventId, 'linkedInvestmentEventId'),
       };
 
       await this.assertValidReferences(tx, userId, createData);
@@ -182,10 +173,6 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
         destinationAccountId:
           data.destinationAccountId !== undefined
             ? this.normalizeOptionalInt(data.destinationAccountId, 'destinationAccountId')
-            : undefined,
-        linkedInvestmentEventId:
-          data.linkedInvestmentEventId !== undefined
-            ? this.normalizeOptionalInt(data.linkedInvestmentEventId, 'linkedInvestmentEventId')
             : undefined,
       };
 
@@ -280,7 +267,7 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
     });
   }
 
-  async findByType(userId: number, type: string): Promise<TransactionRecord[]> {
+  async findByType(userId: number, type: TransactionType): Promise<TransactionRecord[]> {
     return this.prisma.transaction.findMany({
       where: { userId, type },
       orderBy: { date: 'desc' },

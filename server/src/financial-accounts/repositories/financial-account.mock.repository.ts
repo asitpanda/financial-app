@@ -1,9 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { IFinancialAccountDataSourcePort } from './financial-account.datasource.port';
-import { mockFinancialAccountsData } from '../../mockdata';
+import { mockFinancialAccountsData, mockTransactionsStore } from '../../mockdata';
 import type { FinancialAccountRecord } from '../financial-account.types';
 import { CreateFinancialAccountDto } from '../dto/create-financial-account.dto';
 import { UpdateFinancialAccountDto } from '../dto/update-financial-account.dto';
+
+const INCOMING_TYPES = new Set(['INCOME', 'TRANSFER', 'INVESTMENT']);
+const OUTGOING_TYPES = new Set(['EXPENSE', 'TRANSFER', 'INVESTMENT']);
 
 let mockFinancialAccounts = [...mockFinancialAccountsData];
 const nextAccountId = () => (mockFinancialAccounts.length ? Math.max(...mockFinancialAccounts.map((account) => account.id)) + 1 : 1);
@@ -19,6 +22,7 @@ export class FinancialAccountMockRepository implements IFinancialAccountDataSour
       institutionName: data.institutionName ?? null,
       accountNumberMasked: data.accountNumberMasked ?? null,
       isActive: data.isActive ?? true,
+      openingBalance: data.openingBalance ?? 0,
       userId: normalizedUserId,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -58,5 +62,32 @@ export class FinancialAccountMockRepository implements IFinancialAccountDataSour
     const normalizedId = Number(id);
     const normalizedUserId = Number(userId);
     mockFinancialAccounts = mockFinancialAccounts.filter((account) => !(account.id === normalizedId && account.userId === normalizedUserId));
+  }
+
+  async sumTransactionFlows(accountIds: number[]): Promise<Map<number, { incoming: number; outgoing: number }>> {
+    const flows = new Map<number, { incoming: number; outgoing: number }>();
+    for (const accountId of accountIds) {
+      flows.set(accountId, { incoming: 0, outgoing: 0 });
+    }
+
+    for (const transaction of mockTransactionsStore) {
+      const amount = Number(transaction.amount) || 0;
+      if (
+        transaction.destinationAccountId != null &&
+        flows.has(transaction.destinationAccountId) &&
+        INCOMING_TYPES.has(transaction.type)
+      ) {
+        flows.get(transaction.destinationAccountId)!.incoming += amount;
+      }
+      if (
+        transaction.sourceAccountId != null &&
+        flows.has(transaction.sourceAccountId) &&
+        OUTGOING_TYPES.has(transaction.type)
+      ) {
+        flows.get(transaction.sourceAccountId)!.outgoing += amount;
+      }
+    }
+
+    return flows;
   }
 }

@@ -19,9 +19,8 @@ const getGoalId = (goal: GoalRecord): string =>
 
 const toRequestGoalDto = (payload: GoalSavePayload): CreateGoalDto => ({
   name: String(payload.name || "").trim(),
-  category: String(payload.category || "").trim(),
-  categoryId:
-    payload.categoryId == null ? null : String(payload.categoryId),
+  categoryId: Number(payload.categoryId),
+  categoryLabelSnapshot: String(payload.category || "").trim(),
   description: payload.description,
   icon: payload.icon,
   targetAmount: Number(payload.targetAmount || 0),
@@ -36,6 +35,11 @@ const toRequestGoalDto = (payload: GoalSavePayload): CreateGoalDto => ({
 
 export const saveGoal = async ({ payload, selectedGoal }: SaveGoalArgs) => {
   validateGoalSavePayload(payload);
+
+  const categoryId = Number(payload.categoryId);
+  if (!categoryId || !Number.isInteger(categoryId)) {
+    throw new Error("A valid goal category must be selected");
+  }
 
   const requestDto = toRequestGoalDto(payload);
 

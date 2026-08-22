@@ -2,9 +2,15 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   confirmRecurringContributionPlan,
   recordInvestmentContribution,
+  recordInvestmentWithdrawal,
   skipCurrentContributionPlan,
   updateContributionPlan,
 } from '../api/contributionPlans.api';
+import {
+  createInvestmentEvent,
+  deleteInvestmentEvent,
+  updateInvestmentEvent,
+} from '../api/investmentEvents.api';
 
 const invalidateInvestmentContributionQueries = (
   queryClient: ReturnType<typeof useQueryClient>,
@@ -51,6 +57,35 @@ export const useRecordInvestmentContribution = () => {
   });
 };
 
+export const useRecordInvestmentWithdrawal = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown> & { investmentId: string | number }) =>
+      recordInvestmentWithdrawal(payload),
+    onSuccess: (_result, variables) => {
+      invalidateInvestmentContributionQueries(queryClient, variables.investmentId);
+    },
+  });
+};
+
+export const useRecordInvestmentIncomeCredit = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      investmentId,
+      payload,
+    }: {
+      investmentId: string | number;
+      payload: Record<string, unknown>;
+    }) => createInvestmentEvent(investmentId, payload),
+    onSuccess: (_result, variables) => {
+      invalidateInvestmentContributionQueries(queryClient, variables.investmentId);
+    },
+  });
+};
+
 export const useSkipCurrentInvestmentContribution = () => {
   const queryClient = useQueryClient();
 
@@ -81,6 +116,42 @@ export const useConfirmRecurringInvestmentContributionPlan = () => {
       investmentId: string | number;
       payload: Record<string, unknown>;
     }) => confirmRecurringContributionPlan(investmentId, payload),
+    onSuccess: (_result, variables) => {
+      invalidateInvestmentContributionQueries(queryClient, variables.investmentId);
+    },
+  });
+};
+
+export const useUpdateInvestmentEvent = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      investmentId,
+      eventId,
+      payload,
+    }: {
+      investmentId: string | number;
+      eventId: string | number;
+      payload: Record<string, unknown>;
+    }) => updateInvestmentEvent(investmentId, eventId, payload),
+    onSuccess: (_result, variables) => {
+      invalidateInvestmentContributionQueries(queryClient, variables.investmentId);
+    },
+  });
+};
+
+export const useDeleteInvestmentEvent = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      investmentId,
+      eventId,
+    }: {
+      investmentId: string | number;
+      eventId: string | number;
+    }) => deleteInvestmentEvent(investmentId, eventId),
     onSuccess: (_result, variables) => {
       invalidateInvestmentContributionQueries(queryClient, variables.investmentId);
     },

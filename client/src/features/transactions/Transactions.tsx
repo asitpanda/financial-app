@@ -30,7 +30,7 @@ import { useDrawerStore } from "../../store/drawerStore";
 import { useDialogStore } from "../../store/dialogStore";
 import { useNotificationStore } from "../../store/notificationStore";
 import {
-  matchesPageDateFilter,
+  matchesGlobalDateFilter,
   resolveFiscalMonthYear,
   usePageDateFilterStore,
 } from "../../store/pageDateFilterStore";
@@ -131,7 +131,7 @@ const matchesTransactionTableDrilldown = (
 ) => {
   if (filterKey === "all") return true;
   if (filterKey === "linked") return Boolean(tx.goalId);
-  return tx.type === filterKey;
+  return tx.type === filterKey.toUpperCase();
 };
 
 export default function Transactions({
@@ -186,6 +186,9 @@ export default function Transactions({
   const periodMode = usePageDateFilterStore((state) => state.mode);
   const selectedYear = usePageDateFilterStore((state) => state.selectedYear);
   const selectedMonth = usePageDateFilterStore((state) => state.selectedMonth);
+  const scopeMode = usePageDateFilterStore((state) => state.scopeMode);
+  const rangeStart = usePageDateFilterStore((state) => state.rangeStart);
+  const rangeEnd = usePageDateFilterStore((state) => state.rangeEnd);
 
   useEffect(() => {
     const initialDateFilter = getInitialDateFilter(prefillFilter);
@@ -270,15 +273,18 @@ export default function Transactions({
     }, {});
   }, [accounts]);
 
+  const globalDateFilterState = useMemo(
+    () => ({ scopeMode, mode: periodMode, selectedYear, selectedMonth, rangeStart, rangeEnd }),
+    [scopeMode, periodMode, selectedYear, selectedMonth, rangeStart, rangeEnd],
+  );
+
   const sortedTransactions = useMemo(() => {
     return getSortedTransactions(
       transactions,
-      periodMode,
-      selectedYear,
-      selectedMonth,
-      matchesPageDateFilter,
+      globalDateFilterState,
+      matchesGlobalDateFilter,
     );
-  }, [transactions, periodMode, selectedYear, selectedMonth]);
+  }, [transactions, globalDateFilterState]);
 
   const filteredTransactions = useMemo(() => {
     return getFilteredTransactions(sortedTransactions, {
@@ -380,7 +386,7 @@ export default function Transactions({
     );
     return {
       goalId: drawerEntityId,
-      type: "income" as const,
+      type: "INCOME" as const,
       category: relatedGoal?.category || "",
     };
   }, [drawerOpen, drawerType, drawerMode, drawerEntityId, goals]);
@@ -501,7 +507,13 @@ export default function Transactions({
       { field: "category", headerName: "Category", flex: 1.2, minWidth: 150 },
       {
         field: "source",
-        headerName: "Bank / Source",
+        headerName: "Source account",
+        flex: 1.15,
+        minWidth: 170,
+      },
+      {
+        field: "destination",
+        headerName: "Destination account",
         flex: 1.15,
         minWidth: 170,
       },
@@ -514,7 +526,7 @@ export default function Transactions({
           <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
             <StatusChip
               label={String(params.value)}
-              tone={params.value === "expense" ? "error" : "success"}
+              tone={params.value === "EXPENSE" ? "error" : "success"}
             />
           </Box>
         ),
@@ -527,7 +539,7 @@ export default function Transactions({
         minWidth: 140,
         renderCell: (params) => {
           const row = params.row as TransactionTableRow;
-          const isExpense = row.type === "expense";
+          const isExpense = row.type === "EXPENSE";
           return (
             <Box
               sx={{
@@ -863,6 +875,7 @@ export default function Transactions({
           onClose={closeDrawer}
           transaction={selectedTransaction}
           goalName={selectedTransactionGoalName}
+          accountNameById={accountNameById}
           onEdit={(transaction) => {
             openEditDrawer(transaction);
           }}

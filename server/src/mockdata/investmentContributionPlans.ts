@@ -7,7 +7,6 @@ export const mockInvestmentContributionPlansData: InvestmentContributionPlanReco
   {
     id: 1,
     investmentId: 1,
-    sourceAccountId: 1,
     status: 'active',
     amount: 12000,
     cadenceUnit: 'month',
@@ -26,7 +25,6 @@ export const mockInvestmentContributionPlansData: InvestmentContributionPlanReco
   {
     id: 2,
     investmentId: 4,
-    sourceAccountId: 4,
     status: 'active',
     amount: 12500,
     cadenceUnit: 'year',
@@ -45,7 +43,6 @@ export const mockInvestmentContributionPlansData: InvestmentContributionPlanReco
   {
     id: 3,
     investmentId: 5,
-    sourceAccountId: 1,
     status: 'active',
     amount: 6000,
     cadenceUnit: 'month',
@@ -64,7 +61,6 @@ export const mockInvestmentContributionPlansData: InvestmentContributionPlanReco
   {
     id: 4,
     investmentId: 6,
-    sourceAccountId: 2,
     status: 'active',
     amount: 9000,
     cadenceUnit: 'month',

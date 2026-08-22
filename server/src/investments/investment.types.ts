@@ -55,6 +55,7 @@ export type SnapshotLike = {
 
 export type EventLike = {
   id?: string | number;
+  investmentId?: string | number | null;
   status?: string | null;
   eventType?: InvestmentEventType | null;
   eventDate?: string | Date | null;

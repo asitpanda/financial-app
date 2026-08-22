@@ -128,7 +128,6 @@ export const recordContributionSchema = z.object({
     .min(1, "Contribution date is required")
     .refine((value) => dayjs(value).isValid(), "Contribution date is required"),
   amount: z.coerce.number().gt(0, "Amount must be greater than 0"),
-  sourceAccountId: z.string().trim().min(1, "Please select a source account"),
   notes: z.string().optional(),
 });
 

@@ -15,9 +15,11 @@ const invalidateInvestmentSnapshotOwnership = (
   queryClient.invalidateQueries({ queryKey: ['investments', 'dashboard'] });
 
   if (investmentId == null || investmentId === '') return;
-  queryClient.invalidateQueries({ queryKey: ['investment-snapshots', investmentId] });
-  queryClient.invalidateQueries({ queryKey: ['investment', investmentId] });
-  queryClient.invalidateQueries({ queryKey: ['investment', investmentId, 'performance'] });
+  // Normalize to number so string IDs from payload (String(id)) match numeric query keys
+  const numericId = Number(investmentId);
+  queryClient.invalidateQueries({ queryKey: ['investment-snapshots', numericId] });
+  queryClient.invalidateQueries({ queryKey: ['investment', numericId] });
+  queryClient.invalidateQueries({ queryKey: ['investment', numericId, 'performance'] });
 };
 
 export const useSaveInvestmentSnapshot = () => {

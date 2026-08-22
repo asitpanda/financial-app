@@ -1,13 +1,13 @@
 export interface Transaction {
   id: string;
-  type: "income" | "expense";
+  type: "INCOME" | "EXPENSE" | "TRANSFER" | "INVESTMENT";
   amount: number;
-  category?: string;
+  category?: string | null;
   categoryId?: string | number | null;
   categoryLabelSnapshot?: string;
   source?: string;
   sourceAccountId?: number | null;
-  transactionKind?: string;
+  destinationAccountId?: number | null;
   date: string;
   notes?: string;
   goalId?: string | number | null;
@@ -17,14 +17,12 @@ export interface Transaction {
 }
 
 export interface CreateTransactionDto {
-  type: "income" | "expense";
+  type: "INCOME" | "EXPENSE" | "TRANSFER" | "INVESTMENT";
   amount: number;
-  categoryId: number;
-  categoryLabelSnapshot: string;
-  transactionKind: string;
-  sourceAccountId?: number;
-  destinationAccountId?: number;
-  linkedInvestmentEventId?: number;
+  categoryId?: number | null;
+  categoryLabelSnapshot?: string | null;
+  sourceAccountId?: number | null;
+  destinationAccountId?: number | null;
   date: string;
   notes?: string;
   goalId?: number | null;
@@ -37,11 +35,12 @@ export interface TransactionRecord extends Transaction {
 }
 
 export interface TransactionSavePayload {
-  type?: "income" | "expense";
+  type?: "INCOME" | "EXPENSE" | "TRANSFER";
   amount?: number;
   category?: string;
   categoryId?: string | number | null;
   source?: string;
+  destination?: string;
   date?: Date | string;
   notes?: string;
   goalId?: string | number | null;

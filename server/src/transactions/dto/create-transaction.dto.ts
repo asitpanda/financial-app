@@ -1,52 +1,42 @@
 import { Type } from 'class-transformer';
 import { IsInt, IsNotEmpty, IsNumber, IsString, IsOptional, IsDateString, IsIn } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import type { TransactionType } from '@prisma/client';
 
 export class CreateTransactionDto {
-  @ApiProperty({ description: 'Transaction type', enum: ['income', 'expense'] })
+  @ApiProperty({ description: 'Transaction type', enum: ['INCOME', 'EXPENSE', 'TRANSFER', 'INVESTMENT'] })
   @IsNotEmpty()
   @IsString()
-  @IsIn(['income', 'expense'])
-  type: string;
+  @IsIn(['INCOME', 'EXPENSE', 'TRANSFER', 'INVESTMENT'])
+  type: TransactionType;
 
   @ApiProperty({ description: 'Transaction amount' })
   @IsNotEmpty()
   @IsNumber()
   amount: number;
 
-  @ApiProperty({ description: 'Transaction category id' })
-  @IsNotEmpty()
+  @ApiProperty({ description: 'Transaction category id', required: false, nullable: true })
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
-  categoryId: number;
+  categoryId?: number | null;
 
-  @ApiProperty({ description: 'Category label snapshot' })
-  @IsNotEmpty()
+  @ApiProperty({ description: 'Category label snapshot', required: false, nullable: true })
+  @IsOptional()
   @IsString()
-  categoryLabelSnapshot: string;
+  categoryLabelSnapshot?: string | null;
 
   @ApiProperty({ description: 'Source account id', required: false })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  sourceAccountId?: number;
+  sourceAccountId?: number | null;
 
   @ApiProperty({ description: 'Destination account id', required: false })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  destinationAccountId?: number;
-
-  @ApiProperty({ description: 'Linked investment event id', required: false })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  linkedInvestmentEventId?: number;
-
-  @ApiProperty({ description: 'Transaction kind' })
-  @IsNotEmpty()
-  @IsString()
-  transactionKind: string;
+  destinationAccountId?: number | null;
 
   @ApiProperty({ description: 'Transaction date' })
   @IsNotEmpty()

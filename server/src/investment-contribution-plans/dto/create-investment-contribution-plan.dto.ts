@@ -7,11 +7,6 @@ export class CreateInvestmentContributionPlanDto {
   @IsString()
   investmentId: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  sourceAccountId?: string;
-
   @ApiProperty()
   @IsNotEmpty()
   @IsString()

@@ -1,5 +1,9 @@
 import { Box, Chip, Stack, Typography } from "@mui/material";
 import type { InvestmentValueSourceSummary } from "../investments.selectors";
+import {
+  INVESTMENT_CHART_SERIES_COLORS,
+  PROFIT_LOSS_COLORS,
+} from "../../../colors";
 
 interface SourceOfValueCardProps {
   summary: InvestmentValueSourceSummary;
@@ -18,7 +22,7 @@ const sourceRows = [
     key: "snapshotBackedValue",
     countKey: "snapshotBackedCount",
     label: "Snapshot-backed",
-    color: "#0f766e",
+    color: INVESTMENT_CHART_SERIES_COLORS.currentValueHex,
     bg: "rgba(15, 118, 110, 0.1)",
   },
   {
@@ -157,12 +161,12 @@ export default function SourceOfValueCard({
           bgcolor:
             summary.staleValuationCount > 0
               ? "rgba(245, 158, 11, 0.08)"
-              : "rgba(16, 185, 129, 0.08)",
+              : `${PROFIT_LOSS_COLORS.gainHex}14`,
           border: "1px solid",
           borderColor:
             summary.staleValuationCount > 0
               ? "rgba(245, 158, 11, 0.26)"
-              : "rgba(16, 185, 129, 0.24)",
+              : `${PROFIT_LOSS_COLORS.gainHex}3D`,
           cursor:
             summary.staleValuationCount > 0 && onSelectStaleValuations
               ? "pointer"

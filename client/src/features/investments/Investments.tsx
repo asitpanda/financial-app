@@ -12,7 +12,7 @@ import ConfirmDialog from "../../components/dialogs/ConfirmDialog";
 import { InvestmentViewDrawer } from "./components/InvestmentViewDrawer";
 import InvestmentsCalendarView from "./components/InvestmentsCalendarView";
 import InvestmentsDashboardView from "./components/InvestmentsDashboardView";
-import RecordContributionModal from "./components/RecordContributionModal";
+import RecordInvestmentActivityModal from "./components/RecordInvestmentActivityModal";
 import { getInvestmentsTableColumns } from "./components/investmentsTableColumns";
 import { useHeaderAction } from "../../hooks/useHeaderAction";
 import { useNotificationStore } from "../../store/notificationStore";
@@ -21,6 +21,7 @@ import {
   formatInvestmentCurrency,
   getInvestmentCategoryLabel,
   getInvestmentTypeLabel,
+  normalizeInvestmentForUi,
 } from "../../utils/investmentHelpers";
 import { getRuntimeErrorMessage } from "../../utils/errorMessage";
 import {
@@ -44,6 +45,7 @@ import {
   getInvestmentCategoryPerformanceRows,
   getInvestmentCategoryLabelMap,
   getInvestmentDashboardKpis,
+  getInvestmentHoldingPerformanceRows,
   getInvestmentPortfolioGrowthData,
   getInvestmentSelectedById,
   getInvestmentTimeSeriesData,
@@ -88,12 +90,6 @@ export const buildRecurringPayloadFromFormValues = (baseValues) => {
   const cadence = mapFrequencyToCadence(plan.frequency);
 
   return {
-    sourceAccountId:
-      baseValues.accountId !== undefined &&
-      baseValues.accountId !== null &&
-      baseValues.accountId !== ""
-        ? String(baseValues.accountId)
-        : undefined,
     amount: Number(plan.amount || 0),
     cadenceUnit: cadence.cadenceUnit,
     cadenceInterval: cadence.cadenceInterval,
@@ -120,7 +116,6 @@ export const buildRecurringPlanUpdatePayloadFromFormValues = (
   const recurringPayload = buildRecurringPayloadFromFormValues(baseValues);
 
   return {
-    sourceAccountId: recurringPayload.sourceAccountId,
     amount: recurringPayload.amount,
     cadenceUnit: recurringPayload.cadenceUnit,
     cadenceInterval: recurringPayload.cadenceInterval,
@@ -355,15 +350,12 @@ export default function Investments() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [selectedYearForDrill, setSelectedYearForDrill] = useState(null);
   const [taxonomyFormError, setTaxonomyFormError] = useState("");
-  const [recordContributionModalOpen, setRecordContributionModalOpen] =
-    useState(false);
+  const [recordActivityModalOpen, setRecordActivityModalOpen] = useState(false);
+  const [recordActivityMode, setRecordActivityMode] = useState("contribution");
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [recurringConfirmLoading, setRecurringConfirmLoading] = useState(false);
   const [pendingRecurringReview, setPendingRecurringReview] = useState(null);
-  const [
-    selectedContributionForRecording,
-    setSelectedContributionForRecording,
-  ] = useState(null);
+  const [selectedInvestmentActivity, setSelectedInvestmentActivity] = useState(null);
   const pushNotification = useNotificationStore(
     (state) => state.pushNotification,
   );
@@ -552,6 +544,10 @@ export default function Investments() {
       })),
     [assetCategoryLabelMap, dashboardAnalytics],
   );
+  const holdingRows = useMemo(
+    () => getInvestmentHoldingPerformanceRows(summaryInvestments, 12),
+    [summaryInvestments],
+  );
   const categoryBreakdown = useMemo(
     () =>
       categoryPerformanceRows.map((row) => ({
@@ -620,16 +616,24 @@ export default function Investments() {
   const valueSourceSummary =
     dashboardAnalyticsQuery.data?.summary?.valueSourceSummary || localValueSourceSummary;
 
-  const topCurrentValueItems =
-    dashboardAnalyticsQuery.data?.upcoming?.topCurrentValueItems ||
-    getTopInvestmentCurrentValueItems(summaryInvestments);
+  const topCurrentValueItems = dashboardAnalyticsQuery.data?.upcoming?.topCurrentValueItems
+    ? dashboardAnalyticsQuery.data.upcoming.topCurrentValueItems.map((item) =>
+        normalizeInvestmentForUi(item, taxonomyNodes),
+      )
+    : getTopInvestmentCurrentValueItems(summaryInvestments);
 
-  const recentInvestments =
-    dashboardAnalyticsQuery.data?.upcoming?.recentInvestments ||
-    getRecentInvestments(summaryInvestments);
+  const recentInvestments = dashboardAnalyticsQuery.data?.upcoming?.recentInvestments
+    ? dashboardAnalyticsQuery.data.upcoming.recentInvestments.map((item) =>
+        normalizeInvestmentForUi(item, taxonomyNodes),
+      )
+    : getRecentInvestments(summaryInvestments);
 
   const upcomingContributions = dashboardAnalyticsQuery.data?.upcoming?.upcomingContributions
-    ? getInvestmentContributionViewItems(dashboardAnalyticsQuery.data.upcoming.upcomingContributions)
+    ? getInvestmentContributionViewItems(
+        dashboardAnalyticsQuery.data.upcoming.upcomingContributions.map((item) =>
+          normalizeInvestmentForUi(item, taxonomyNodes),
+        ),
+      )
     : getInvestmentContributionViewItems(summaryInvestments);
 
   const calendarGroups = getInvestmentCalendarGroups(summaryInvestments);
@@ -646,14 +650,29 @@ export default function Investments() {
     setDrawerOpen(true);
   };
 
-  const openRecordContributionModal = (investment, contributionPlan) => {
-    setSelectedContributionForRecording({ investment, contributionPlan });
-    setRecordContributionModalOpen(true);
+  const openRecordInvestmentActivity = (investment, contributionPlan = null, mode = "contribution") => {
+    setSelectedInvestmentActivity({ investment, contributionPlan, editingEvent: null });
+    setRecordActivityMode(mode);
+    setRecordActivityModalOpen(true);
   };
 
-  const closeRecordContributionModal = () => {
-    setRecordContributionModalOpen(false);
-    setSelectedContributionForRecording(null);
+  const openEditInvestmentActivity = (investment, event) => {
+    setSelectedInvestmentActivity({ investment, contributionPlan: null, editingEvent: event });
+    setRecordActivityMode("income_credit");
+    setRecordActivityModalOpen(true);
+  };
+
+  const closeRecordInvestmentActivity = () => {
+    setRecordActivityModalOpen(false);
+    setSelectedInvestmentActivity(null);
+  };
+
+  const openRecordContributionModal = (investment, contributionPlan) => {
+    openRecordInvestmentActivity(investment, contributionPlan, "contribution");
+  };
+
+  const openRecordWithdrawalModal = (investment) => {
+    openRecordInvestmentActivity(investment, null, "withdrawal");
   };
 
   const closeInvestmentDrawer = () => {
@@ -936,6 +955,7 @@ export default function Investments() {
       categoryPerformanceRows={categoryPerformanceRows}
       categorySubBreakdown={categorySubBreakdown}
       categoryPerformanceSubRows={categoryPerformanceSubRows}
+      holdingRows={holdingRows}
       topCurrentValueItems={topCurrentValueItems}
       upcomingContributions={upcomingContributions}
       recentInvestments={recentInvestments}
@@ -950,6 +970,7 @@ export default function Investments() {
       onResetFilters={handleResetFilters}
       onCreateInvestment={openCreateDrawer}
       onRecordContribution={openRecordContributionModal}
+      onRecordWithdrawal={openRecordWithdrawalModal}
       formatCurrency={formatInvestmentCurrency}
     />
   );
@@ -1096,6 +1117,8 @@ export default function Investments() {
         investment={selectedInvestment}
         taxonomyNodes={taxonomyNodes}
         onEdit={openEditDrawer}
+        onRecordActivity={openRecordInvestmentActivity}
+        onEditActivity={openEditInvestmentActivity}
       />
 
       <InvestmentAssetTaxonomyFormDrawer
@@ -1122,12 +1145,14 @@ export default function Investments() {
         onConfirm={handleDeleteInvestment}
       />
 
-      <RecordContributionModal
-        open={recordContributionModalOpen}
-        onClose={closeRecordContributionModal}
-        investment={selectedContributionForRecording?.investment}
-        contributionPlan={selectedContributionForRecording?.contributionPlan}
+      <RecordInvestmentActivityModal
+        open={recordActivityModalOpen}
+        onClose={closeRecordInvestmentActivity}
+        investment={selectedInvestmentActivity?.investment}
+        contributionPlan={selectedInvestmentActivity?.contributionPlan}
         accounts={accounts}
+        initialMode={recordActivityMode}
+        editingEvent={selectedInvestmentActivity?.editingEvent}
       />
 
       <RecurringOccurrencesReviewDialog

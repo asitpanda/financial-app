@@ -7,6 +7,13 @@ export const recordInvestmentContribution = async (
   return response.data;
 };
 
+export const recordInvestmentWithdrawal = async (
+  payload: Record<string, unknown>,
+) => {
+  const response = await apiClient.post('/transactions/withdrawals/record', payload);
+  return response.data;
+};
+
 export const previewRecurringContributionPlan = async (
   investmentId: string | number,
   payload: Record<string, unknown>,
@@ -55,6 +62,7 @@ export const skipCurrentContributionPlan = async (
 
 const contributionPlansApi = {
   recordInvestmentContribution,
+  recordInvestmentWithdrawal,
   previewRecurringContributionPlan,
   confirmRecurringContributionPlan,
   updateContributionPlan,

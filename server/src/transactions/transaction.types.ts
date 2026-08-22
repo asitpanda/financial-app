@@ -1,16 +1,15 @@
+import type { TransactionType } from '@prisma/client';
 import type { CreateTransactionDto } from './dto/create-transaction.dto';
 
 export type TransactionRecord = {
   id: number;
   userId: number;
-  type: string;
+  type: TransactionType;
   amount: number;
-  categoryId: number;
-  categoryLabelSnapshot: string;
+  categoryId: number | null;
+  categoryLabelSnapshot: string | null;
   sourceAccountId: number | null;
   destinationAccountId: number | null;
-  linkedInvestmentEventId: number | null;
-  transactionKind: string;
   date: Date;
   notes: string | null;
   goalId: number | null;
@@ -25,23 +24,20 @@ export type TransactionGoalDeltaSource = {
 };
 
 export type TransactionReferenceCheckInput = Partial<TransactionPersistedWriteData> & {
-  categoryId: number | string;
+  categoryId?: number | string | null;
   goalId?: number | string | null;
   sourceAccountId?: number | string | null;
   destinationAccountId?: number | string | null;
-  linkedInvestmentEventId?: number | string | null;
 };
 
 export type TransactionPersistedWriteData = {
   userId?: number;
-  type?: string;
+  type?: TransactionType;
   amount?: number;
-  categoryId?: number;
-  categoryLabelSnapshot?: string;
+  categoryId?: number | null;
+  categoryLabelSnapshot?: string | null;
   sourceAccountId?: number | null;
   destinationAccountId?: number | null;
-  linkedInvestmentEventId?: number | null;
-  transactionKind?: string;
   date?: Date;
   notes?: string | null;
   goalId?: number | null;
@@ -49,11 +45,10 @@ export type TransactionPersistedWriteData = {
 
 export type TransactionCreateData = TransactionPersistedWriteData & {
   userId: number;
-  type: string;
+  type: TransactionType;
   amount: number;
-  categoryId: number;
-  categoryLabelSnapshot: string;
-  transactionKind: string;
+  categoryId?: number | null;
+  categoryLabelSnapshot?: string | null;
   date: Date;
 };
 

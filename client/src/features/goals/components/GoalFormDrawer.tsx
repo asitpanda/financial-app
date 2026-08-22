@@ -69,19 +69,17 @@ export default function GoalFormDrawer({
 
   const categoryOptions = useMemo(() => {
     const names = categories
-      .filter((category) => category?.type === "goal")
+      .filter((category) => category?.type === "expense")
       .map((category) => category.name)
       .filter(Boolean);
-    return [
-      ...new Set(["Personal", ...names, reviewValues.category].filter(Boolean)),
-    ];
-  }, [categories, reviewValues.category]);
+    return [...new Set(names)];
+  }, [categories]);
 
   const categoryMetaByName = useMemo(
     () =>
       new Map(
         categories
-          .filter((category) => category?.name && category?.type === "goal")
+          .filter((category) => category?.name && category?.type === "expense")
           .map((category) => [category.name.trim().toLowerCase(), category]),
       ),
     [categories],
@@ -100,15 +98,21 @@ export default function GoalFormDrawer({
       ? categoryMetaByName.get(normalizedCategoryName)
       : undefined;
 
+    const resolvedCategoryId =
+      matchedCategory?.id ||
+      (initialValues?.category?.trim().toLowerCase() === normalizedCategoryName
+        ? initialValues?.categoryId || null
+        : null);
+
+    if (!resolvedCategoryId) {
+      setError("category", { message: "Please select a valid goal category from the list" });
+      return;
+    }
+
     const result = await onSubmit?.({
       name: values.name.trim(),
       category: values.category.trim(),
-      categoryId:
-        matchedCategory?.id ||
-        (initialValues?.category?.trim().toLowerCase() ===
-        normalizedCategoryName
-          ? initialValues?.categoryId || null
-          : null),
+      categoryId: resolvedCategoryId,
       description: values.description?.trim() || undefined,
       icon: matchedCategory?.icon || values.icon || DEFAULT_GOAL_ICON,
       targetAmount: Number(values.targetAmount),

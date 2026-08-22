@@ -1,12 +1,11 @@
 import React from "react";
 import { SectionCard } from "../../../components/common";
 import type { DashboardAccountOverviewRow } from "../dashboard.types";
+import { getProfitLossHexColor } from "../../../colors";
 
 interface DashboardAccountsSectionProps {
   accountOverviewRows: DashboardAccountOverviewRow[];
-  lifetimeBalance: number;
   periodBalance: number;
-  selectedPeriodLabel: string;
   onAddAccount: () => void;
   onEditAccount: (accountName: string) => void;
 }
@@ -16,9 +15,7 @@ const formatCurrency = (value: number) =>
 
 export default function DashboardAccountsSection({
   accountOverviewRows,
-  lifetimeBalance,
   periodBalance,
-  selectedPeriodLabel,
   onAddAccount,
   onEditAccount,
 }: DashboardAccountsSectionProps) {
@@ -46,28 +43,12 @@ export default function DashboardAccountsSection({
     >
       <div className="space-y-2">
         <div className="grid gap-3">
-          <div className="rounded-[24px] border border-slate-200 bg-white">
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-sm font-medium text-slate-500">
-                Balance till today
-              </p>
-              <div className="text-right text-[30px] font-semibold tracking-tight text-slate-900">
-                {formatCurrency(lifetimeBalance)}
-              </div>
-            </div>
-          </div>
           <div className="rounded-[24px] border border-slate-100 bg-gradient-to-br from-white via-white to-emerald-50/40">
             <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-slate-500">
-                  Period change
-                </p>
-                <p className="mt-1 text-xs font-medium text-slate-400">
-                  {selectedPeriodLabel}
-                </p>
-              </div>
+              <p className="text-sm font-medium text-slate-500">Balance</p>
               <div
-                className={`text-right text-[30px] font-semibold tracking-tight ${periodBalance >= 0 ? "text-emerald-600" : "text-rose-500"}`}
+                className="text-right text-[30px] font-semibold tracking-tight"
+                style={{ color: getProfitLossHexColor(periodBalance, "gain") }}
               >
                 {periodBalance >= 0 ? "+" : "-"}
                 {formatCurrency(Math.abs(periodBalance))}
@@ -78,9 +59,7 @@ export default function DashboardAccountsSection({
 
         <div className="max-h-[324px] space-y-3 overflow-y-auto pr-1">
           {accountOverviewRows.map((bank) => {
-            const isPositive = bank.currentBalance >= 0;
-            const hasPeriodActivity = bank.periodTransactions > 0;
-            const isPeriodPositive = bank.periodChange >= 0;
+            const isPositive = bank.balance >= 0;
 
             return (
               <button
@@ -93,23 +72,18 @@ export default function DashboardAccountsSection({
                   <div className="truncate text-sm font-semibold text-slate-900">
                     {bank.name}
                   </div>
-                  <div
-                    className={`mt-1 text-xs font-medium ${hasPeriodActivity ? (isPeriodPositive ? "text-emerald-600" : "text-rose-500") : "text-slate-400"}`}
-                  >
-                    {hasPeriodActivity
-                      ? `${isPeriodPositive ? "+" : "-"}${formatCurrency(Math.abs(bank.periodChange))} in ${selectedPeriodLabel}`
-                      : `No change in ${selectedPeriodLabel}`}
-                  </div>
                 </div>
 
                 <div className="text-right">
                   <div
-                    className={`text-sm font-semibold ${isPositive ? "text-emerald-600" : "text-rose-500"}`}
+                    className="text-sm font-semibold"
+                    style={{
+                      color: getProfitLossHexColor(bank.balance, "gain"),
+                    }}
                   >
                     {isPositive ? "+" : "-"}
-                    {formatCurrency(Math.abs(bank.currentBalance))}
+                    {formatCurrency(Math.abs(bank.balance))}
                   </div>
-                  <div className="mt-1 text-xs text-slate-400">Till today</div>
                 </div>
               </button>
             );

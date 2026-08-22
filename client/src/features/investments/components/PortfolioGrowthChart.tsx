@@ -2,6 +2,10 @@ import { useState } from "react";
 import { Box, Stack, Typography } from "@mui/material";
 import AppButton from "../../../components/common/AppButton";
 import type { InvestmentPortfolioGrowthPoint } from "../investments.selectors";
+import {
+  INVESTMENT_CHART_SERIES_COLORS,
+  PROFIT_LOSS_COLORS,
+} from "../../../colors";
 
 interface PortfolioGrowthChartProps {
   data: InvestmentPortfolioGrowthPoint[];
@@ -245,7 +249,11 @@ export default function PortfolioGrowthChart({
                 y={bandTop}
                 width={Math.max(nextPoint.x - point.x, 0)}
                 height={bandHeight}
-                fill={point.returnToDate >= 0 ? "rgba(16, 185, 129, 0.14)" : "rgba(239, 68, 68, 0.14)"}
+                fill={
+                  point.returnToDate >= 0
+                    ? PROFIT_LOSS_COLORS.gainFillSoft
+                    : PROFIT_LOSS_COLORS.lossFillSoft
+                }
               />
             );
           })}
@@ -265,21 +273,25 @@ export default function PortfolioGrowthChart({
                 width={6}
                 height={connectorHeight}
                 rx={3}
-                fill={point.returnToDate >= 0 ? "rgba(16, 185, 129, 0.22)" : "rgba(239, 68, 68, 0.24)"}
+                fill={
+                  point.returnToDate >= 0
+                    ? PROFIT_LOSS_COLORS.gainFillStrong
+                    : PROFIT_LOSS_COLORS.lossFillStrong
+                }
               />
             );
           })}
           <path
             d={currentPath}
             fill="none"
-            stroke="#0f766e"
+            stroke={INVESTMENT_CHART_SERIES_COLORS.currentValueHex}
             strokeWidth="3"
             strokeLinejoin="round"
           />
           <path
             d={investedPathStepped}
             fill="none"
-            stroke="#f59e0b"
+            stroke={INVESTMENT_CHART_SERIES_COLORS.investedHex}
             strokeWidth="2.5"
             strokeLinejoin="round"
             strokeDasharray="8,5"
@@ -314,8 +326,8 @@ export default function PortfolioGrowthChart({
                 strokeDasharray="4,4"
               />
 
-              <circle cx={activePoint.x} cy={activePoint.yCurrent} r={5} fill="#0f766e" />
-              <circle cx={activePoint.x} cy={activePoint.yInvested} r={5} fill="#f59e0b" />
+              <circle cx={activePoint.x} cy={activePoint.yCurrent} r={5} fill={INVESTMENT_CHART_SERIES_COLORS.currentValueHex} />
+              <circle cx={activePoint.x} cy={activePoint.yInvested} r={5} fill={INVESTMENT_CHART_SERIES_COLORS.investedHex} />
             </>
           ) : null}
 
@@ -323,13 +335,13 @@ export default function PortfolioGrowthChart({
             cx={points[points.length - 1].x}
             cy={points[points.length - 1].yCurrent}
             r={4}
-            fill="#0f766e"
+            fill={INVESTMENT_CHART_SERIES_COLORS.currentValueHex}
           />
           <circle
             cx={points[points.length - 1].x}
             cy={points[points.length - 1].yInvested}
             r={4}
-            fill="#f59e0b"
+            fill={INVESTMENT_CHART_SERIES_COLORS.investedHex}
           />
 
           {activePoint ? (
@@ -353,14 +365,14 @@ export default function PortfolioGrowthChart({
               <text
                 x={tooltipX + 12}
                 y={tooltipY + 38}
-                style={{ fontSize: 11, fill: "#f59e0b" }}
+                style={{ fontSize: 11, fill: INVESTMENT_CHART_SERIES_COLORS.investedHex }}
               >
                 Invested: {formatValue(activePoint.investedToDate)}
               </text>
               <text
                 x={tooltipX + 12}
                 y={tooltipY + 54}
-                style={{ fontSize: 11, fill: "#5eead4" }}
+                style={{ fontSize: 11, fill: "#99f6e4" }}
               >
                 Current: {formatValue(activePoint.currentValueToDate)}
               </text>
@@ -369,7 +381,10 @@ export default function PortfolioGrowthChart({
                 y={tooltipY + 70}
                 style={{
                   fontSize: 11,
-                  fill: activePoint.returnToDate >= 0 ? "#86efac" : "#fca5a5",
+                  fill:
+                    activePoint.returnToDate >= 0
+                      ? PROFIT_LOSS_COLORS.gainSoftHex
+                      : PROFIT_LOSS_COLORS.lossSoftHex,
                 }}
               >
                 Return: {activePoint.returnToDate >= 0 ? "+" : ""}
@@ -392,7 +407,11 @@ export default function PortfolioGrowthChart({
             x={points[points.length - 1].x - 12}
             y={points[points.length - 1].yCurrent - 8}
             textAnchor="end"
-            style={{ fontSize: 11, fill: "#0f766e", fontWeight: 700 }}
+            style={{
+              fontSize: 11,
+              fill: INVESTMENT_CHART_SERIES_COLORS.currentValueHex,
+              fontWeight: 700,
+            }}
           >
             Current
           </text>
@@ -400,7 +419,11 @@ export default function PortfolioGrowthChart({
             x={points[points.length - 1].x - 12}
             y={points[points.length - 1].yInvested - 8}
             textAnchor="end"
-            style={{ fontSize: 11, fill: "#f59e0b", fontWeight: 700 }}
+            style={{
+              fontSize: 11,
+              fill: INVESTMENT_CHART_SERIES_COLORS.investedHex,
+              fontWeight: 700,
+            }}
           >
             Invested
           </text>
@@ -409,13 +432,25 @@ export default function PortfolioGrowthChart({
 
       <Box sx={{ display: "flex", justifyContent: "center", gap: 3, flexWrap: "wrap" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Box sx={{ width: 24, height: 2, backgroundColor: "#0f766e" }} />
+          <Box
+            sx={{
+              width: 24,
+              height: 2,
+              backgroundColor: INVESTMENT_CHART_SERIES_COLORS.currentValueHex,
+            }}
+          />
           <Typography variant="caption" sx={{ fontWeight: 600 }}>
             Current Value
           </Typography>
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Box sx={{ width: 24, height: 2, backgroundColor: "#f59e0b" }} />
+          <Box
+            sx={{
+              width: 24,
+              height: 2,
+              backgroundColor: INVESTMENT_CHART_SERIES_COLORS.investedHex,
+            }}
+          />
           <Typography variant="caption" sx={{ fontWeight: 600 }}>
             Total Invested
           </Typography>

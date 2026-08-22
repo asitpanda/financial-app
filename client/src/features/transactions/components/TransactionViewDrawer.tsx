@@ -9,6 +9,7 @@ interface TransactionViewDrawerProps {
   onClose: () => void;
   transaction: TransactionRecord | null;
   goalName: string;
+  accountNameById?: Record<number, string>;
   onDelete?: (transaction: TransactionRecord) => void;
   onEdit?: (transaction: TransactionRecord) => void;
 }
@@ -21,6 +22,7 @@ export function TransactionViewDrawer({
   onClose,
   transaction,
   goalName,
+  accountNameById = {},
   onDelete,
   onEdit,
 }: TransactionViewDrawerProps) {
@@ -62,7 +64,13 @@ export function TransactionViewDrawer({
     </Box>
   );
 
-  const amountTone = transaction?.type === "expense" ? "error" : "success";
+  const amountTone = transaction?.type === "EXPENSE" ? "error" : "success";
+  const sourceLabel = transaction?.sourceAccountId != null
+    ? accountNameById[Number(transaction.sourceAccountId)] || String(transaction.sourceAccountId)
+    : "Not provided";
+  const destinationLabel = transaction?.destinationAccountId != null
+    ? accountNameById[Number(transaction.destinationAccountId)] || String(transaction.destinationAccountId)
+    : "Not provided";
 
   return (
     <AppDrawer
@@ -87,7 +95,7 @@ export function TransactionViewDrawer({
                 px: 2,
                 py: 2.5,
                 background:
-                  transaction.type === "expense"
+                  transaction.type === "EXPENSE"
                     ? "linear-gradient(180deg, #fff7f7 0%, #ffffff 100%)"
                     : "linear-gradient(180deg, #f5fff8 0%, #ffffff 100%)",
                 border: "1px solid",
@@ -120,7 +128,7 @@ export function TransactionViewDrawer({
                       color: `${amountTone}.main`,
                     }}
                   >
-                    {transaction.type === "expense" ? "-" : "+"}{" "}
+                    {transaction.type === "EXPENSE" ? "-" : "+"}{" "}
                     {formatCurrency(transaction.amount)}
                   </Typography>
                 </Box>
@@ -152,7 +160,15 @@ export function TransactionViewDrawer({
                     Bank / Source
                   </Typography>
                   <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 600 }}>
-                    {transaction.source || "Not provided"}
+                    {sourceLabel}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Destination account
+                  </Typography>
+                  <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 600 }}>
+                    {destinationLabel}
                   </Typography>
                 </Box>
                 <Box>

@@ -80,12 +80,18 @@ export default function TransactionsAddEditDrawer({
     handleSubmit,
     reset,
     setValue,
+    watch,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(transactionSchema),
     defaultValues: createDefaultTransactionForm(),
     mode: "onTouched",
   });
+
+  const selectedType = watch("type");
+  const showCategory = selectedType === "INCOME" || selectedType === "EXPENSE";
+  const showSource = selectedType === "EXPENSE" || selectedType === "TRANSFER";
+  const showDestination = selectedType === "INCOME" || selectedType === "TRANSFER";
 
   const getErrorMessage = (message: unknown): string | undefined =>
     typeof message === "string" ? message : undefined;
@@ -155,7 +161,7 @@ export default function TransactionsAddEditDrawer({
     }
 
     if (hdfcSource) {
-      setValue("source", String(hdfcSource.value), {
+      setValue("destination", String(hdfcSource.value), {
         shouldDirty: true,
         shouldValidate: true,
       });
@@ -276,15 +282,23 @@ export default function TransactionsAddEditDrawer({
               render={({ field }) => (
                 <LabeledSelectField
                   labelText="Type"
-                  value={field.value || "expense"}
+                  value={field.value || "EXPENSE"}
                   onChange={(event: SelectChangeLikeEvent) => {
                     const nextType = event.target.value;
                     field.onChange(nextType);
-                    if (nextType === "income") applyIncomeDefaults();
+                    if (nextType === "INCOME") {
+                      setValue("source", "", { shouldDirty: true });
+                      applyIncomeDefaults();
+                    } else if (nextType === "EXPENSE") {
+                      setValue("destination", "", { shouldDirty: true });
+                    } else {
+                      setValue("category", "", { shouldDirty: true });
+                    }
                   }}
                   options={[
-                    { value: "income", label: "Income" },
-                    { value: "expense", label: "Expense" },
+                    { value: "INCOME", label: "Income" },
+                    { value: "EXPENSE", label: "Expense" },
+                    { value: "TRANSFER", label: "Transfer" },
                   ]}
                   errorMessage={errors.type?.message}
                 />
@@ -318,37 +332,59 @@ export default function TransactionsAddEditDrawer({
               gap: 1.5,
             }}
           >
-            <Controller
-              name="category"
-              control={control}
-              render={({ field }) => (
-                <LabeledSelectField
-                  labelText="Category"
-                  value={field.value || ""}
-                  onChange={(event: SelectChangeLikeEvent) =>
-                    field.onChange(event.target.value)
-                  }
-                  options={categoryOptions}
-                  errorMessage={getErrorMessage(errors.category?.message)}
-                />
-              )}
-            />
+            {showCategory ? (
+              <Controller
+                name="category"
+                control={control}
+                render={({ field }) => (
+                  <LabeledSelectField
+                    labelText="Category"
+                    value={field.value || ""}
+                    onChange={(event: SelectChangeLikeEvent) =>
+                      field.onChange(event.target.value)
+                    }
+                    options={categoryOptions}
+                    errorMessage={getErrorMessage(errors.category?.message)}
+                  />
+                )}
+              />
+            ) : null}
 
-            <Controller
-              name="source"
-              control={control}
-              render={({ field }) => (
-                <LabeledSelectField
-                  labelText="Bank / Source"
-                  value={field.value || ""}
-                  onChange={(event: SelectChangeLikeEvent) =>
-                    field.onChange(event.target.value)
-                  }
-                  options={sourceOptions}
-                  errorMessage={getErrorMessage(errors.source?.message)}
-                />
-              )}
-            />
+            {showSource ? (
+              <Controller
+                name="source"
+                control={control}
+                render={({ field }) => (
+                  <LabeledSelectField
+                    labelText="Source account"
+                    value={field.value || ""}
+                    onChange={(event: SelectChangeLikeEvent) =>
+                      field.onChange(event.target.value)
+                    }
+                    options={sourceOptions}
+                    errorMessage={getErrorMessage(errors.source?.message)}
+                  />
+                )}
+              />
+            ) : null}
+
+            {showDestination ? (
+              <Controller
+                name="destination"
+                control={control}
+                render={({ field }) => (
+                  <LabeledSelectField
+                    labelText="Destination account"
+                    value={field.value || ""}
+                    onChange={(event: SelectChangeLikeEvent) =>
+                      field.onChange(event.target.value)
+                    }
+                    options={sourceOptions}
+                    errorMessage={getErrorMessage(errors.destination?.message)}
+                  />
+                )}
+              />
+            ) : null}
           </Box>
 
           <Box

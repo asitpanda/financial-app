@@ -20,17 +20,20 @@ const toRequestTransactionDto = (
 ): CreateTransactionDto => {
   const categoryId = Number(payload.categoryId);
   const sourceAccountId = Number(payload.source);
+  const destinationAccountId = Number(payload.destination);
   const goalId = Number(payload.goalId);
 
   return {
-    type: payload.type === "income" ? "income" : "expense",
+    type: payload.type || "EXPENSE",
     amount: Number(payload.amount),
-    categoryId,
-    categoryLabelSnapshot: String(payload.category || "").trim(),
-    transactionKind: payload.type === "income" ? "credit" : "debit",
+    categoryId: Number.isNaN(categoryId) ? null : categoryId,
+    categoryLabelSnapshot: payload.category?.trim() || null,
     sourceAccountId: Number.isNaN(sourceAccountId)
-      ? undefined
+      ? null
       : sourceAccountId,
+    destinationAccountId: Number.isNaN(destinationAccountId)
+      ? null
+      : destinationAccountId,
     date:
       payload.date instanceof Date
         ? payload.date.toISOString()

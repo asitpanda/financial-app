@@ -2,18 +2,13 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsDateString, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString } from 'class-validator';
 
-export class RecordContributionDto {
+export class RecordWithdrawalDto {
   @ApiProperty({ description: 'Investment id' })
   @IsNotEmpty()
   @IsString()
   investmentId: string;
 
-  @ApiProperty({ description: 'Contribution plan id', required: false })
-  @IsOptional()
-  @IsString()
-  contributionPlanId?: string;
-
-  @ApiProperty({ description: 'Contribution amount' })
+  @ApiProperty({ description: 'Withdrawal amount' })
   @Type(() => Number)
   @IsNumber()
   @IsPositive()

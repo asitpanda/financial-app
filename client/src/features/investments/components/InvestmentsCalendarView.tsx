@@ -19,6 +19,15 @@ import type {
   InvestmentCalendarItem,
   InvestmentCalendarGroups,
 } from '../investments.selectors';
+import {
+  AMOUNT_HEATMAP_PALETTE,
+  COUNT_HEATMAP_PALETTE,
+  INVESTMENT_CHART_SERIES_COLORS,
+  LOSS_HEATMAP_PALETTE,
+  PROFIT_HEATMAP_PALETTE,
+  PROFIT_LOSS_COLORS,
+  getProfitLossReadableHexColor,
+} from '../../../colors';
 
 interface InvestmentsCalendarViewProps {
   calendarGroups: InvestmentCalendarGroups;
@@ -145,7 +154,7 @@ const getCellColor = (
     const ratio = Math.max(0, Math.min(Math.abs(value) / maxValue, 1));
 
     if (value < 0) {
-      const palette = ['#fff1f2', '#fecdd3', '#fb7185', '#be123c'];
+      const palette = LOSS_HEATMAP_PALETTE;
       const shadeIndex = Math.min(
         palette.length - 1,
         Math.floor(ratio * palette.length),
@@ -158,7 +167,7 @@ const getCellColor = (
       };
     }
 
-    const palette = ['#ecfdf5', '#bbf7d0', '#4ade80', '#15803d'];
+    const palette = PROFIT_HEATMAP_PALETTE;
     const shadeIndex = Math.min(
       palette.length - 1,
       Math.floor(ratio * palette.length),
@@ -174,8 +183,8 @@ const getCellColor = (
   const ratio = Math.max(0, Math.min(value / maxValue, 1));
   const palette =
     metric === 'count'
-      ? ['#eff6ff', '#bfdbfe', '#60a5fa', '#2563eb']
-      : ['#ecfeff', '#99f6e4', '#2dd4bf', '#0f766e'];
+      ? COUNT_HEATMAP_PALETTE
+      : AMOUNT_HEATMAP_PALETTE.slice(0, 4);
   const shadeIndex = Math.min(
     palette.length - 1,
     Math.floor(ratio * palette.length),
@@ -695,7 +704,13 @@ export default function InvestmentsCalendarView({
                             }}
                           >
                             <Typography sx={{ fontSize: 12, color: '#64748b' }}>Amount</Typography>
-                            <Typography sx={{ fontSize: 12, fontWeight: 800, color: '#0f766e' }}>
+                            <Typography
+                              sx={{
+                                fontSize: 12,
+                                fontWeight: 800,
+                                color: INVESTMENT_CHART_SERIES_COLORS.currentValueHex,
+                              }}
+                            >
                               {formatInvestmentCurrency(cell.amount)}
                             </Typography>
                           </Box>
@@ -751,7 +766,7 @@ export default function InvestmentsCalendarView({
                               sx={{
                                 fontSize: 12,
                                 fontWeight: 800,
-                                color: cell.profitLoss >= 0 ? '#15803d' : '#be123c',
+                                color: getProfitLossReadableHexColor(cell.profitLoss, 'gain'),
                               }}
                             >
                               {cell.profitLoss >= 0 ? '+' : '-'}
@@ -859,10 +874,16 @@ export default function InvestmentsCalendarView({
                 {metric === 'profitLoss' ? 'Loss' : 'Lower'}
               </Typography>
               {(metric === 'profitLoss'
-                ? ['#fff1f2', '#fecdd3', '#e5e7eb', '#bbf7d0', '#15803d']
+                ? [
+                    LOSS_HEATMAP_PALETTE[0],
+                    LOSS_HEATMAP_PALETTE[1],
+                    '#e5e7eb',
+                    PROFIT_HEATMAP_PALETTE[1],
+                    PROFIT_LOSS_COLORS.gainDeepHex,
+                  ]
                 : metric === 'count'
-                  ? ['#eff6ff', '#bfdbfe', '#60a5fa', '#2563eb', '#1d4ed8']
-                  : ['#ecfeff', '#99f6e4', '#2dd4bf', '#0f766e', '#115e59']
+                  ? COUNT_HEATMAP_PALETTE
+                  : AMOUNT_HEATMAP_PALETTE
               ).map((color, index) => (
                 <Box
                   key={index}

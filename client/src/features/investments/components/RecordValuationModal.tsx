@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useState } from 'react';
-import { Alert, Box, Modal, Stack, TextField, Typography, Button, CircularProgress } from '@mui/material';
+import { Alert, Box, Divider, Modal, Stack, TextField, Typography, Button, CircularProgress } from '@mui/material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -32,6 +32,8 @@ export default function RecordValuationModal({
   onSnapshotAdded,
   onSnapshotSaved,
   snapshot,
+  totalInvested,
+  currentValue,
 }) {
   const getInitialFormData = React.useCallback(
     (currentSnapshot) => ({
@@ -161,6 +163,33 @@ export default function RecordValuationModal({
           <Typography variant="caption" color="text.secondary">
             {investmentName}
           </Typography>
+          {(totalInvested != null || currentValue != null) && (
+            <>
+              <Divider sx={{ my: 1.25 }} />
+              <Box sx={{ display: 'flex', gap: 3 }}>
+                {totalInvested != null && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block' }}>
+                      Total Invested
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      ₹{Number(totalInvested).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    </Typography>
+                  </Box>
+                )}
+                {currentValue != null && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block' }}>
+                      Current Value
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      ₹{Number(currentValue).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            </>
+          )}
         </Box>
 
         {/* Form */}
@@ -276,17 +305,6 @@ export default function RecordValuationModal({
               </Box>
             </>
           ) : null}
-
-          {/* Note */}
-          <Box sx={{ p: 1.5, bgcolor: '#f3f4f6', borderRadius: 1 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.6 }}>
-              <strong>Required:</strong> Snapshot Date and total asset value on that date
-              <br />
-              <strong>When to use:</strong> Only when you want to update the latest known balance/value, not for every monthly contribution
-              <br />
-              <strong>Optional:</strong> Units and Price for market-linked assets only
-            </Typography>
-          </Box>
         </Stack>
 
         {/* Footer */}

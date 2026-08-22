@@ -8,12 +8,15 @@ import {
   Delete,
   Query,
   ParseIntPipe,
+  ParseEnumPipe,
 } from '@nestjs/common';
+import { TransactionType } from '@prisma/client';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TransactionsService } from './transactions.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { RecordContributionDto } from './dto/record-contribution.dto';
+import { RecordWithdrawalDto } from './dto/record-withdrawal.dto';
 import { CurrentUserId } from '../auth/current-user-id.decorator';
 import { parseRequiredDateInput } from '../common/utils/date-input';
 
@@ -35,9 +38,18 @@ export class TransactionsController {
     return this.transactionsService.recordContribution(recordContributionDto, userId);
   }
 
+  @Post('withdrawals/record')
+  @ApiOperation({ summary: 'Record an investment principal withdrawal' })
+  recordWithdrawal(@Body() recordWithdrawalDto: RecordWithdrawalDto, @CurrentUserId() userId: number) {
+    return this.transactionsService.recordWithdrawal(recordWithdrawalDto, userId);
+  }
+
   @Get()
   @ApiOperation({ summary: 'Get all transactions' })
-  findAll(@CurrentUserId() userId: number, @Query('type') type?: string) {
+  findAll(
+    @CurrentUserId() userId: number,
+    @Query('type', new ParseEnumPipe(TransactionType, { optional: true })) type?: TransactionType,
+  ) {
     if (type) {
       return this.transactionsService.findByType(userId, type);
     }

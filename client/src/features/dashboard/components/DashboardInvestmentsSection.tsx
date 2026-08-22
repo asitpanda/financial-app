@@ -4,6 +4,7 @@ import type {
   DashboardInvestmentSummary,
   DashboardPageData,
 } from "../dashboard.types";
+import { getStableSeriesColorMap } from "../../../colors";
 
 interface DashboardInvestmentsSectionProps {
   selectedPeriodLabel: string;
@@ -22,16 +23,7 @@ const formatShortDate = (value?: string | null) =>
     year: "numeric",
   }).format(new Date(value || Date.now()));
 
-const INVESTMENT_TYPE_CHART_COLORS = [
-  "#059669",
-  "#0ea5e9",
-  "#f59e0b",
-  "#8b5cf6",
-  "#ef4444",
-  "#14b8a6",
-];
-
-const ALLOCATION_VISIBLE_LIMIT = 3;
+const ALLOCATION_VISIBLE_LIMIT = 7;
 
 const ACTION_TAG_STYLES: Record<DashboardInvestmentActionItem["kind"], string> = {
   overdue: "bg-rose-100 text-rose-600",
@@ -58,6 +50,11 @@ export default function DashboardInvestmentsSection({
   onOpenInvestments,
   onAddInvestment,
 }: DashboardInvestmentsSectionProps) {
+  const allocationColorByKey = getStableSeriesColorMap(
+    investmentSummary.allocationBreakdown.map((item) => item.key),
+    "dashboard-investments-allocation",
+  );
+
   return (
     <SectionCard
       title="Investments Snapshot"
@@ -87,58 +84,35 @@ export default function DashboardInvestmentsSection({
     >
       <div className="space-y-3">
         <div className="rounded-[18px] border border-slate-100 bg-slate-50 px-4 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Portfolio Value · as of today
-              </div>
-              <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
-                <span className="text-xl font-semibold text-slate-900">
-                  {formatCurrency(investmentSummary.currentValue)}
-                </span>
-                <span
-                  className={`text-xs font-semibold ${investmentSummary.unrealisedGain >= 0 ? "text-emerald-600" : "text-rose-500"}`}
-                >
-                  {investmentSummary.unrealisedGain >= 0 ? "+" : ""}
-                  {formatCurrency(investmentSummary.unrealisedGain)} (
-                  {investmentSummary.unrealisedGainPct >= 0 ? "+" : ""}
-                  {investmentSummary.unrealisedGainPct.toFixed(1)}%)
-                </span>
-              </div>
-              <div className="mt-0.5 text-xs text-slate-400">
-                Invested {formatCurrency(investmentSummary.totalInvested)}
-              </div>
-            </div>
-            <div className="flex flex-col items-end gap-1">
-              {investmentSummary.actionItemsTotalCount === 0 ? (
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                  ✓ All caught up
-                </span>
-              ) : (
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                    investmentSummary.actionItems[0]?.kind === "overdue"
-                      ? "bg-rose-100 text-rose-700"
-                      : "bg-amber-100 text-amber-700"
-                  }`}
-                >
-                  ⚠ {investmentSummary.actionItemsTotalCount} need
-                  {investmentSummary.actionItemsTotalCount === 1 ? "s" : ""}{" "}
-                  attention
-                </span>
-              )}
-              {investmentSummary.staleValuationCount > 0 && (
-                <button
-                  type="button"
-                  onClick={onOpenInvestments}
-                  className="text-[11px] font-semibold text-slate-400 transition hover:text-slate-600"
-                >
-                  {investmentSummary.staleValuationCount} holding
-                  {investmentSummary.staleValuationCount === 1 ? "" : "s"}{" "}
-                  unvalued 90+ days →
-                </button>
-              )}
-            </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {investmentSummary.actionItemsTotalCount === 0 ? (
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                ✓ All caught up
+              </span>
+            ) : (
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  investmentSummary.actionItems[0]?.kind === "overdue"
+                    ? "bg-rose-100 text-rose-700"
+                    : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                ⚠ {investmentSummary.actionItemsTotalCount} need
+                {investmentSummary.actionItemsTotalCount === 1 ? "s" : ""}{" "}
+                attention
+              </span>
+            )}
+            {investmentSummary.staleValuationCount > 0 && (
+              <button
+                type="button"
+                onClick={onOpenInvestments}
+                className="text-[11px] font-semibold text-slate-400 transition hover:text-slate-600"
+              >
+                {investmentSummary.staleValuationCount} holding
+                {investmentSummary.staleValuationCount === 1 ? "" : "s"}{" "}
+                unvalued 90+ days →
+              </button>
+            )}
           </div>
         </div>
 
@@ -170,9 +144,7 @@ export default function DashboardInvestmentsSection({
                           style={{
                             width: `${Math.max(item.pct, 4)}%`,
                             backgroundColor:
-                              INVESTMENT_TYPE_CHART_COLORS[
-                                index % INVESTMENT_TYPE_CHART_COLORS.length
-                              ],
+                              allocationColorByKey.get(item.key) ?? "#94a3b8",
                           }}
                         />
                       </div>

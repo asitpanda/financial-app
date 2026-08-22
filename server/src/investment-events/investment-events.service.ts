@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { InvestmentEventStatus, InvestmentEventType } from '@prisma/client';
 import { EventRepository } from './repositories/event.repository';
 import { CreateInvestmentEventDto } from './dto/create-investment-event.dto';
 import { UpdateInvestmentEventDto } from './dto/update-investment-event.dto';
@@ -15,6 +16,8 @@ export class InvestmentEventsService {
     if (userId !== undefined) {
       await this.assertOwnedInvestment(createInvestmentEventDto.investmentId, userId);
     }
+
+    this.assertIncomeCreditIsInvestmentOnly(createInvestmentEventDto);
 
     return this.repository.create(createInvestmentEventDto);
   }
@@ -43,14 +46,21 @@ export class InvestmentEventsService {
   }
 
   async update(id: string, updateInvestmentEventDto: UpdateInvestmentEventDto, userId?: number) {
-    if (userId !== undefined) {
-      const existingEvent = await this.findOne(id, userId);
-      if (!existingEvent) return null;
+    const existingEvent = await this.findOne(id, userId);
+    if (!existingEvent) return null;
 
+    if (userId !== undefined) {
       if (updateInvestmentEventDto.investmentId !== undefined) {
         await this.assertOwnedInvestment(updateInvestmentEventDto.investmentId, userId);
       }
     }
+
+    this.assertIncomeCreditIsInvestmentOnly({
+      ...existingEvent,
+      ...updateInvestmentEventDto,
+      linkedTransactionId:
+        updateInvestmentEventDto.linkedTransactionId ?? existingEvent.linkedTransactionId ?? undefined,
+    });
 
     return this.repository.update(id, updateInvestmentEventDto);
   }
@@ -71,5 +81,21 @@ export class InvestmentEventsService {
     }
 
     return investment;
+  }
+
+  private assertIncomeCreditIsInvestmentOnly(event: {
+    eventType?: InvestmentEventType;
+    linkedTransactionId?: string | number | null;
+    status?: string | null;
+  }) {
+    if (event.eventType !== InvestmentEventType.INCOME_CREDIT) return;
+
+    if (event.linkedTransactionId != null && String(event.linkedTransactionId).trim() !== '') {
+      throw new BadRequestException('Income credit cannot be linked to a transaction.');
+    }
+
+    if (event.status !== InvestmentEventStatus.CONFIRMED) {
+      throw new BadRequestException('Income credit must be recorded as a confirmed event.');
+    }
   }
 }

@@ -30,4 +30,8 @@ export class FinancialAccountRepository {
   async delete(id: string, userId: string): Promise<void> {
     return this.dataSource.delete(id, userId);
   }
+
+  async sumTransactionFlows(accountIds: number[]) {
+    return this.dataSource.sumTransactionFlows(accountIds);
+  }
 }

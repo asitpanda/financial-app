@@ -4,10 +4,12 @@ import AppButton from "../../../components/common/AppButton";
 import Icon from "@mdi/react";
 import { mdiChevronLeft, mdiChevronRight } from "@mdi/js";
 import type { InvestmentCategoryPerformanceRow } from "../investments.selectors";
+import { getProfitLossHexColor } from "../../../colors";
 
 interface CategoryPerformanceTableProps {
   rows: InvestmentCategoryPerformanceRow[];
   subRows?: InvestmentCategoryPerformanceRow[];
+  holdingRows?: InvestmentCategoryPerformanceRow[];
   formatValue: (value: number) => string;
   onSelectRow?: (row: InvestmentCategoryPerformanceRow) => void;
 }
@@ -37,24 +39,47 @@ const createSparklinePath = (values: number[], width: number, height: number) =>
 export default function CategoryPerformanceTable({
   rows,
   subRows,
+  holdingRows,
   formatValue,
   onSelectRow,
 }: CategoryPerformanceTableProps) {
   const [trendWindow, setTrendWindow] = useState<(typeof TREND_OPTIONS)[number]["value"]>("6m");
   const [drilledType, setDrilledType] = useState<string | null>(null);
+  const [drilledCategory, setDrilledCategory] = useState<string | null>(null);
   const selectedTrend = TREND_OPTIONS.find((option) => option.value === trendWindow) || TREND_OPTIONS[1];
 
   const drilledTypeLabel = drilledType
     ? (rows.find((r) => r.key === drilledType)?.label ?? drilledType)
     : null;
+  const drilledCategoryLabel = drilledCategory
+    ? ((subRows ?? []).find((r) => r.key === drilledCategory && r.assetType === drilledType)?.label ?? drilledCategory)
+    : null;
 
-  const visibleRows = drilledType
+  const visibleRows = drilledType && drilledCategory
+    ? (holdingRows ?? []).filter((r) => r.assetType === drilledType && r.assetCategory === drilledCategory)
+    : drilledType
     ? (subRows ?? []).filter((r) => r.assetType === drilledType)
     : rows.slice(0, 6);
 
+  const handleBack = () => {
+    if (drilledCategory) {
+      setDrilledCategory(null);
+    } else {
+      setDrilledType(null);
+    }
+  };
+
   const handleRowClick = (row: InvestmentCategoryPerformanceRow) => {
+    // L2 → L1: type row with category children
     if (!drilledType && subRows?.some((r) => r.assetType === row.key)) {
       setDrilledType(row.key);
+      return;
+    }
+    // L1 → L0: category row with multiple holdings
+    if (drilledType && !drilledCategory && row.holdings > 1 && holdingRows?.some(
+      (r) => r.assetType === drilledType && r.assetCategory === row.key,
+    )) {
+      setDrilledCategory(row.key);
       return;
     }
     onSelectRow?.(row);
@@ -68,16 +93,28 @@ export default function CategoryPerformanceTable({
             <AppButton
               size="small"
               variant="text"
-              onClick={() => setDrilledType(null)}
+              onClick={handleBack}
               sx={{ minWidth: 0, px: 0.5 }}
             >
               <Icon path={mdiChevronLeft} size={0.75} />
               Back
             </AppButton>
             <Icon path={mdiChevronRight} size={0.65} style={{ opacity: 0.4 }} />
-            <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            <Typography
+              variant="caption"
+              sx={{ fontWeight: 600, cursor: drilledCategory ? "pointer" : "default", opacity: drilledCategory ? 0.6 : 1 }}
+              onClick={drilledCategory ? () => setDrilledCategory(null) : undefined}
+            >
               {drilledTypeLabel}
             </Typography>
+            {drilledCategory && (
+              <>
+                <Icon path={mdiChevronRight} size={0.65} style={{ opacity: 0.4 }} />
+                <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                  {drilledCategoryLabel}
+                </Typography>
+              </>
+            )}
           </Box>
         ) : (
           <Typography variant="caption" color="text.secondary">
@@ -108,7 +145,11 @@ export default function CategoryPerformanceTable({
       {visibleRows.map((row) => {
         const sparklineValues = row.sparkline.slice(-selectedTrend.months);
         const sparklinePath = createSparklinePath(sparklineValues, 96, 28);
-        const hasDrillChildren = !drilledType && subRows?.some((r) => r.assetType === row.key);
+        const hasDrillChildren = drilledType
+          ? (!drilledCategory && row.holdings > 1 && holdingRows?.some(
+              (r) => r.assetType === drilledType && r.assetCategory === row.key,
+            ))
+          : subRows?.some((r) => r.assetType === row.key);
 
         return (
           <Box
@@ -165,7 +206,7 @@ export default function CategoryPerformanceTable({
                 variant="body2"
                 sx={{
                   fontWeight: 800,
-                  color: row.returnAmount >= 0 ? "#10b981" : "#ef4444",
+                  color: getProfitLossHexColor(row.returnAmount, "gain"),
                 }}
               >
                 {row.returnAmount >= 0 ? "+" : ""}
@@ -173,7 +214,7 @@ export default function CategoryPerformanceTable({
               </Typography>
               <Typography
                 variant="caption"
-                sx={{ color: row.returnPercentage >= 0 ? "#10b981" : "#ef4444" }}
+                sx={{ color: getProfitLossHexColor(row.returnPercentage, "gain") }}
               >
                 {row.returnPercentage >= 0 ? "+" : ""}
                 {row.returnPercentage.toFixed(1)}%
@@ -184,7 +225,7 @@ export default function CategoryPerformanceTable({
                 <path
                   d={sparklinePath}
                   fill="none"
-                  stroke={row.returnAmount >= 0 ? "#10b981" : "#ef4444"}
+                  stroke={getProfitLossHexColor(row.returnAmount, "gain")}
                   strokeWidth="2.5"
                   strokeLinecap="round"
                 />

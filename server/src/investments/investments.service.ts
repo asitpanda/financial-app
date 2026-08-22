@@ -894,7 +894,8 @@ export class InvestmentsService {
         investedValue -= amount;
         currentValue -= amount;
       } else if (
-        event?.eventType === InvestmentEventType.OPENING_INCOME_CREDIT
+        event?.eventType === InvestmentEventType.OPENING_INCOME_CREDIT ||
+        event?.eventType === InvestmentEventType.INCOME_CREDIT
       ) {
         currentValue += amount;
       } else {
@@ -942,10 +943,11 @@ export class InvestmentsService {
       )
       .reduce((sum, event) => sum + Number(event?.amount || 0), 0);
 
-    const historicalIncome = confirmedEvents
+    const incomeCredits = confirmedEvents
       .filter(
         (event) =>
-          event?.eventType === InvestmentEventType.OPENING_INCOME_CREDIT,
+          event?.eventType === InvestmentEventType.OPENING_INCOME_CREDIT ||
+          event?.eventType === InvestmentEventType.INCOME_CREDIT,
       )
       .reduce((sum, event) => sum + Number(event?.amount || 0), 0);
 
@@ -960,9 +962,35 @@ export class InvestmentsService {
 
     return {
       totalInvested,
-      currentValue: totalInvested + historicalIncome,
+      currentValue: totalInvested + incomeCredits,
       lastValuationAt: latestConfirmedEvent?.eventDate ?? null,
       currentValueSource: 'manual',
+    };
+  }
+
+  private hydrateInvestmentWithDerivedEventValuation<T extends InvestmentLike>(
+    investment: T,
+    events: EventLike[] = [],
+  ): T {
+    const storedCurrentValue = Number(investment?.currentValue ?? Number.NaN);
+    const derivedValuation = this.buildDerivedEventValuation(events);
+    const hasStoredCurrentValue = Number.isFinite(storedCurrentValue);
+    const shouldKeepStoredValue =
+      hasStoredCurrentValue &&
+      (storedCurrentValue !== 0 || !derivedValuation);
+
+    if (shouldKeepStoredValue || !derivedValuation) {
+      return investment;
+    }
+
+    return {
+      ...investment,
+      totalInvested: derivedValuation.totalInvested,
+      currentValue: derivedValuation.currentValue,
+      currentValueSource:
+        investment.currentValueSource ?? derivedValuation.currentValueSource,
+      lastValuationAt:
+        investment.lastValuationAt ?? derivedValuation.lastValuationAt,
     };
   }
 
@@ -1173,6 +1201,24 @@ export class InvestmentsService {
     const investments = await this.repository.findAll(userId);
     const plans = await this.contributionPlansService.findAllByUser(userId);
     const plansByInvestmentId = new Map<string, ActivePlanLike[]>();
+    const requiresDerivedValuation = investments.some(
+      (investment) => {
+        const currentValue = Number(investment?.currentValue ?? Number.NaN);
+
+        return !Number.isFinite(currentValue) || currentValue === 0;
+      },
+    );
+    const eventsByInvestmentId = new Map<string, EventLike[]>();
+
+    if (requiresDerivedValuation) {
+      const events = await this.investmentEventsService.findAll(userId);
+      events.forEach((event) => {
+        const investmentId = String(event.investmentId);
+        const existingEvents = eventsByInvestmentId.get(investmentId) ?? [];
+        existingEvents.push(event);
+        eventsByInvestmentId.set(investmentId, existingEvents);
+      });
+    }
 
     plans.forEach((plan) => {
       const investmentId = String(plan.investmentId);
@@ -1181,14 +1227,21 @@ export class InvestmentsService {
       plansByInvestmentId.set(investmentId, existingPlans);
     });
 
-    return investments.map((investment) => ({
-      ...investment,
-      activeContributionPlan: this.mapActiveContributionPlan(
-        this.selectDisplayContributionPlan(
-          plansByInvestmentId.get(String(investment.id)) ?? [],
+    return investments.map((investment) => {
+      const hydratedInvestment = this.hydrateInvestmentWithDerivedEventValuation(
+        investment,
+        eventsByInvestmentId.get(String(investment.id)) ?? [],
+      );
+
+      return {
+        ...hydratedInvestment,
+        activeContributionPlan: this.mapActiveContributionPlan(
+          this.selectDisplayContributionPlan(
+            plansByInvestmentId.get(String(investment.id)) ?? [],
+          ),
         ),
-      ),
-    }));
+      };
+    });
   }
 
   private async buildDashboardUpcoming(userId: number) {
@@ -1283,9 +1336,13 @@ export class InvestmentsService {
 
     const activePlan = this.selectDisplayContributionPlan(plans);
     const latestSnapshot = this.getLatestSnapshot(valuationSnapshots);
+    const hydratedInvestment = this.hydrateInvestmentWithDerivedEventValuation(
+      investment,
+      investmentEvents,
+    );
 
     return this.buildDetailShellResponse(
-      investment,
+      hydratedInvestment,
       activePlan,
       investmentEvents.length,
       valuationSnapshots.length,

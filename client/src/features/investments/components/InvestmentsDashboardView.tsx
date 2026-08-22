@@ -28,6 +28,7 @@ import {
   formatInvestmentDate,
   getInvestmentTypeLabel,
 } from "../../../utils/investmentHelpers";
+import { getProfitLossHexColor } from "../../../colors";
 import type { Investment } from "../types/investment.types";
 import type { GridColDef } from "@mui/x-data-grid";
 import type {
@@ -54,6 +55,7 @@ interface InvestmentDashboardViewProps {
   categoryPerformanceRows: InvestmentCategoryPerformanceRow[];
   categorySubBreakdown: InvestmentAllocationSegment[];
   categoryPerformanceSubRows: InvestmentCategoryPerformanceRow[];
+  holdingRows: InvestmentCategoryPerformanceRow[];
   topCurrentValueItems: Investment[];
   upcomingContributions: InvestmentContributionViewItem[];
   recentInvestments: Investment[];
@@ -88,6 +90,7 @@ export default function InvestmentsDashboardView({
   categoryPerformanceRows,
   categorySubBreakdown,
   categoryPerformanceSubRows,
+  holdingRows,
   topCurrentValueItems,
   upcomingContributions,
   recentInvestments,
@@ -122,6 +125,12 @@ export default function InvestmentsDashboardView({
     overflowY: { xs: "visible", lg: "auto" },
     pr: { lg: 0.5 },
   } as const;
+  const fixedListWidgetContentSx = {
+    minHeight: 320,
+    maxHeight: 320,
+    overflowY: "auto",
+    pr: 0.5,
+  } as const;
 
   const allocationReturnBreakdown = useMemo(
     () =>
@@ -150,6 +159,35 @@ export default function InvestmentsDashboardView({
         }))
         .sort((left, right) => Math.abs(right.value) - Math.abs(left.value)),
     [categoryPerformanceSubRows],
+  );
+
+  const holdingAllocationBreakdown = useMemo(
+    () =>
+      holdingRows.map((row) => ({
+        key: row.key,
+        label: row.label,
+        value: row.invested,
+        investmentIds: row.investmentIds,
+        assetType: row.assetType,
+        assetCategory: row.assetCategory,
+      })),
+    [holdingRows],
+  );
+
+  const holdingReturnAllocationBreakdown = useMemo(
+    () =>
+      holdingRows
+        .filter((row) => Number(row.returnAmount || 0) !== 0)
+        .map((row) => ({
+          key: row.key,
+          label: row.label,
+          value: row.returnAmount,
+          investmentIds: row.investmentIds,
+          assetType: row.assetType,
+          assetCategory: row.assetCategory,
+        }))
+        .sort((left, right) => Math.abs(right.value) - Math.abs(left.value)),
+    [holdingRows],
   );
 
   const focusedInvestments = useMemo(() => {
@@ -233,6 +271,11 @@ export default function InvestmentsDashboardView({
     );
   };
 
+  const getInstitutionLabel = (institution?: string | null) => {
+    const value = institution?.trim();
+    return value ? value : "Unknown institution";
+  };
+
   return (
     <Stack spacing={2}>
       <Box
@@ -293,7 +336,7 @@ export default function InvestmentsDashboardView({
               variant="caption"
               sx={{
                 fontWeight: 700,
-                color: dashboardKpis.totalReturn >= 0 ? "#10b981" : "#ef4444",
+                color: getProfitLossHexColor(dashboardKpis.totalReturn, "gain"),
               }}
             >
               {dashboardKpis.totalReturn >= 0 ? "+" : ""}
@@ -303,8 +346,7 @@ export default function InvestmentsDashboardView({
               variant="caption"
               sx={{
                 fontWeight: 700,
-                color:
-                  dashboardKpis.returnPercentage >= 0 ? "#10b981" : "#ef4444",
+                color: getProfitLossHexColor(dashboardKpis.returnPercentage, "gain"),
               }}
             >
               ({dashboardKpis.returnPercentage >= 0 ? "+" : ""}
@@ -397,6 +439,7 @@ export default function InvestmentsDashboardView({
           <CategoryPerformanceTable
             rows={categoryPerformanceRows}
             subRows={categoryPerformanceSubRows}
+            holdingRows={holdingRows}
             formatValue={formatCurrency}
             onSelectRow={(row) =>
               focusAssets(
@@ -464,6 +507,8 @@ export default function InvestmentsDashboardView({
             returnData={allocationReturnBreakdown}
             subData={categorySubBreakdown}
             subReturnData={allocationReturnSubBreakdown}
+            holdingData={holdingAllocationBreakdown}
+            holdingReturnData={holdingReturnAllocationBreakdown}
             formatValue={formatCurrency}
             onSelectSegment={(segment, mode) =>
               focusAssets(
@@ -483,7 +528,7 @@ export default function InvestmentsDashboardView({
           title="Upcoming Contributions"
           subtitle="Scheduled recurring payments due on active investments."
           sx={widgetCardSx}
-          contentSx={widgetContentSx}
+          contentSx={fixedListWidgetContentSx}
           empty={upcomingContributions.length === 0}
           emptyState={{
             title: "No upcoming contributions",
@@ -528,7 +573,7 @@ export default function InvestmentsDashboardView({
                           variant="caption"
                           color="text.secondary"
                         >
-                          {item.institution} •{" "}
+                          {getInstitutionLabel(item.institution)} •{" "}
                           {item.activeContributionPlan &&
                           item.activeContributionPlan.cadenceInterval > 1
                             ? `every ${item.activeContributionPlan.cadenceInterval} `
@@ -578,7 +623,7 @@ export default function InvestmentsDashboardView({
           title="Current Value Snapshot"
           subtitle="Highest-value assets based on the latest stored values."
           sx={widgetCardSx}
-          contentSx={widgetContentSx}
+          contentSx={fixedListWidgetContentSx}
           empty={topCurrentValueItems.length === 0}
           emptyState={{
             title: "No current value snapshot",
@@ -607,7 +652,13 @@ export default function InvestmentsDashboardView({
                         {item.name}
                       </Typography>
                     }
-                    secondary={`${item.institution} • ${item.type} • ${formatInvestmentDate(item.lastValuationAt || item.startDate)}`}
+                    secondary={[
+                      getInstitutionLabel(item.institution),
+                      getInvestmentTypeLabel(item.assetType || item.type),
+                      formatInvestmentDate(item.lastValuationAt || item.startDate),
+                    ]
+                      .filter((value) => Boolean(value))
+                      .join(" • ")}
                   />
                   <Typography variant="body2" sx={{ fontWeight: 700 }}>
                     {formatCurrency(item.currentValue || item.totalInvested)}
@@ -622,7 +673,7 @@ export default function InvestmentsDashboardView({
           title="Recent Investments"
           subtitle="The latest additions to the organizer."
           sx={widgetCardSx}
-          contentSx={widgetContentSx}
+          contentSx={fixedListWidgetContentSx}
           empty={recentInvestments.length === 0}
           emptyState={{
             title: "No investments added yet",
@@ -661,7 +712,12 @@ export default function InvestmentsDashboardView({
                       color="text.secondary"
                       sx={{ mt: 0.25 }}
                     >
-                      {item.institution} • {item.type}
+                      {[
+                        getInstitutionLabel(item.institution),
+                        getInvestmentTypeLabel(item.assetType || item.type),
+                      ]
+                        .filter((value) => Boolean(value))
+                        .join(" • ")}
                     </Typography>
                     <Box
                       sx={{

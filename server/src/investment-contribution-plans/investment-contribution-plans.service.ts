@@ -22,7 +22,6 @@ import {
   RecurringScheduleCalculator,
 } from './recurring-schedule-calculator.service';
 import { InvestmentRepository } from '../investments/repositories/investment.repository';
-import { FinancialAccountsService } from '../financial-accounts/financial-accounts.service';
 
 @Injectable()
 export class InvestmentContributionPlansService {
@@ -32,7 +31,6 @@ export class InvestmentContributionPlansService {
     private readonly repository: ContributionPlanRepository,
     private readonly scheduleCalculator: RecurringScheduleCalculator,
     private readonly investmentRepository: InvestmentRepository,
-    private readonly financialAccountsService: FinancialAccountsService,
   ) {}
 
   private normalizePlanStatus(status: string | null | undefined) {
@@ -115,7 +113,6 @@ export class InvestmentContributionPlansService {
   async create(createDto: CreateInvestmentContributionPlanDto, userId?: number) {
     if (userId !== undefined) {
       await this.assertOwnedInvestment(createDto.investmentId, userId);
-      await this.assertOwnedSourceAccount(createDto.sourceAccountId, userId);
     }
 
     this.validatePlanMutationInput(createDto);
@@ -229,7 +226,6 @@ export class InvestmentContributionPlansService {
     userId: number,
   ) {
     await this.assertOwnedInvestment(investmentId, userId);
-    await this.assertOwnedSourceAccount(dto.sourceAccountId, userId);
     this.validatePlanDates(dto.anchorDate, dto.endDate);
 
     const today = this.toUtcDateOnly(new Date());
@@ -364,7 +360,6 @@ export class InvestmentContributionPlansService {
     if (userId !== undefined) {
       const investmentId = String(updateDto.investmentId ?? plan.investmentId);
       await this.assertOwnedInvestment(investmentId, userId);
-      await this.assertOwnedSourceAccount(updateDto.sourceAccountId, userId);
     }
 
     this.validatePlanMutationInput(updateDto, plan);
@@ -403,8 +398,6 @@ export class InvestmentContributionPlansService {
     if (!plan || String(plan.investmentId) !== String(investmentId)) {
       throw new NotFoundException('Recurring plan not found');
     }
-
-    await this.assertOwnedSourceAccount(plan.sourceAccountId, userId);
 
     if (!plan.nextDueDate) {
       throw new BadRequestException('Recurring plan does not have a due contribution to skip');
@@ -486,22 +479,6 @@ export class InvestmentContributionPlansService {
     }
 
     return investment;
-  }
-
-  private async assertOwnedSourceAccount(
-    sourceAccountId: string | number | null | undefined,
-    userId: number,
-  ) {
-    if (sourceAccountId === undefined || sourceAccountId === null || sourceAccountId === '') {
-      return null;
-    }
-
-    const account = await this.financialAccountsService.findOne(Number(sourceAccountId), userId);
-    if (!account) {
-      throw new NotFoundException(`Financial account ${sourceAccountId} not found`);
-    }
-
-    return account;
   }
 
   private toCadenceUnit(value: string): RecurringCadenceUnit {

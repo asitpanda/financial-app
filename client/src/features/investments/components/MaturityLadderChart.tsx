@@ -1,5 +1,6 @@
 import { Box, Stack, Typography } from "@mui/material";
 import type { InvestmentMaturityBucket } from "../investments.selectors";
+import { INVESTMENT_CHART_SERIES_COLORS } from "../../../colors";
 
 interface MaturityLadderChartProps {
   data: InvestmentMaturityBucket[];
@@ -28,11 +29,11 @@ export default function MaturityLadderChart({
             cursor: onSelectBucket ? "pointer" : "default",
             border:
               selectedLabel === item.label
-                ? "1px solid rgba(15, 118, 110, 0.4)"
+                ? `1px solid ${INVESTMENT_CHART_SERIES_COLORS.currentValueHex}66`
                 : "1px solid transparent",
             backgroundColor:
               selectedLabel === item.label
-                ? "rgba(15, 118, 110, 0.04)"
+                ? `${INVESTMENT_CHART_SERIES_COLORS.currentValueHex}0A`
                 : "transparent",
           }}
         >
@@ -68,7 +69,10 @@ export default function MaturityLadderChart({
                 width: `${(item.amount / maxAmount) * 100}%`,
                 minWidth: item.amount > 0 ? 6 : 0,
                 height: "100%",
-                bgcolor: item.amount > 0 ? "#0f766e" : "transparent",
+                bgcolor:
+                  item.amount > 0
+                    ? INVESTMENT_CHART_SERIES_COLORS.currentValueHex
+                    : "transparent",
                 opacity: item.amount > 0 ? 0.9 : 1,
               }}
             />

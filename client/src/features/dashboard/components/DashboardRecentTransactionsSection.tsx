@@ -4,6 +4,7 @@ import { SectionCard } from "../../../components/common";
 import { getIconPathByKey } from "../../../constants/categoryIcons";
 import type { CategoryRecord } from "../../categories/categories.types";
 import type { TransactionRecord } from "../../transactions/transaction.types";
+import { getProfitLossHexColor } from "../../../colors";
 
 interface DashboardRecentTransactionsSectionProps {
   recentTransactions: TransactionRecord[];
@@ -83,7 +84,7 @@ export default function DashboardRecentTransactionsSection({
             >
               <div className="flex min-w-0 items-center gap-3">
                 <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-2xl text-base font-semibold ${matchedCategory?.color ? "" : isExpense ? "bg-rose-50 text-rose-500" : "bg-emerald-50 text-emerald-600"}`}
+                  className={`flex h-10 w-10 items-center justify-center rounded-2xl text-base font-semibold ${matchedCategory?.color ? "" : isExpense ? "bg-red-50 text-red-500" : "bg-emerald-50 text-emerald-500"}`}
                   style={iconContainerStyle}
                 >
                   <Icon path={iconPath} size={0.82} color="currentColor" />
@@ -99,7 +100,8 @@ export default function DashboardRecentTransactionsSection({
               </div>
               <div className="text-right">
                 <div
-                  className={`text-sm font-semibold ${isExpense ? "text-rose-500" : "text-emerald-600"}`}
+                  className="text-sm font-semibold"
+                  style={{ color: getProfitLossHexColor(isExpense ? -amount : amount, "gain") }}
                 >
                   {isExpense ? "-" : "+"}
                   {formatCurrency(amount)}

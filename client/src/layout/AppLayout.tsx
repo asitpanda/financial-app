@@ -1,4 +1,5 @@
 import React from 'react';
+import { Box } from '@mui/material';
 import Sidebar from '../features/layout/components/Sidebar';
 import Header from './Header';
 import type { Screen } from '../store/appStore';
@@ -13,7 +14,9 @@ export default function AppLayout({ activeScreen, onNavigate, children }: AppLay
   return (
     <Sidebar onNavigate={onNavigate} activeRoute={activeScreen}>
       <Header activeScreen={activeScreen} />
-      {children}
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        {children}
+      </Box>
     </Sidebar>
   );
 }

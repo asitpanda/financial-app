@@ -36,7 +36,7 @@ import ConfirmDialog from "../../../components/dialogs/ConfirmDialog";
 import { EmptyState, SectionCard, StatusChip } from "../../../components/common";
 import DataTable from "../../../components/common/DataTable";
 import RecordValuationModal from "./RecordValuationModal";
-import { useUpdateInvestmentContributionPlan } from "../hooks/useContributionPlans";
+import { useUpdateInvestmentContributionPlan, useDeleteInvestmentEvent } from "../hooks/useContributionPlans";
 import { useDeleteInvestmentSnapshot } from "../hooks/useInvestmentSnapshots";
 import { INVESTMENT_EVENT_TYPES } from "../../../types/investmentEventTypes";
 import { useNotificationStore } from "../../../store/notificationStore";
@@ -47,6 +47,11 @@ import {
   getInvestmentCategoryLabel,
   getInvestmentStatusTone,
 } from "../../../utils/investmentHelpers";
+import {
+  INVESTMENT_CHART_SERIES_COLORS,
+  PROFIT_LOSS_COLORS,
+  getProfitLossMuiColor,
+} from "../../../colors";
 
 const DRAWER_TABS = ["overview", "contribution", "valuation", "details"];
 const VALUATION_STALE_DAYS = 30;
@@ -83,6 +88,8 @@ function getContributionEventLabel(eventType) {
       return "Opening Balance";
     case INVESTMENT_EVENT_TYPES.OPENING_INCOME_CREDIT:
       return "Opening Income";
+    case INVESTMENT_EVENT_TYPES.INCOME_CREDIT:
+      return "Income Credit";
     case INVESTMENT_EVENT_TYPES.WITHDRAWAL_PRINCIPAL:
       return "Principal Withdrawal";
     default:
@@ -137,6 +144,7 @@ function isContributionLike(eventType) {
     INVESTMENT_EVENT_TYPES.CONTRIBUTION,
     INVESTMENT_EVENT_TYPES.OPENING_BALANCE,
     INVESTMENT_EVENT_TYPES.OPENING_INCOME_CREDIT,
+    INVESTMENT_EVENT_TYPES.INCOME_CREDIT,
   ].includes(eventType);
 }
 
@@ -306,6 +314,20 @@ function CompactKeyValue({ label, value, emphasize = false, valueColor = "text.p
   );
 }
 
+const tableCellCenterSx = {
+  display: "flex",
+  alignItems: "center",
+  height: "100%",
+  width: "100%",
+};
+
+const tableCellStackSx = {
+  ...tableCellCenterSx,
+  justifyContent: "center",
+  flexDirection: "column",
+  alignItems: "flex-start",
+};
+
 function InvestmentPerformanceChart({ points, formatValue }) {
   const [hoveredIndex, setHoveredIndex] = React.useState(null);
 
@@ -405,8 +427,8 @@ function InvestmentPerformanceChart({ points, formatValue }) {
           );
         })}
 
-        <path d={investedLine} fill="none" stroke="#f59e0b" strokeWidth="2" />
-        <path d={currentLine} fill="none" stroke="#2563eb" strokeWidth="2.5" />
+        <path d={investedLine} fill="none" stroke={INVESTMENT_CHART_SERIES_COLORS.investedHex} strokeWidth="2" />
+        <path d={currentLine} fill="none" stroke={INVESTMENT_CHART_SERIES_COLORS.investedAltHex} strokeWidth="2.5" />
 
         {plottedPoints.map((point, pointIdx) => {
           const tooltipWidth = 200;
@@ -424,8 +446,8 @@ function InvestmentPerformanceChart({ points, formatValue }) {
             <g key={`point-${pointIdx}`}>
               {showDots[pointIdx] ? (
                 <>
-                  <circle cx={point.x} cy={point.yCurrentValue} r={hoveredIndex === pointIdx ? 5 : 3} fill="#2563eb" opacity={hoveredIndex === pointIdx ? 1 : 0.7} style={{ cursor: "pointer", transition: "all 0.15s" }} onMouseEnter={() => setHoveredIndex(pointIdx)} onMouseLeave={() => setHoveredIndex(null)} />
-                  <circle cx={point.x} cy={point.yInvestedValue} r={hoveredIndex === pointIdx ? 4.5 : 2.5} fill="#f59e0b" opacity={hoveredIndex === pointIdx ? 1 : 0.6} style={{ cursor: "pointer", transition: "all 0.15s" }} onMouseEnter={() => setHoveredIndex(pointIdx)} onMouseLeave={() => setHoveredIndex(null)} />
+                  <circle cx={point.x} cy={point.yCurrentValue} r={hoveredIndex === pointIdx ? 5 : 3} fill={INVESTMENT_CHART_SERIES_COLORS.investedAltHex} opacity={hoveredIndex === pointIdx ? 1 : 0.7} style={{ cursor: "pointer", transition: "all 0.15s" }} onMouseEnter={() => setHoveredIndex(pointIdx)} onMouseLeave={() => setHoveredIndex(null)} />
+                  <circle cx={point.x} cy={point.yInvestedValue} r={hoveredIndex === pointIdx ? 4.5 : 2.5} fill={INVESTMENT_CHART_SERIES_COLORS.investedHex} opacity={hoveredIndex === pointIdx ? 1 : 0.6} style={{ cursor: "pointer", transition: "all 0.15s" }} onMouseEnter={() => setHoveredIndex(pointIdx)} onMouseLeave={() => setHoveredIndex(null)} />
                 </>
               ) : null}
 
@@ -436,11 +458,11 @@ function InvestmentPerformanceChart({ points, formatValue }) {
                     {dayjs(point.date).format("DD MMM YYYY")}
                   </text>
                   <text x={tooltipX + 10} y={tooltipY + 42} style={{ fontSize: 11, fill: "#e5e7eb" }}>Current Value</text>
-                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 42} textAnchor="end" style={{ fontSize: 11, fill: "#60a5fa", fontWeight: 700 }}>{formatValue(point.currentValue)}</text>
+                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 42} textAnchor="end" style={{ fontSize: 11, fill: INVESTMENT_CHART_SERIES_COLORS.investedAltHex, fontWeight: 700 }}>{formatValue(point.currentValue)}</text>
                   <text x={tooltipX + 10} y={tooltipY + 58} style={{ fontSize: 11, fill: "#e5e7eb" }}>Total Invested</text>
-                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 58} textAnchor="end" style={{ fontSize: 11, fill: "#fcd34d", fontWeight: 700 }}>{formatValue(point.investedValue)}</text>
+                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 58} textAnchor="end" style={{ fontSize: 11, fill: INVESTMENT_CHART_SERIES_COLORS.investedHex, fontWeight: 700 }}>{formatValue(point.investedValue)}</text>
                   <text x={tooltipX + 10} y={tooltipY + 74} style={{ fontSize: 11, fill: "#e5e7eb" }}>Return</text>
-                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 74} textAnchor="end" style={{ fontSize: 11, fill: point.gainLossValue >= 0 ? "#34d399" : "#f87171", fontWeight: 700 }}>
+                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 74} textAnchor="end" style={{ fontSize: 11, fill: point.gainLossValue >= 0 ? PROFIT_LOSS_COLORS.gainSoftHex : PROFIT_LOSS_COLORS.lossSoftHex, fontWeight: 700 }}>
                     {point.gainLossValue >= 0 ? "+" : ""}
                     {formatValue(point.gainLossValue)} ({point.gainLossPercentage >= 0 ? "+" : ""}
                     {point.gainLossPercentage.toFixed(2)}%)
@@ -473,6 +495,8 @@ export function InvestmentViewDrawer({
   investment,
   taxonomyNodes = [],
   onEdit,
+  onRecordActivity,
+  onEditActivity,
 }) {
   const [activeTab, setActiveTab] = React.useState("overview");
   const [contributionFilter, setContributionFilter] = React.useState("all");
@@ -482,12 +506,15 @@ export function InvestmentViewDrawer({
   const [recordValuationOpen, setRecordValuationOpen] = React.useState(false);
   const [selectedSnapshot, setSelectedSnapshot] = React.useState(null);
   const [deleteSnapshotTarget, setDeleteSnapshotTarget] = React.useState(null);
+  const [deleteEventTarget, setDeleteEventTarget] = React.useState(null);
   const [snapshotActionLoading, setSnapshotActionLoading] = React.useState(false);
+  const [eventActionLoading, setEventActionLoading] = React.useState(false);
   const [planActionLoading, setPlanActionLoading] = React.useState(false);
   const [planActionError, setPlanActionError] = React.useState("");
   const pushNotification = useNotificationStore((state) => state.pushNotification);
   const updateContributionPlanMutation = useUpdateInvestmentContributionPlan();
   const deleteSnapshotMutation = useDeleteInvestmentSnapshot();
+  const deleteEventMutation = useDeleteInvestmentEvent();
 
   React.useEffect(() => {
     if (!open) return;
@@ -587,6 +614,30 @@ export function InvestmentViewDrawer({
     }
   };
 
+  const handleDeleteEvent = async () => {
+    if (!deleteEventTarget?.id || !investment?.id) return;
+
+    setEventActionLoading(true);
+    try {
+      await deleteEventMutation.mutateAsync({
+        investmentId: investment.id,
+        eventId: deleteEventTarget.id,
+      });
+      pushNotification({
+        type: "success",
+        message: `Deleted ${getContributionEventLabel(deleteEventTarget.eventType).toLowerCase()} from ${formatInvestmentDate(deleteEventTarget.eventDate)}`,
+      });
+      setDeleteEventTarget(null);
+    } catch (error) {
+      pushNotification({
+        type: "error",
+        message: getRuntimeErrorMessage(error, "Failed to delete activity"),
+      });
+    } finally {
+      setEventActionLoading(false);
+    }
+  };
+
   const valuationSnapshots = React.useMemo(() => {
     if (!Array.isArray(investment?.valuationSnapshots)) {
       return [];
@@ -630,7 +681,7 @@ export function InvestmentViewDrawer({
   const totalReturnValue = effectiveCurrentValue - effectiveTotalInvested;
   const totalReturnPercentage =
     effectiveTotalInvested > 0 ? (totalReturnValue / effectiveTotalInvested) * 100 : 0;
-  const totalReturnColor = totalReturnValue >= 0 ? "success.main" : "error.main";
+  const totalReturnColor = getProfitLossMuiColor(totalReturnValue, "gain");
   const freshnessMeta = getFreshnessMeta(latestSnapshot, investment?.lastValuationAt);
   const recurringPlanStatus = String(investment?.activeContributionPlan?.status || "active").toLowerCase();
   const categoryLabel = getInvestmentCategoryLabel(
@@ -691,6 +742,7 @@ export function InvestmentViewDrawer({
       notes: event.notes || "—",
       linkedTransactionId: event.linkedTransactionId,
       dueDate: event.dueDate,
+      event,
     };
   });
 
@@ -701,27 +753,36 @@ export function InvestmentViewDrawer({
       flex: 1.05,
       minWidth: 132,
       renderCell: ({ row }) => (
-        <Box sx={{ py: 0.75 }}>
+        <Box sx={tableCellCenterSx}>
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
             {formatDateOrDash(row.date)}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {row.date ? dayjs(row.date).format("ddd") : "—"}
           </Typography>
         </Box>
       ),
     },
-    { field: "activity", headerName: "Contribution", flex: 1.2, minWidth: 160 },
+    {
+      field: "activity",
+      headerName: "Contribution",
+      flex: 1.2,
+      minWidth: 160,
+      renderCell: ({ value }) => (
+        <Box sx={tableCellCenterSx}>
+          <Typography variant="body2">{value}</Typography>
+        </Box>
+      ),
+    },
     {
       field: "amount",
       headerName: "Amount",
       flex: 0.9,
       minWidth: 130,
       renderCell: ({ value }) => (
-        <Typography variant="body2" sx={{ fontWeight: 700, color: value >= 0 ? "success.main" : "error.main" }}>
-          {value >= 0 ? "+" : ""}
-          {formatInvestmentCurrency(value)}
-        </Typography>
+        <Box sx={tableCellCenterSx}>
+          <Typography variant="body2" sx={{ fontWeight: 700, color: getProfitLossMuiColor(value, "gain") }}>
+            {value >= 0 ? "+" : ""}
+            {formatInvestmentCurrency(value)}
+          </Typography>
+        </Box>
       ),
     },
     {
@@ -730,10 +791,22 @@ export function InvestmentViewDrawer({
       flex: 0.9,
       minWidth: 120,
       renderCell: ({ value }) => (
-        <Chip size="small" label={formatCodeLabel(value)} color={getStatusChipColor(value)} sx={{ fontWeight: 600 }} />
+        <Box sx={tableCellCenterSx}>
+          <Chip size="small" label={formatCodeLabel(value)} color={getStatusChipColor(value)} sx={{ fontWeight: 600 }} />
+        </Box>
       ),
     },
-    { field: "source", headerName: "Source", flex: 1, minWidth: 140 },
+    {
+      field: "source",
+      headerName: "Source",
+      flex: 1,
+      minWidth: 140,
+      renderCell: ({ value }) => (
+        <Box sx={tableCellCenterSx}>
+          <Typography variant="body2">{value}</Typography>
+        </Box>
+      ),
+    },
     {
       field: "linkedTransactionId",
       headerName: "Linked Transaction",
@@ -741,11 +814,15 @@ export function InvestmentViewDrawer({
       minWidth: 160,
       renderCell: ({ value }) =>
         value ? (
-          <Typography variant="body2" sx={{ fontWeight: 600, color: "primary.main" }}>
-            TXN-{value}
-          </Typography>
+          <Box sx={tableCellCenterSx}>
+            <Typography variant="body2" sx={{ fontWeight: 600, color: "primary.main" }}>
+              TXN-{value}
+            </Typography>
+          </Box>
         ) : (
-          <Typography variant="body2" color="text.secondary">—</Typography>
+          <Box sx={tableCellCenterSx}>
+            <Typography variant="body2" color="text.secondary">—</Typography>
+          </Box>
         ),
     },
     {
@@ -754,12 +831,68 @@ export function InvestmentViewDrawer({
       flex: 1,
       minWidth: 130,
       renderCell: ({ value }) => (
-        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-          {formatDateOrDash(value)}
-        </Typography>
+        <Box sx={tableCellCenterSx}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            {formatDateOrDash(value)}
+          </Typography>
+        </Box>
       ),
     },
-    { field: "notes", headerName: "Notes", flex: 1.4, minWidth: 190 },
+    {
+      field: "notes",
+      headerName: "Notes",
+      flex: 1.4,
+      minWidth: 190,
+      renderCell: ({ value }) => (
+        <Box sx={tableCellCenterSx}>
+          <Typography variant="body2">{value}</Typography>
+        </Box>
+      ),
+    },
+    {
+      field: "actions",
+      headerName: "Actions",
+      sortable: false,
+      filterable: false,
+      align: "right",
+      headerAlign: "right",
+      minWidth: 116,
+      renderCell: ({ row }) => {
+        const editableEventTypes = [
+          INVESTMENT_EVENT_TYPES.INCOME_CREDIT,
+          INVESTMENT_EVENT_TYPES.OPENING_INCOME_CREDIT,
+        ];
+        const isEditable = !row.linkedTransactionId && editableEventTypes.includes(row.event?.eventType);
+
+        if (!isEditable) {
+          return (
+            <Box sx={tableCellCenterSx}>
+              <Typography variant="caption" color="text.secondary">—</Typography>
+            </Box>
+          );
+        }
+
+        return (
+          <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+            <IconButton
+              size="small"
+              onClick={() => onEditActivity?.(investment, row.event)}
+              aria-label={`Edit activity on ${formatInvestmentDate(row.date)}`}
+            >
+              <Icon path={mdiPencilOutline} size={0.8} />
+            </IconButton>
+            <IconButton
+              size="small"
+              color="error"
+              onClick={() => setDeleteEventTarget(row.event)}
+              aria-label={`Delete activity on ${formatInvestmentDate(row.date)}`}
+            >
+              <Icon path={mdiDeleteOutline} size={0.8} />
+            </IconButton>
+          </Box>
+        );
+      },
+    },
   ];
 
   const valuationRows = valuationSnapshots.map((snapshot) => ({
@@ -779,12 +912,9 @@ export function InvestmentViewDrawer({
       flex: 1.05,
       minWidth: 150,
       renderCell: ({ row }) => (
-        <Box sx={{ py: 0.75 }}>
+        <Box sx={tableCellCenterSx}>
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
             {formatDateOrDash(row.snapshotDate)}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {row.snapshotDate ? dayjs(row.snapshotDate).format("ddd") : "—"}
           </Typography>
         </Box>
       ),
@@ -795,9 +925,11 @@ export function InvestmentViewDrawer({
       flex: 1,
       minWidth: 150,
       renderCell: ({ value }) => (
-        <Typography variant="body2" sx={{ fontWeight: 700 }}>
-          {formatInvestmentCurrency(value)}
-        </Typography>
+        <Box sx={tableCellCenterSx}>
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            {formatInvestmentCurrency(value)}
+          </Typography>
+        </Box>
       ),
     },
     {
@@ -805,21 +937,33 @@ export function InvestmentViewDrawer({
       headerName: "Units",
       flex: 0.8,
       minWidth: 110,
-      renderCell: ({ value }) => <Typography variant="body2">{value ?? "—"}</Typography>,
+      renderCell: ({ value }) => (
+        <Box sx={tableCellCenterSx}>
+          <Typography variant="body2">{value ?? "—"}</Typography>
+        </Box>
+      ),
     },
     {
       field: "price",
       headerName: "Price",
       flex: 0.9,
       minWidth: 130,
-      renderCell: ({ value }) => <Typography variant="body2">{value != null ? formatInvestmentCurrency(value) : "—"}</Typography>,
+      renderCell: ({ value }) => (
+        <Box sx={tableCellCenterSx}>
+          <Typography variant="body2">{value != null ? formatInvestmentCurrency(value) : "—"}</Typography>
+        </Box>
+      ),
     },
     {
       field: "source",
       headerName: "Source",
       flex: 0.9,
       minWidth: 130,
-      renderCell: ({ value }) => <Chip size="small" variant="outlined" label={value ? formatCodeLabel(value) : "Manual"} />,
+      renderCell: ({ value }) => (
+        <Box sx={tableCellCenterSx}>
+          <Chip size="small" variant="outlined" label={value ? formatCodeLabel(value) : "Manual"} />
+        </Box>
+      ),
     },
     {
       field: "actions",
@@ -1113,6 +1257,20 @@ export function InvestmentViewDrawer({
 
     return (
       <Stack spacing={0} sx={{ height: "100%", minHeight: 0 }}>
+        {onRecordActivity ? (
+          <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1.5 }}>
+            <AppButton
+              size="small"
+              variant="outlined"
+              onClick={() => onRecordActivity(investment, investment?.activeContributionPlan ?? null, "contribution")}
+            >
+              <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+                <Icon path={mdiPlus} size={0.8} />
+                Record Activity
+              </Box>
+            </AppButton>
+          </Box>
+        ) : null}
         {investment?.activeContributionPlan ? (
           <SectionCard
             title={
@@ -1223,7 +1381,13 @@ export function InvestmentViewDrawer({
               {planActionError ? <Alert severity="error">{planActionError}</Alert> : null}
             </Stack>
           </SectionCard>
-        ) : null}
+        ) : (
+          <Box sx={{ mb: 1.5, p: 1.75, borderRadius: 1.5, bgcolor: "action.hover", border: "1px solid", borderColor: "divider", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
+            <Typography variant="body2" color="text.secondary">
+              <strong>One-time investment</strong> — no recurring plan. Any manually recorded contributions appear in the activity table below.
+            </Typography>
+          </Box>
+        )}
 
         <SectionBlock
           grow
@@ -1425,7 +1589,7 @@ export function InvestmentViewDrawer({
           ) : valuationSnapshots.length > 0 ? (
             <Alert severity="info">No chartable performance series is available yet for this period.</Alert>
           ) : (
-            <EmptyState text="No valuation history yet" subText="Record the first valuation to start tracking value, profit, and growth over time." actionLabel="Record Valuation" onAction={handleOpenCreateSnapshot} />
+            <EmptyState text="No valuation history yet" subText="Record the first valuation to start tracking value, profit, and growth over time." />
           )}
         </SectionCard>
 
@@ -1444,7 +1608,7 @@ export function InvestmentViewDrawer({
               }}
             />
           ) : (
-            <EmptyState text="No valuation history yet" subText="Record the first valuation to track market value over time." actionLabel="Record Valuation" onAction={handleOpenCreateSnapshot} />
+            <EmptyState text="No valuation history yet" subText="Record the first valuation to track market value over time." />
           )}
         </SectionBlock>
       </Stack>
@@ -1586,8 +1750,7 @@ export function InvestmentViewDrawer({
           </Box>
         </Box>
       )}
-
-      <RecordValuationModal open={recordValuationOpen} onClose={handleCloseSnapshotModal} investmentId={investment?.id} investmentName={investment?.name} snapshot={selectedSnapshot} />
+     <RecordValuationModal open={recordValuationOpen} onClose={handleCloseSnapshotModal} investmentId={investment?.id} investmentName={investment?.name} snapshot={selectedSnapshot} totalInvested={investment?.totalInvested} currentValue={investment?.currentValue} />
 
       <ConfirmDialog
         open={Boolean(deleteSnapshotTarget)}
@@ -1598,6 +1761,17 @@ export function InvestmentViewDrawer({
         loading={snapshotActionLoading}
         onCancel={() => setDeleteSnapshotTarget(null)}
         onConfirm={handleDeleteSnapshot}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteEventTarget)}
+        title="Delete activity"
+        description={deleteEventTarget ? `Remove the ${getContributionEventLabel(deleteEventTarget.eventType).toLowerCase()} from ${formatInvestmentDate(deleteEventTarget.eventDate)}? Invested principal and current value will be recalculated.` : ""}
+        confirmLabel="Delete"
+        confirmColor="error"
+        loading={eventActionLoading}
+        onCancel={() => setDeleteEventTarget(null)}
+        onConfirm={handleDeleteEvent}
       />
     </AppDrawer>
   );

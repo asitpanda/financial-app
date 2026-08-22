@@ -45,7 +45,7 @@ export const transactionApi = {
 
   delete: deleteTransaction,
 
-  getByType: async (type: "income" | "expense"): Promise<Transaction[]> => {
+  getByType: async (type: Transaction["type"]): Promise<Transaction[]> => {
     const response = await apiClient.get(`/transactions?type=${type}`);
     return response.data;
   },

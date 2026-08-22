@@ -9,7 +9,7 @@ import FinancialAccountFormDrawer from "../accounts/components/FinancialAccountF
 import { getFinancialAccounts } from "../accounts/financialAccounts.api";
 
 import { saveTransaction } from "../transactions/transactions.service";
-import { createGoal, updateGoal } from "../goals/goals.api";
+import { useCreateGoal, useUpdateGoal } from "../goals/useGoals";
 import { createCategory } from "../categories/categories.api";
 import {
   createInvestment,
@@ -24,7 +24,7 @@ import { getRuntimeErrorMessage } from "../../utils/errorMessage";
 import { navigateTo } from "../../services/navigation";
 import {
   usePageDateFilterStore,
-  matchesPageDateFilter,
+  matchesGlobalDateFilter,
 } from "../../store/pageDateFilterStore";
 import InvestmentFormDrawer from "../investments/components/InvestmentFormDrawer";
 import {
@@ -102,6 +102,9 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
   const periodMode = usePageDateFilterStore((state) => state.mode);
   const selectedYear = usePageDateFilterStore((state) => state.selectedYear);
   const selectedMonth = usePageDateFilterStore((state) => state.selectedMonth);
+  const scopeMode = usePageDateFilterStore((state) => state.scopeMode);
+  const rangeStart = usePageDateFilterStore((state) => state.rangeStart);
+  const rangeEnd = usePageDateFilterStore((state) => state.rangeEnd);
 
   const {
     data: dashboardData,
@@ -120,6 +123,8 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
   const pushNotification = useNotificationStore(
     (state) => state.pushNotification,
   );
+  const createGoalMutation = useCreateGoal();
+  const updateGoalMutation = useUpdateGoal();
 
   const assetTypeConfigs = useMemo(
     () =>
@@ -173,47 +178,42 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
     [accounts],
   );
 
+  const dateFilterState = useMemo(
+    () => ({ scopeMode, mode: periodMode, selectedYear, selectedMonth, rangeStart, rangeEnd }),
+    [scopeMode, periodMode, selectedYear, selectedMonth, rangeStart, rangeEnd],
+  );
+
   const filteredTransactions = useMemo(() => {
     return getDashboardFilteredTransactions(
       transactions,
-      periodMode,
-      selectedYear,
-      selectedMonth,
-      matchesPageDateFilter,
+      dateFilterState,
+      matchesGlobalDateFilter,
     );
-  }, [transactions, periodMode, selectedYear, selectedMonth]);
+  }, [transactions, dateFilterState]);
 
   const totals = useMemo(() => {
     return summarizeTransactions(filteredTransactions);
   }, [filteredTransactions]);
 
-  const lifetimeTotals = useMemo(() => {
-    return summarizeTransactions(transactions);
-  }, [transactions]);
-
   const periodBankSummaries = useMemo(() => {
     return summarizeSources(filteredTransactions, accountNameById);
   }, [filteredTransactions, accountNameById]);
 
-  const lifetimeBankSummaries = useMemo(() => {
-    return summarizeSources(transactions, accountNameById);
-  }, [transactions, accountNameById]);
-
   const accountOverviewRows = useMemo(() => {
-    return getDashboardAccountOverviewRows(
-      accounts,
-      lifetimeBankSummaries,
-      periodBankSummaries,
-    );
-  }, [accounts, lifetimeBankSummaries, periodBankSummaries]);
+    return getDashboardAccountOverviewRows(accounts, periodBankSummaries);
+  }, [accounts, periodBankSummaries]);
+
+  const totalAccountBalance = useMemo(() => {
+    return accountOverviewRows.reduce((sum, row) => sum + row.balance, 0);
+  }, [accountOverviewRows]);
 
   const categoryPieData = useMemo(() => {
     return getDashboardCategoryPieData(filteredTransactions);
   }, [filteredTransactions]);
 
   const selectedPeriodLabel = useMemo(
-    () => getDashboardPeriodLabel(periodMode, selectedYear, selectedMonth),
-    [periodMode, selectedYear, selectedMonth],
+    () => getDashboardPeriodLabel(dateFilterState),
+    [dateFilterState],
   );
 
   const recentTransactions = useMemo(() => {
@@ -252,12 +252,8 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
   }, [taxonomyNodes]);
 
   const investmentPeriodBounds = useMemo(() => {
-    return getDashboardInvestmentPeriodBounds(
-      periodMode,
-      selectedYear,
-      selectedMonth,
-    );
-  }, [periodMode, selectedYear, selectedMonth]);
+    return getDashboardInvestmentPeriodBounds(dateFilterState);
+  }, [dateFilterState]);
 
   const investmentSummary = useMemo(() => {
     return getDashboardInvestmentSummary(
@@ -295,18 +291,13 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
   const handleSubmitGoal = async (payload) => {
     try {
       if (editGoal) {
-        const updated = await updateGoal(getGoalId(editGoal), payload);
-        const updatedGoalId = getGoalId(updated) || getGoalId(editGoal);
-        setGoals((prev) =>
-          prev.map((g) => (getGoalId(g) === updatedGoalId ? updated : g)),
-        );
+        await updateGoalMutation.mutateAsync({ id: getGoalId(editGoal), data: payload });
         pushNotification({
           type: "success",
           message: "Goal updated successfully",
         });
       } else {
-        const created = await createGoal(payload);
-        setGoals((prev) => [created, ...prev]);
+        await createGoalMutation.mutateAsync(payload);
         pushNotification({
           type: "success",
           message: "Goal added successfully",
@@ -481,9 +472,7 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
       <section className="grid grid-cols-1 gap-3 xl:grid-cols-4">
         <DashboardAccountsSection
           accountOverviewRows={accountOverviewRows}
-          lifetimeBalance={lifetimeTotals.balance}
-          periodBalance={totals.balance}
-          selectedPeriodLabel={selectedPeriodLabel}
+          periodBalance={totalAccountBalance}
           onAddAccount={handleOpenAddAccount}
           onEditAccount={handleOpenEditAccount}
         />

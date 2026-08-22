@@ -39,7 +39,7 @@ import { useDrawerStore } from "../../store/drawerStore";
 import { useDialogStore } from "../../store/dialogStore";
 import { useNotificationStore } from "../../store/notificationStore";
 import {
-  matchesPageDateFilter,
+  matchesGlobalDateFilter,
   usePageDateFilterStore,
 } from "../../store/pageDateFilterStore";
 import {
@@ -157,6 +157,9 @@ export default function Categories() {
   const periodMode = usePageDateFilterStore((state) => state.mode);
   const selectedYear = usePageDateFilterStore((state) => state.selectedYear);
   const selectedMonth = usePageDateFilterStore((state) => state.selectedMonth);
+  const scopeMode = usePageDateFilterStore((state) => state.scopeMode);
+  const rangeStart = usePageDateFilterStore((state) => state.rangeStart);
+  const rangeEnd = usePageDateFilterStore((state) => state.rangeEnd);
 
   const openAddDrawer = () => {
     openDrawer({ type: "category", mode: "create", step: "form" });
@@ -245,16 +248,19 @@ export default function Categories() {
     [focusCategoryTable],
   );
 
+  const globalDateFilterState = useMemo(
+    () => ({ scopeMode, mode: periodMode, selectedYear, selectedMonth, rangeStart, rangeEnd }),
+    [scopeMode, periodMode, selectedYear, selectedMonth, rangeStart, rangeEnd],
+  );
+
   const filteredTransactions = useMemo(
     () =>
       getFilteredCategoryTransactions(
         transactions,
-        periodMode,
-        selectedYear,
-        selectedMonth,
-        matchesPageDateFilter,
+        globalDateFilterState,
+        matchesGlobalDateFilter,
       ),
-    [transactions, periodMode, selectedYear, selectedMonth],
+    [transactions, globalDateFilterState],
   );
 
   const filteredCategories = useMemo(() => {

@@ -8,28 +8,12 @@ import {
   buildAssetTypeLabelMap,
   formatInvestmentCurrency,
   formatInvestmentDate,
+  getCadenceLabel,
   getInvestmentStatusTone,
   getInvestmentTypeLabel,
 } from "../../../utils/investmentHelpers";
 import type { Investment, InvestmentAssetTypeConfig } from "../types/investment.types";
 import { getProfitLossMuiColor } from "../../../colors";
-
-const getCadenceLabel = (cadenceUnit?: string, cadenceInterval?: number | string) => {
-  const interval = Math.max(Number(cadenceInterval) || 1, 1);
-
-  if (interval === 1) {
-    if (cadenceUnit === "week") return "Weekly";
-    if (cadenceUnit === "month") return "Monthly";
-    if (cadenceUnit === "quarter") return "Quarterly";
-    if (cadenceUnit === "year") return "Yearly";
-  }
-
-  if (cadenceUnit === "month") {
-    return `Every ${interval} months`;
-  }
-
-  return `Every ${interval} ${cadenceUnit}${interval === 1 ? "" : "s"}`;
-};
 
 const getInvestmentReturnMetrics = (investment: Investment) => {
   const investedValue = Number(investment?.totalInvested || 0);

@@ -2,15 +2,32 @@ import type { InvestmentEventType } from '../../../types/investmentEventTypes';
 
 export type InvestmentStatus = "active" | "matured" | "closed";
 export type InvestmentContributionMode = "ONE_TIME" | "RECURRING";
+export type AccountingTreatment = "INVESTMENT" | "INSURANCE_SAVINGS" | "PROTECTION_EXPENSE";
+
+export type InvestmentFrequency =
+	| "weekly"
+	| "monthly"
+	| "quarterly"
+	| "halfyearly"
+	| "yearly";
+
+export interface FrequencyCadenceOption {
+	frequency: InvestmentFrequency;
+	label: string;
+	cadenceUnit: string;
+	cadenceInterval: number;
+}
 
 export interface InvestmentAssetCategoryConfig {
 	code: string;
 	label: string;
+	accountingTreatment?: AccountingTreatment | null;
 }
 
 export interface InvestmentAssetTypeConfig {
 	code: string;
 	label: string;
+	accountingTreatment?: AccountingTreatment | null;
 	categories: InvestmentAssetCategoryConfig[];
 }
 
@@ -91,6 +108,8 @@ export interface InvestmentBase {
 	currentValue?: number;
 	startDate?: string | null;
 	status: InvestmentStatus;
+	accountingTreatment?: AccountingTreatment | null;
+	accountingTreatmentOverride?: AccountingTreatment | null;
 	maturityDate?: string | null;
 	currency?: string;
 	contributionMode?: InvestmentContributionMode;
@@ -136,6 +155,8 @@ export interface InvestmentDashboardSummaryPayload {
 	returnPercentage: number;
 	upcomingMaturity: number;
 	insuranceCover: number;
+	insuranceSavingsContribution: number;
+	protectionExpenseTotal: number;
 	valueSourceSummary: {
 		snapshotBackedValue: number;
 		estimatedValue: number;

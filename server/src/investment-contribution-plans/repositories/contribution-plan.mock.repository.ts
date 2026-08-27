@@ -110,15 +110,15 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
   }
 
   async findAllActiveByUser(userId: number): Promise<InvestmentContributionPlanRecord[]> {
-    const ownedInvestmentIds = new Set(
+    const ownedActiveInvestmentIds = new Set(
       mockInvestmentsData
-        .filter((investment) => investment.userId === userId)
+        .filter((investment) => investment.userId === userId && String(investment.status).toLowerCase() === 'active')
         .map((investment) => investment.id),
     );
 
     return mockInvestmentContributionPlans.filter(
       (plan) =>
-        ownedInvestmentIds.has(plan.investmentId) &&
+        ownedActiveInvestmentIds.has(plan.investmentId) &&
         String(plan.status).toLowerCase() === 'active',
     );
   }

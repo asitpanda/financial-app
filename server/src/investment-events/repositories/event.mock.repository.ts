@@ -15,12 +15,22 @@ const normalizeNullableNumber = (value?: string | number | null) =>
   value === undefined || value === null || value === '' ? null : Number(value);
 
 const syncInvestmentDerivedValues = (investmentId: number) => {
+  const investmentIndex = mockInvestmentsData.findIndex((investment) => investment.id === investmentId);
+  if (investmentIndex < 0) return;
+
+  const accountingTreatment = mockInvestmentsData[investmentIndex].accountingTreatment ?? 'INVESTMENT';
+
+  // Premiums on protection products are a pure expense - never written back to invested capital or value.
+  if (accountingTreatment === 'PROTECTION_EXPENSE') return;
+
   const principalIn = mockInvestmentEvents
     .filter(
       (event) =>
         event.investmentId === investmentId &&
         event.status === 'CONFIRMED' &&
-        (event.eventType === InvestmentEventType.CONTRIBUTION || event.eventType === InvestmentEventType.OPENING_BALANCE),
+        (event.eventType === InvestmentEventType.CONTRIBUTION ||
+          event.eventType === InvestmentEventType.OPENING_BALANCE ||
+          (accountingTreatment === 'INSURANCE_SAVINGS' && event.eventType === InvestmentEventType.PREMIUM)),
     )
     .reduce((sum, event) => sum + Number(event.amount || 0), 0);
 
@@ -43,8 +53,12 @@ const syncInvestmentDerivedValues = (investmentId: number) => {
     )
     .reduce((sum, event) => sum + Number(event.amount || 0), 0);
 
-  const investmentIndex = mockInvestmentsData.findIndex((investment) => investment.id === investmentId);
-  if (investmentIndex < 0) return;
+  if (accountingTreatment === 'INSURANCE_SAVINGS') {
+    // Premium-paid history is permanent; a money-back payout must not retroactively reduce it, and currentValue
+    // is never manufactured here - only an explicit ValuationSnapshot should set it for these products.
+    mockInvestmentsData[investmentIndex].totalInvested = principalIn;
+    return;
+  }
 
   const principalTotal = principalIn - principalOut;
   mockInvestmentsData[investmentIndex].totalInvested = principalTotal;

@@ -29,6 +29,10 @@ export class AssetTaxonomyRepository {
     return this.dataSource.update(id, userId, data);
   }
 
+  async updateLevelsForDescendants(userId: number, updates: Array<{ id: number; level: number }>): Promise<void> {
+    return this.dataSource.updateLevelsForDescendants(userId, updates);
+  }
+
   async delete(id: number, userId: number): Promise<void> {
     return this.dataSource.delete(id, userId);
   }

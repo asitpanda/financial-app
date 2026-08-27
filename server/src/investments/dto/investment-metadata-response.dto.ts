@@ -9,6 +9,9 @@ export class InvestmentMetadataAssetCategoryDto {
 
   @ApiProperty()
   label: string;
+
+  @ApiProperty({ required: false, enum: ['INVESTMENT', 'INSURANCE_SAVINGS', 'PROTECTION_EXPENSE'] })
+  accountingTreatment?: string | null;
 }
 
 export class InvestmentMetadataAssetTypeDto {
@@ -20,6 +23,9 @@ export class InvestmentMetadataAssetTypeDto {
 
   @ApiProperty()
   label: string;
+
+  @ApiProperty({ required: false, enum: ['INVESTMENT', 'INSURANCE_SAVINGS', 'PROTECTION_EXPENSE'] })
+  accountingTreatment?: string | null;
 
   @ApiProperty({ type: [InvestmentMetadataAssetCategoryDto] })
   categories: InvestmentMetadataAssetCategoryDto[];

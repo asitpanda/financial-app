@@ -258,19 +258,22 @@ export const getDashboardInvestmentSummary = (
     const startDate = investment.startDate ? new Date(investment.startDate) : null;
     return !startDate || startDate <= periodEnd;
   });
+  const portfolioInvestments = periodInvestments.filter(
+    (investment) => (investment.accountingTreatment || 'INVESTMENT') === 'INVESTMENT',
+  );
 
-  const periodTotalInvested = periodInvestments.reduce(
+  const periodTotalInvested = portfolioInvestments.reduce(
     (sum, investment) => sum + (Number(investment.totalInvested) || 0),
     0,
   );
-  const periodCurrentValue = periodInvestments.reduce(
+  const periodCurrentValue = portfolioInvestments.reduce(
     (sum, investment) => sum + (Number(investment.currentValue || investment.totalInvested) || 0),
     0,
   );
   const periodUnrealisedGain = periodCurrentValue - periodTotalInvested;
   const periodUnrealisedGainPct = periodTotalInvested > 0 ? (periodUnrealisedGain / periodTotalInvested) * 100 : 0;
 
-  const categoryTotals = periodInvestments.reduce<Record<string, number>>((acc, investment) => {
+  const categoryTotals = portfolioInvestments.reduce<Record<string, number>>((acc, investment) => {
     const key = investment.assetCategory || investment.category || 'other';
     acc[key] = (acc[key] || 0) + (Number(investment.totalInvested) || 0);
     return acc;
@@ -381,6 +384,12 @@ export const getDashboardInvestmentSummary = (
       (sum, investment) => sum + (Number(investment.insuranceCover) || 0),
       0,
     ),
+    insuranceSavingsContribution: periodInvestments
+      .filter((investment) => investment.accountingTreatment === 'INSURANCE_SAVINGS')
+      .reduce((sum, investment) => sum + (Number(investment.totalInvested) || 0), 0),
+    protectionExpenseTotal: periodInvestments
+      .filter((investment) => investment.accountingTreatment === 'PROTECTION_EXPENSE')
+      .reduce((sum, investment) => sum + (Number(investment.totalInvested) || 0), 0),
     allocationBreakdown,
     upcomingContributionAmount: upcomingContributions.reduce(
       (sum, investment) => sum + (Number(investment.activeContributionPlan!.amount) || 0),

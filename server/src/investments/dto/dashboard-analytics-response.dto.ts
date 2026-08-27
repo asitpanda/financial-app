@@ -42,6 +42,7 @@ export class InvestmentDashboardSummaryDto {
   @ApiProperty()
   totalInvestments: number;
 
+  // The following totals only include products with accountingTreatment === INVESTMENT.
   @ApiProperty()
   totalInvested: number;
 
@@ -59,6 +60,14 @@ export class InvestmentDashboardSummaryDto {
 
   @ApiProperty()
   insuranceCover: number;
+
+  // Cumulative premium/contribution paid toward INSURANCE_SAVINGS products - not blended into totalInvested/totalReturn.
+  @ApiProperty()
+  insuranceSavingsContribution: number;
+
+  // Cumulative premium paid toward PROTECTION_EXPENSE products - reported as expense, excluded from portfolio value entirely.
+  @ApiProperty()
+  protectionExpenseTotal: number;
 
   @ApiProperty({ type: InvestmentValueSourceSummaryDto })
   valueSourceSummary: InvestmentValueSourceSummaryDto;

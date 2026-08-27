@@ -204,6 +204,22 @@ export class AssetTaxonomyPrismaRepository
     return this.mapOutput(updated);
   }
 
+  async updateLevelsForDescendants(
+    userId: number,
+    updates: Array<{ id: number; level: number }>,
+  ): Promise<void> {
+    if (!updates.length) return;
+
+    await this.prisma.$transaction(
+      updates.map((update) =>
+        this.prisma.investmentAssetTaxonomy.updateMany({
+          where: { id: update.id, userId: Number(userId) },
+          data: { level: update.level },
+        }),
+      ),
+    );
+  }
+
   async delete(id: number, userId: number): Promise<void> {
     const ownerScoped = await this.prisma.investmentAssetTaxonomy.findFirst({
       where: { id, userId: Number(userId) },

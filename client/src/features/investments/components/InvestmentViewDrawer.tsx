@@ -36,6 +36,7 @@ import ConfirmDialog from "../../../components/dialogs/ConfirmDialog";
 import { EmptyState, SectionCard, StatusChip } from "../../../components/common";
 import DataTable from "../../../components/common/DataTable";
 import RecordValuationModal from "./RecordValuationModal";
+import { useUpdateInvestment } from "../hooks/useInvestments";
 import { useUpdateInvestmentContributionPlan, useDeleteInvestmentEvent } from "../hooks/useContributionPlans";
 import { useDeleteInvestmentSnapshot } from "../hooks/useInvestmentSnapshots";
 import { INVESTMENT_EVENT_TYPES } from "../../../types/investmentEventTypes";
@@ -52,6 +53,7 @@ import {
   PROFIT_LOSS_COLORS,
   getProfitLossMuiColor,
 } from "../../../colors";
+import { getCadenceLabel } from "../../../utils/investmentHelpers";
 
 const DRAWER_TABS = ["overview", "contribution", "valuation", "details"];
 const VALUATION_STALE_DAYS = 30;
@@ -84,6 +86,8 @@ function getContributionEventLabel(eventType) {
   switch (eventType) {
     case INVESTMENT_EVENT_TYPES.CONTRIBUTION:
       return "Contribution";
+    case INVESTMENT_EVENT_TYPES.PREMIUM:
+      return "Premium";
     case INVESTMENT_EVENT_TYPES.OPENING_BALANCE:
       return "Opening Balance";
     case INVESTMENT_EVENT_TYPES.OPENING_INCOME_CREDIT:
@@ -118,15 +122,7 @@ function getContributionSourceLabel(event) {
 
 function getContributionCadenceLabel(plan) {
   if (!plan) return "—";
-  const interval = Number(plan.cadenceInterval || 1);
-  const unit = String(plan.cadenceUnit || "").toLowerCase();
-
-  if (!unit) return "—";
-  if (interval > 1) {
-    return `Every ${interval} ${unit}`;
-  }
-
-  return unit.charAt(0).toUpperCase() + unit.slice(1);
+  return getCadenceLabel(plan.cadenceUnit, plan.cadenceInterval);
 }
 
 function getContributionAmountSummary(plan) {
@@ -142,6 +138,7 @@ function getContributionAmountSummary(plan) {
 function isContributionLike(eventType) {
   return [
     INVESTMENT_EVENT_TYPES.CONTRIBUTION,
+    INVESTMENT_EVENT_TYPES.PREMIUM,
     INVESTMENT_EVENT_TYPES.OPENING_BALANCE,
     INVESTMENT_EVENT_TYPES.OPENING_INCOME_CREDIT,
     INVESTMENT_EVENT_TYPES.INCOME_CREDIT,
@@ -510,8 +507,12 @@ export function InvestmentViewDrawer({
   const [snapshotActionLoading, setSnapshotActionLoading] = React.useState(false);
   const [eventActionLoading, setEventActionLoading] = React.useState(false);
   const [planActionLoading, setPlanActionLoading] = React.useState(false);
+  const [investmentStatusLoading, setInvestmentStatusLoading] = React.useState(false);
+  const [pendingInvestmentStatus, setPendingInvestmentStatus] = React.useState(null);
+  const [pendingPlanStatus, setPendingPlanStatus] = React.useState(null);
   const [planActionError, setPlanActionError] = React.useState("");
   const pushNotification = useNotificationStore((state) => state.pushNotification);
+  const updateInvestmentMutation = useUpdateInvestment();
   const updateContributionPlanMutation = useUpdateInvestmentContributionPlan();
   const deleteSnapshotMutation = useDeleteInvestmentSnapshot();
   const deleteEventMutation = useDeleteInvestmentEvent();
@@ -586,6 +587,52 @@ export function InvestmentViewDrawer({
     }
   };
 
+
+  const handleInvestmentStatusChange = async (newStatus) => {
+    if (!investment?.id || newStatus === investment.status) return;
+
+    setInvestmentStatusLoading(true);
+    try {
+      await updateInvestmentMutation.mutateAsync({
+        id: investment.id,
+        data: { status: newStatus },
+      });
+      const successMsg =
+        newStatus === "matured"
+          ? "Investment status updated to Matured. Attached contribution plan paused."
+          : newStatus === "closed"
+          ? "Investment status updated to Closed. Attached contribution plan paused."
+          : "Investment status updated to Active.";
+      pushNotification({
+        type: "success",
+        message: successMsg,
+      });
+    } catch (error) {
+      pushNotification({
+        type: "error",
+        message: getRuntimeErrorMessage(error, "Failed to update investment status"),
+      });
+    } finally {
+      setInvestmentStatusLoading(false);
+    }
+  };
+
+  const handleConfirmInvestmentStatusChange = async () => {
+    if (!pendingInvestmentStatus) return;
+    const targetStatus = pendingInvestmentStatus;
+    setPendingInvestmentStatus(null);
+    await handleInvestmentStatusChange(targetStatus);
+  };
+
+  const handleConfirmPlanStatusChange = async () => {
+    if (!pendingPlanStatus) return;
+    const targetStatus = pendingPlanStatus;
+    setPendingPlanStatus(null);
+    await handlePlanUpdate(
+      { status: targetStatus },
+      `Recurring plan status updated to ${formatCodeLabel(targetStatus)}`,
+    );
+  };
 
   const handlePausePlan = () => handlePlanUpdate({ status: "paused" }, "Recurring plan paused");
   const handleResumePlan = () => handlePlanUpdate({ status: "active" }, "Recurring plan resumed");
@@ -690,6 +737,8 @@ export function InvestmentViewDrawer({
   );
   const institutionLabel = investment?.institution || investment?.institutionName || "—";
   const holdingMode = investment?.contributionMode ? formatCodeLabel(investment.contributionMode) : "—";
+  const accountingTreatment = investment?.accountingTreatment || "INVESTMENT";
+  const isInsuranceSavings = accountingTreatment === "INSURANCE_SAVINGS";
   const sourceLabel = investment?.currentValueSource ? formatCodeLabel(investment.currentValueSource) : "—";
   const statusOptions = React.useMemo(() => {
     const uniqueStatuses = Array.from(
@@ -1009,11 +1058,14 @@ export function InvestmentViewDrawer({
       { label: "Start Date", value: formatDateOrDash(investment?.startDate) },
       { label: "Holding Mode", value: holdingMode },
       { label: "Asset Category", value: categoryLabel || "—" },
-      { label: "Maturity Date", value: formatDateOrDash(investment?.maturityDate) },
+      {
+        label: isInsuranceSavings ? "Policy Term End Date" : "Maturity Date",
+        value: formatDateOrDash(investment?.maturityDate),
+      },
       { label: "Reference Number", value: formatValueOrDash(investment?.referenceNumber) },
       { label: "Asset Type", value: investment?.type || investment?.assetType || "—" },
       { label: "Insurance Cover", value: formatValueOrDash(investment?.insuranceCover, formatInvestmentCurrency) },
-      { label: "Status", value: formatCodeLabel(investment?.status || "—") },
+      { label: "Accounting Treatment", value: formatCodeLabel(accountingTreatment) },
     ];
     const atGlanceColumns = [
       [atGlanceItems[0], atGlanceItems[3], atGlanceItems[6]],
@@ -1023,7 +1075,61 @@ export function InvestmentViewDrawer({
 
     return (
       <Stack spacing={2} sx={{ pb: 0.5 }}>
-        <SectionCard title="At a glance">
+        <SectionCard
+          title="At a glance"
+          action={
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                Status:
+              </Typography>
+              <Select
+                size="small"
+                value={pendingInvestmentStatus || investment?.status || "active"}
+                onChange={(e) => setPendingInvestmentStatus(e.target.value)}
+                disabled={investmentStatusLoading}
+                aria-label="Investment Status"
+                sx={{
+                  height: 32,
+                  minWidth: 110,
+                  fontSize: "0.8125rem",
+                  fontWeight: 600,
+                  borderRadius: "8px",
+                  bgcolor:
+                    (pendingInvestmentStatus || investment?.status) === "active"
+                      ? "rgba(46, 125, 50, 0.08)"
+                      : (pendingInvestmentStatus || investment?.status) === "matured"
+                      ? "rgba(237, 108, 2, 0.08)"
+                      : "rgba(0, 0, 0, 0.04)",
+                  color:
+                    (pendingInvestmentStatus || investment?.status) === "active"
+                      ? "#2e7d32"
+                      : (pendingInvestmentStatus || investment?.status) === "matured"
+                      ? "#ed6c02"
+                      : "#666666",
+                  "& .MuiOutlinedInput-notchedOutline": {
+                    borderColor:
+                      (pendingInvestmentStatus || investment?.status) === "active"
+                        ? "rgba(46, 125, 50, 0.3)"
+                        : (pendingInvestmentStatus || investment?.status) === "matured"
+                        ? "rgba(237, 108, 2, 0.3)"
+                        : "rgba(0, 0, 0, 0.2)",
+                  },
+                  "& .MuiSelect-select": {
+                    py: "4px",
+                    pr: "28px !important",
+                    pl: "10px",
+                    display: "flex",
+                    alignItems: "center",
+                  },
+                }}
+              >
+                <MenuItem value="active">Active</MenuItem>
+                <MenuItem value="matured">Matured</MenuItem>
+                <MenuItem value="closed">Closed</MenuItem>
+              </Select>
+            </Box>
+          }
+        >
           <Box
             sx={{
               display: "grid",
@@ -1257,20 +1363,6 @@ export function InvestmentViewDrawer({
 
     return (
       <Stack spacing={0} sx={{ height: "100%", minHeight: 0 }}>
-        {onRecordActivity ? (
-          <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1.5 }}>
-            <AppButton
-              size="small"
-              variant="outlined"
-              onClick={() => onRecordActivity(investment, investment?.activeContributionPlan ?? null, "contribution")}
-            >
-              <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
-                <Icon path={mdiPlus} size={0.8} />
-                Record Activity
-              </Box>
-            </AppButton>
-          </Box>
-        ) : null}
         {investment?.activeContributionPlan ? (
           <SectionCard
             title={
@@ -1286,33 +1378,68 @@ export function InvestmentViewDrawer({
               </Box>
             }
             action={
-              isRecurringContributionType ? (
-                planStatusNormalized === "paused" ? (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                {isRecurringContributionType ? (
+                  <Select
+                    size="small"
+                    value={pendingPlanStatus || planStatusNormalized}
+                    onChange={(e) => setPendingPlanStatus(e.target.value)}
+                    disabled={planActionLoading}
+                    aria-label="Recurring Plan Status"
+                    sx={{
+                      height: 32,
+                      minWidth: 120,
+                      fontSize: "0.8125rem",
+                      fontWeight: 600,
+                      borderRadius: "8px",
+                      bgcolor:
+                        (pendingPlanStatus || planStatusNormalized) === "active"
+                          ? "rgba(46, 125, 50, 0.08)"
+                          : (pendingPlanStatus || planStatusNormalized) === "paused"
+                          ? "rgba(237, 108, 2, 0.08)"
+                          : "rgba(0, 0, 0, 0.04)",
+                      color:
+                        (pendingPlanStatus || planStatusNormalized) === "active"
+                          ? "#2e7d32"
+                          : (pendingPlanStatus || planStatusNormalized) === "paused"
+                          ? "#ed6c02"
+                          : "#666666",
+                      "& .MuiOutlinedInput-notchedOutline": {
+                        borderColor:
+                          (pendingPlanStatus || planStatusNormalized) === "active"
+                            ? "rgba(46, 125, 50, 0.3)"
+                            : (pendingPlanStatus || planStatusNormalized) === "paused"
+                            ? "rgba(237, 108, 2, 0.3)"
+                            : "rgba(0, 0, 0, 0.2)",
+                      },
+                      "& .MuiSelect-select": {
+                        py: "4px",
+                        pr: "28px !important",
+                        pl: "10px",
+                        display: "flex",
+                        alignItems: "center",
+                      },
+                    }}
+                  >
+                    <MenuItem value="active">Active</MenuItem>
+                    <MenuItem value="paused">Paused</MenuItem>
+                    <MenuItem value="completed">Completed</MenuItem>
+                    <MenuItem value="cancelled">Cancelled</MenuItem>
+                  </Select>
+                ) : null}
+                {onRecordActivity ? (
                   <AppButton
                     size="small"
                     variant="outlined"
-                    onClick={handleResumePlan}
-                    disabled={planActionLoading}
+                    onClick={() => onRecordActivity(investment, investment?.activeContributionPlan ?? null, "contribution")}
                   >
                     <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
-                      <Icon path={mdiPlayCircleOutline} size={0.72} />
-                      Resume Plan
+                      <Icon path={mdiPlus} size={0.8} />
+                      Record Activity
                     </Box>
                   </AppButton>
-                ) : (
-                  <AppButton
-                    size="small"
-                    variant="outlined"
-                    onClick={handlePausePlan}
-                    disabled={planActionLoading}
-                  >
-                    <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
-                      <Icon path={mdiPauseCircleOutline} size={0.72} />
-                      Pause Plan
-                    </Box>
-                  </AppButton>
-                )
-              ) : null
+                ) : null}
+              </Box>
             }
           >
             <Stack spacing={1.5}>
@@ -1642,6 +1769,9 @@ export function InvestmentViewDrawer({
             { label: "Insurance Cover", value: formatValueOrDash(investment?.insuranceCover, formatInvestmentCurrency) },
             { label: "Currency", value: formatValueOrDash(investment?.currency) },
             { label: "Contribution Mode", value: holdingMode },
+            ...(isInsuranceSavings
+              ? [{ label: "Premium Pay Term End Date", value: formatDateOrDash(investment?.activeContributionPlan?.endDate) }]
+              : []),
             { label: "External Reference", value: formatValueOrDash(investment?.externalReference) },
           ].map((item) => (
             <Box
@@ -1772,6 +1902,40 @@ export function InvestmentViewDrawer({
         loading={eventActionLoading}
         onCancel={() => setDeleteEventTarget(null)}
         onConfirm={handleDeleteEvent}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingInvestmentStatus)}
+        title="Confirm Investment Status Change"
+        description={
+          pendingInvestmentStatus
+            ? `Are you sure you want to change the investment status to "${formatCodeLabel(pendingInvestmentStatus)}"?${
+                ['matured', 'closed'].includes(pendingInvestmentStatus)
+                  ? ' Any active recurring contribution plan will be automatically paused.'
+                  : ''
+              }`
+            : ""
+        }
+        confirmLabel="Update Status"
+        confirmColor="primary"
+        loading={investmentStatusLoading}
+        onCancel={() => setPendingInvestmentStatus(null)}
+        onConfirm={handleConfirmInvestmentStatusChange}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingPlanStatus)}
+        title="Confirm Plan Status Change"
+        description={
+          pendingPlanStatus
+            ? `Are you sure you want to change the recurring contribution plan status to "${formatCodeLabel(pendingPlanStatus)}"?`
+            : ""
+        }
+        confirmLabel="Update Status"
+        confirmColor="primary"
+        loading={planActionLoading}
+        onCancel={() => setPendingPlanStatus(null)}
+        onConfirm={handleConfirmPlanStatusChange}
       />
     </AppDrawer>
   );

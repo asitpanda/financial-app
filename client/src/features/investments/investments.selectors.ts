@@ -4,7 +4,7 @@ import {
   getInvestmentCategoryOptions,
   normalizeInvestmentForUi,
 } from '../../utils/investmentHelpers';
-import type { Investment } from './types/investment.types';
+import type { AccountingTreatment, Investment } from './types/investment.types';
 import type { InvestmentAssetTaxonomyNode } from './types/investmentAssetTaxonomy.types';
 
 type InvestmentId = Investment['id'];
@@ -17,6 +17,8 @@ export interface InvestmentDashboardKpis {
   returnPercentage: number;
   upcomingMaturity: number;
   insuranceCover: number;
+  insuranceSavingsContribution: number;
+  protectionExpenseTotal: number;
 }
 
 export interface InvestmentAllocationSegment {
@@ -142,6 +144,12 @@ const STALE_VALUATION_DAYS = 90;
 const getInvestmentInvestedAmount = (investment: Investment) =>
   Number(investment.totalInvested || 0);
 
+const getAccountingTreatment = (investment: Investment): AccountingTreatment =>
+  investment.accountingTreatment || 'INVESTMENT';
+
+const isPortfolioInvestment = (investment: Investment) =>
+  getAccountingTreatment(investment) === 'INVESTMENT';
+
 const getInvestmentCurrentValueAtDate = (
   investment: Investment,
   pointDate = dayjs(),
@@ -247,14 +255,15 @@ export const getInvestmentDashboardKpis = (
   investments: Investment[],
 ): InvestmentDashboardKpis => {
   const records = getResolvedInvestmentRecords(investments);
-  const totalInvested = records.reduce((sum, item) => sum + item.investedAmount, 0);
-  const totalCurrentValue = records.reduce((sum, item) => sum + item.currentValue, 0);
+  const investmentRecords = records.filter((item) => isPortfolioInvestment(item.investment));
+  const totalInvested = investmentRecords.reduce((sum, item) => sum + item.investedAmount, 0);
+  const totalCurrentValue = investmentRecords.reduce((sum, item) => sum + item.currentValue, 0);
 
   const totalReturn = totalCurrentValue - totalInvested;
   const returnPercentage =
     totalInvested > 0 ? (totalReturn / totalInvested) * 100 : 0;
 
-  const upcomingMaturity = records
+  const upcomingMaturity = investmentRecords
     .filter(
       (item) =>
         item.investment.status === 'active' &&
@@ -264,9 +273,26 @@ export const getInvestmentDashboardKpis = (
 
   const insuranceCover = records
     .filter(
-      (item) => item.category === 'insurance' && item.investment.status === 'active',
+      (item) =>
+        String(item.investment.assetType || item.investment.type || '').trim().toUpperCase() ===
+          'INSURANCE' &&
+        item.investment.status === 'active',
     )
     .reduce((sum, item) => sum + Number(item.investment.insuranceCover || 0), 0);
+  const insuranceSavingsContribution = investments
+    .filter(
+      (investment) =>
+        investment.status === 'active' &&
+        getAccountingTreatment(investment) === 'INSURANCE_SAVINGS',
+    )
+    .reduce((sum, investment) => sum + getInvestmentInvestedAmount(investment), 0);
+  const protectionExpenseTotal = investments
+    .filter(
+      (investment) =>
+        investment.status === 'active' &&
+        getAccountingTreatment(investment) === 'PROTECTION_EXPENSE',
+    )
+    .reduce((sum, investment) => sum + getInvestmentInvestedAmount(investment), 0);
 
   return {
     totalInvestments: investments.length,
@@ -276,6 +302,8 @@ export const getInvestmentDashboardKpis = (
     returnPercentage,
     upcomingMaturity,
     insuranceCover,
+    insuranceSavingsContribution,
+    protectionExpenseTotal,
   };
 };
 
@@ -283,7 +311,9 @@ export const getInvestmentCategoryBreakdown = (
   investments: Investment[],
   taxonomyNodes: InvestmentAssetTaxonomyNode[],
 ): InvestmentAllocationSegment[] => {
-  const records = getResolvedInvestmentRecords(investments);
+  const records = getResolvedInvestmentRecords(investments).filter((item) =>
+    isPortfolioInvestment(item.investment),
+  );
   const categoryLabelLookup = getCategoryLabelLookup(taxonomyNodes, investments);
   const totals = records.reduce<
     Record<string, { value: number; investmentIds: InvestmentId[] }>
@@ -352,7 +382,9 @@ export const getTopInvestmentCurrentValueItems = (
   investments: Investment[],
   limit = 5,
 ) => {
-  const records = getResolvedInvestmentRecords(investments);
+  const records = getResolvedInvestmentRecords(investments).filter((item) =>
+    isPortfolioInvestment(item.investment),
+  );
 
   return [...records]
     .sort(
@@ -367,7 +399,12 @@ export const getUpcomingMaturityItems = (
   limit = 5,
 ) => {
   return [...investments]
-    .filter((item) => item.status === 'active' && item.maturityDate)
+    .filter(
+      (item) =>
+        item.status === 'active' &&
+        item.maturityDate &&
+        isPortfolioInvestment(item),
+    )
     .sort(
       (left, right) =>
         dayjs(left.maturityDate).valueOf() - dayjs(right.maturityDate).valueOf(),
@@ -561,7 +598,9 @@ export const getInvestmentCategoryPerformanceRows = (
   categoryLabelMap: Record<string, string>,
   months = 6,
 ): InvestmentCategoryPerformanceRow[] => {
-  const records = getResolvedInvestmentRecords(investments);
+  const records = getResolvedInvestmentRecords(investments).filter((item) =>
+    isPortfolioInvestment(item.investment),
+  );
   const categoryGroups = records.reduce<Record<string, ResolvedInvestmentRecord[]>>(
     (groups, record) => {
       const key = record.category;
@@ -618,7 +657,9 @@ export const getInvestmentHoldingPerformanceRows = (
   investments: Investment[],
   months = 12,
 ): InvestmentCategoryPerformanceRow[] => {
-  const records = getResolvedInvestmentRecords(investments);
+  const records = getResolvedInvestmentRecords(investments).filter((item) =>
+    isPortfolioInvestment(item.investment),
+  );
   const trendMonths = Math.max(months, 1);
   const monthPoints = Array.from({ length: trendMonths }, (_, index) =>
     dayjs()
@@ -661,7 +702,9 @@ export const getInvestmentMaturityLadderData = (
   investments: Investment[],
   months = 6,
 ): InvestmentMaturityBucket[] => {
-  const records = getResolvedInvestmentRecords(investments);
+  const records = getResolvedInvestmentRecords(investments).filter((item) =>
+    isPortfolioInvestment(item.investment),
+  );
   const startMonth = dayjs().startOf('month');
   const buckets = Array.from({ length: months }, (_, index) => {
     const bucketMonth = startMonth.add(index, 'month');
@@ -707,7 +750,7 @@ export const getInvestmentPortfolioGrowthData = (
   investments: Investment[],
 ): InvestmentPortfolioGrowthPoint[] => {
   const datedInvestments = getResolvedInvestmentRecords(investments).filter((item) =>
-    item.timelineStartDate.isValid(),
+    isPortfolioInvestment(item.investment) && item.timelineStartDate.isValid(),
   );
 
   if (datedInvestments.length === 0) {
@@ -775,7 +818,9 @@ export const getInvestmentYearlyTimeSeriesData = (
   investments: Investment[],
 ): InvestmentSeriesPoint[] => {
   if (investments.length === 0) return [];
-  const records = getResolvedInvestmentRecords(investments);
+  const records = getResolvedInvestmentRecords(investments).filter((item) =>
+    isPortfolioInvestment(item.investment),
+  );
 
   const yearGroups: Record<string, InvestmentSeriesPoint> = {};
 
@@ -823,7 +868,9 @@ export const getInvestmentMonthlyTimeSeriesData = (
   selectedYearForDrill: string | null,
 ): InvestmentSeriesPoint[] => {
   if (!selectedYearForDrill || investments.length === 0) return [];
-  const records = getResolvedInvestmentRecords(investments);
+  const records = getResolvedInvestmentRecords(investments).filter((item) =>
+    isPortfolioInvestment(item.investment),
+  );
 
   const yearMatch = selectedYearForDrill.match(/FY (\d+)-(\d+)/);
   if (!yearMatch) return [];

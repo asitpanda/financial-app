@@ -99,6 +99,16 @@ export class AssetTaxonomyMockRepository implements IAssetTaxonomyDataSourcePort
     return mockInvestmentAssetTaxonomy[index];
   }
 
+  async updateLevelsForDescendants(userId: number, updates: Array<{ id: number; level: number }>): Promise<void> {
+    const levelById = new Map(updates.map((update) => [update.id, update.level]));
+
+    mockInvestmentAssetTaxonomy = mockInvestmentAssetTaxonomy.map((node) =>
+      Number(node.userId ?? 1) === Number(userId) && levelById.has(node.id)
+        ? { ...node, level: levelById.get(node.id) as number, updatedAt: new Date() }
+        : node,
+    );
+  }
+
   async delete(id: number, userId: number): Promise<void> {
     mockInvestmentAssetTaxonomy = mockInvestmentAssetTaxonomy.filter(
       (node) =>

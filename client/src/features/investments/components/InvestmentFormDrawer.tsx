@@ -34,6 +34,11 @@ import {
   STATUS_OPTIONS,
 } from "../../../utils/investmentHelpers";
 import { validateInvestmentForm } from "../investment.schema";
+import {
+  cadenceToFrequency,
+  DEFAULT_FREQUENCY,
+  FREQUENCY_SELECT_OPTIONS,
+} from "../../../utils/investmentHelpers";
 
 const toDayjsOrNull = (value) => {
   if (!value) return null;
@@ -109,7 +114,7 @@ export default function InvestmentFormDrawer({
   const [pendingTypeNodeId, setPendingTypeNodeId] = useState(null);
   const [contributionType, setContributionType] = useState("one-time");
   const [recurringPlan, setRecurringPlan] = useState({
-    frequency: "monthly",
+    frequency: DEFAULT_FREQUENCY,
     amount: "",
     anchorDate: null,
     nextContributionDate: null,
@@ -149,14 +154,10 @@ export default function InvestmentFormDrawer({
     setLocalSubmitError("");
     setContributionType(existingPlan ? "recurring" : "one-time");
     setRecurringPlan({
-      frequency:
-        existingPlan?.cadenceUnit === "week"
-          ? "weekly"
-          : existingPlan?.cadenceUnit === "quarter"
-            ? "quarterly"
-            : existingPlan?.cadenceUnit === "year"
-              ? "yearly"
-              : "monthly",
+      frequency: cadenceToFrequency(
+        existingPlan?.cadenceUnit,
+        existingPlan?.cadenceInterval,
+      ),
       amount: existingPlan?.amount ? String(existingPlan.amount) : "",
       anchorDate: toDayjsOrNull(
         existingPlan?.anchorDate || initialValues?.startDate,
@@ -389,10 +390,44 @@ export default function InvestmentFormDrawer({
   const handleConfirmInvestmentType = () => {
     if (!pendingTypeNodeId) return;
 
-    setForm((current) => ({
-      ...current,
-      assetTaxonomyId: pendingTypeNodeId,
-    }));
+    const selectedNode = taxonomyNodes.find(
+      (node) => String(node.id) === String(pendingTypeNodeId),
+    );
+
+    setForm((current) => {
+      const nextForm = { ...current, assetTaxonomyId: pendingTypeNodeId };
+
+      const defaultTypeConfig = assetTypeConfigs.find(
+        (typeConfig) =>
+          String(typeConfig.code) === String(selectedNode?.defaultAssetType || ""),
+      );
+      if (defaultTypeConfig) {
+        nextForm.type = defaultTypeConfig.code;
+
+        const defaultCategoryCodes = (defaultTypeConfig.categories || []).map(
+          (categoryConfig) => String(categoryConfig.code),
+        );
+        nextForm.category = defaultCategoryCodes.includes(
+          String(selectedNode.defaultAssetCategory || ""),
+        )
+          ? selectedNode.defaultAssetCategory
+          : defaultTypeConfig.categories?.[0]?.code || "";
+      } else {
+        // No default hint on this bucket; force an explicit user choice.
+        nextForm.type = "";
+        nextForm.category = "";
+      }
+
+      return nextForm;
+    });
+
+    setErrors((current) => {
+      if (!current.type && !current.category) return current;
+      const nextErrors = { ...current };
+      delete nextErrors.type;
+      delete nextErrors.category;
+      return nextErrors;
+    });
 
     setTypePickerOpen(false);
     setPendingTypeNodeId(null);
@@ -408,15 +443,16 @@ export default function InvestmentFormDrawer({
       label: categoryConfig.label,
     })),
   ];
-  const selectedCategoryConfig = (selectedTypeConfig?.categories || []).find(
-    (categoryConfig) =>
-      String(categoryConfig.code) === String(form.category || ""),
-  );
   const currentBucketDisplayLabel = getInvestmentTypeDisplayLabel(
     form.assetTaxonomyId,
     taxonomyNodes,
   );
   const isInsurance = String(form.type || "") === "INSURANCE";
+  const selectedCategoryConfig = selectedTypeConfig?.categories?.find(
+    (categoryConfig) => String(categoryConfig.code) === String(form.category || ""),
+  );
+  const isInsuranceSavings =
+    selectedCategoryConfig?.accountingTreatment === "INSURANCE_SAVINGS";
   const referenceLabel = isInsurance
     ? "Policy Number"
     : ["MUTUAL_FUND", "DEBT_MUTUAL_FUND", "INDEX_FUND"].includes(
@@ -627,11 +663,6 @@ export default function InvestmentFormDrawer({
                     <Typography sx={{ fontWeight: 700, mt: 0.35 }}>
                       {currentBucketDisplayLabel || "Optional organizational bucket"}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-                      {selectedTypeConfig && selectedCategoryConfig
-                        ? `${selectedTypeConfig.label} / ${selectedCategoryConfig.label} is the saved classification. Taxonomy is only an optional grouping bucket.`
-                        : "Select type and category first, then optionally attach a taxonomy bucket."}
-                    </Typography>
                     {!investmentTypeTreeItems.length ? (
                       <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
                         No asset taxonomy is available yet. Type and category still work without it.
@@ -808,7 +839,11 @@ export default function InvestmentFormDrawer({
           >
             <LabelCurrencyField
               labelText={
-                isRecurring ? "Initial Principal (Seed Value)" : "Investment Amount"
+                isRecurring
+                  ? "Initial Principal (Seed Value)"
+                  : isInsuranceSavings
+                    ? "Premium Paid"
+                    : "Investment Amount"
               }
               value={displayTotalInvested}
               onValueChange={(value) => handleFormChange("totalInvested", value)}
@@ -821,14 +856,18 @@ export default function InvestmentFormDrawer({
               disabled={isRecurring}
             />
             <LabelCurrencyField
-              labelText="Current Value (Optional)"
+              labelText={isInsuranceSavings ? "Current Value (Optional)" : "Current Value"}
               value={displayCurrentValue}
               onValueChange={(value) => handleFormChange("currentValue", value)}
-              helperText="System-calculated from valuation import/history."
-              disabled
+              helperText={
+                isInsuranceSavings
+                  ? "Optional policy value; excluded from portfolio return totals."
+                  : "System-calculated from valuation import/history."
+              }
+              disabled={!isInsuranceSavings}
             />
             <LabeledDateField
-              labelText="Maturity Date (Optional)"
+              labelText={isInsurance ? "Policy Term End Date (Optional)" : "Maturity Date (Optional)"}
               value={form.maturityDate}
               onChange={(value) => handleFormChange("maturityDate", value)}
             />
@@ -946,13 +985,7 @@ export default function InvestmentFormDrawer({
                   onChange={(event) =>
                     handleRecurringPlanChange("frequency", event.target.value)
                   }
-                  options={[
-                    { value: "weekly", label: "Weekly" },
-                    { value: "monthly", label: "Monthly" },
-                    { value: "quarterly", label: "Quarterly" },
-                    { value: "halfyearly", label: "Half-yearly" },
-                    { value: "yearly", label: "Yearly" },
-                  ]}
+                  options={FREQUENCY_SELECT_OPTIONS}
                 />
                 <LabeledDateField
                   labelText="Anchor Date"
@@ -970,7 +1003,11 @@ export default function InvestmentFormDrawer({
                   }
                 />
                 <LabeledDateField
-                  labelText="Plan End Date (Optional)"
+                  labelText={
+                    isInsuranceSavings
+                      ? "Premium Pay Term End Date (Optional)"
+                      : "Plan End Date (Optional)"
+                  }
                   value={recurringPlan.endDate}
                   onChange={(value) =>
                     handleRecurringPlanChange("endDate", value)
@@ -1102,7 +1139,9 @@ export default function InvestmentFormDrawer({
         <DialogContent dividers sx={{ p: 0 }}>
           <Box sx={{ px: 3, py: 2 }}>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Choose any non-root node from the asset taxonomy hierarchy. This does not change the saved asset type or category.
+              Choose any non-root node from the asset taxonomy hierarchy. If the
+              bucket has a default asset type/category hint, it will update
+              those fields below.
             </Typography>
             <Paper
               variant="outlined"

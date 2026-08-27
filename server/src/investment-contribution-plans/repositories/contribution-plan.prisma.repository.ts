@@ -194,6 +194,7 @@ export class ContributionPlanPrismaRepository
         status: 'active',
         investment: {
           userId,
+          status: 'active',
         },
       },
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],

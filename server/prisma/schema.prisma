@@ -39,11 +39,39 @@ enum InvestmentEventType {
   OPENING_INCOME_CREDIT
   INCOME_CREDIT
   WITHDRAWAL_PRINCIPAL
+  PREMIUM
 }
 
 enum InvestmentContributionMode {
   ONE_TIME
   RECURRING
+}
+
+// How a product participates in portfolio totals/gain-loss, independent of asset type/category.
+enum AccountingTreatment {
+  INVESTMENT
+  INSURANCE_SAVINGS
+  PROTECTION_EXPENSE
+}
+
+enum InvestmentBenefitType {
+  MATURITY
+  COUPON
+  INTEREST
+  PRINCIPAL_REDEMPTION
+  ANNUITY
+  MONEY_BACK
+  SURVIVAL
+  BONUS
+  RETURN_OF_PREMIUM
+  DEATH_BENEFIT
+  OTHER
+}
+
+enum InvestmentBenefitStatus {
+  EXPECTED
+  RECEIVED
+  CANCELLED
 }
 
 enum TransactionType {
@@ -173,16 +201,17 @@ model FinancialAccount {
 }
 
 model AppMetaConfigRef {
-  id          Int      @id @default(autoincrement())
-  module      String
-  configType  String
-  parentId    Int?
-  code        String   @unique
-  label       String
-  isActive    Boolean  @default(true)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                  Int      @id @default(autoincrement())
+  module              String
+  configType          String
+  parentId            Int?
+  code                String   @unique
+  label               String
+  accountingTreatment AccountingTreatment?
+  isActive            Boolean  @default(true)
+  sortOrder           Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   parent                        AppMetaConfigRef?         @relation("AppMetaConfigTree", fields: [parentId], references: [id], onDelete: SetNull)
   children                      AppMetaConfigRef[]        @relation("AppMetaConfigTree")
@@ -216,6 +245,8 @@ model Investment {
   lastValuationAt     DateTime?
   insuranceCover      Float?
   contributionMode    InvestmentContributionMode @default(ONE_TIME)
+  // Per-product exception when the category default doesn't fit; resolution: override ?? assetCategoryRef.accountingTreatment
+  accountingTreatmentOverride AccountingTreatment?
   notes               String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -228,6 +259,7 @@ model Investment {
   investmentEvents   InvestmentEvent[]
   contributionPlans  InvestmentContributionPlan[]
   valuationSnapshots ValuationSnapshot[]
+  benefits           InvestmentBenefit[]
 
   @@index([userId])
   @@index([accountId])
@@ -290,6 +322,7 @@ model InvestmentEvent {
   investment            Investment         @relation(fields: [investmentId], references: [id], onDelete: Cascade)
   recurringPlan         InvestmentContributionPlan? @relation(fields: [recurringPlanId], references: [id], onDelete: SetNull)
   linkedTransaction     Transaction?       @relation("InvestmentEventLinkedTransaction", fields: [linkedTransactionId], references: [id], onDelete: SetNull)
+  linkedBenefits        InvestmentBenefit[]
 
   @@index([investmentId])
   @@index([recurringPlanId])
@@ -298,6 +331,27 @@ model InvestmentEvent {
   @@unique([linkedTransactionId])
   @@unique([recurringPlanId, dueDate, eventType])
   @@map("investment_events")
+}
+
+model InvestmentBenefit {
+  id           Int      @id @default(autoincrement())
+  investmentId Int
+  benefitType  InvestmentBenefitType
+  amount       Decimal  @db.Decimal(18, 2)
+  benefitDate  DateTime
+  status       InvestmentBenefitStatus @default(EXPECTED)
+  notes        String?
+  linkedEventId Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  investment   Investment       @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  linkedEvent  InvestmentEvent? @relation(fields: [linkedEventId], references: [id], onDelete: SetNull)
+
+  @@index([investmentId])
+  @@index([status])
+  @@index([benefitDate])
+  @@map("investment_benefits")
 }
 
 model InvestmentContributionPlan {

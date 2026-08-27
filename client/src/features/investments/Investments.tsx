@@ -24,6 +24,7 @@ import {
   normalizeInvestmentForUi,
 } from "../../utils/investmentHelpers";
 import { getRuntimeErrorMessage } from "../../utils/errorMessage";
+import { frequencyToCadence } from "../../utils/investmentHelpers";
 import {
   useInvestmentDashboardAnalytics,
   useInvestment,
@@ -66,17 +67,7 @@ const VIEW_OPTIONS = [
   { value: "calendar", label: "Investment Activity" },
 ];
 
-export const mapFrequencyToCadence = (frequency) => {
-  if (frequency === "weekly")
-    return { cadenceUnit: "week", cadenceInterval: 1 };
-  if (frequency === "quarterly")
-    return { cadenceUnit: "quarter", cadenceInterval: 1 };
-  if (frequency === "halfyearly")
-    return { cadenceUnit: "month", cadenceInterval: 6 };
-  if (frequency === "yearly")
-    return { cadenceUnit: "year", cadenceInterval: 1 };
-  return { cadenceUnit: "month", cadenceInterval: 1 };
-};
+export const mapFrequencyToCadence = frequencyToCadence;
 
 export const toDateOnly = (value) => {
   if (!value) return null;
@@ -609,6 +600,14 @@ export default function Investments() {
         ),
         insuranceCover: Number(
           dashboardAnalyticsQuery.data.summary.insuranceCover ?? localDashboardKpis.insuranceCover,
+        ),
+        insuranceSavingsContribution: Number(
+          dashboardAnalyticsQuery.data.summary.insuranceSavingsContribution ??
+            localDashboardKpis.insuranceSavingsContribution,
+        ),
+        protectionExpenseTotal: Number(
+          dashboardAnalyticsQuery.data.summary.protectionExpenseTotal ??
+            localDashboardKpis.protectionExpenseTotal,
         ),
       }
     : localDashboardKpis;

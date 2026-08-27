@@ -116,6 +116,33 @@ export default function DashboardInvestmentsSection({
           </div>
         </div>
 
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+              Investable portfolio
+            </div>
+            <div className="mt-1 text-lg font-bold text-slate-900">
+              {formatCurrency(investmentSummary.periodTotalInvested)}
+            </div>
+          </div>
+          <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+              Insurance savings
+            </div>
+            <div className="mt-1 text-lg font-bold text-sky-700">
+              {formatCurrency(investmentSummary.insuranceSavingsContribution)}
+            </div>
+          </div>
+          <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+              Protection expense
+            </div>
+            <div className="mt-1 text-lg font-bold text-rose-600">
+              {formatCurrency(investmentSummary.protectionExpenseTotal)}
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <div className="rounded-[18px] border border-slate-200 bg-slate-50/80 px-4 py-3">
             <div className="mb-3 flex items-center justify-between">

@@ -25,7 +25,7 @@ import { InvestmentRepository } from '../investments/repositories/investment.rep
 
 @Injectable()
 export class InvestmentContributionPlansService {
-  private readonly writableStatuses = new Set(['active', 'paused']);
+  private readonly writableStatuses = new Set(['active', 'paused', 'completed', 'closed', 'cancelled']);
 
   constructor(
     private readonly repository: ContributionPlanRepository,

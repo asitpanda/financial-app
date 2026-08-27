@@ -23,6 +23,7 @@ export interface DashboardInvestmentRecord {
   institution?: string;
   totalInvested: number;
   currentValue?: number;
+  accountingTreatment?: 'INVESTMENT' | 'INSURANCE_SAVINGS' | 'PROTECTION_EXPENSE' | null;
   startDate?: string | null;
   status: 'active' | 'matured' | 'closed';
   maturityDate?: string | null;
@@ -95,6 +96,8 @@ export interface DashboardInvestmentSummary {
   periodUnrealisedGain: number;
   periodUnrealisedGainPct: number;
   insuranceCover: number;
+  insuranceSavingsContribution: number;
+  protectionExpenseTotal: number;
   allocationBreakdown: Array<{
     key: string;
     label: string;

@@ -64,7 +64,8 @@ BEGIN
       'OPENING_BALANCE',
       'OPENING_INCOME_CREDIT',
       'INCOME_CREDIT',
-      'WITHDRAWAL_PRINCIPAL'
+      'WITHDRAWAL_PRINCIPAL',
+      'PREMIUM'
     );
   END IF;
 
@@ -77,6 +78,53 @@ BEGIN
     CREATE TYPE public."InvestmentContributionMode" AS ENUM (
       'ONE_TIME',
       'RECURRING'
+    );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE t.typname = 'AccountingTreatment' AND n.nspname = 'public'
+  ) THEN
+    CREATE TYPE public."AccountingTreatment" AS ENUM (
+      'INVESTMENT',
+      'INSURANCE_SAVINGS',
+      'PROTECTION_EXPENSE'
+    );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE t.typname = 'InvestmentBenefitType' AND n.nspname = 'public'
+  ) THEN
+    CREATE TYPE public."InvestmentBenefitType" AS ENUM (
+      'MATURITY',
+      'COUPON',
+      'INTEREST',
+      'PRINCIPAL_REDEMPTION',
+      'ANNUITY',
+      'MONEY_BACK',
+      'SURVIVAL',
+      'BONUS',
+      'RETURN_OF_PREMIUM',
+      'DEATH_BENEFIT',
+      'OTHER'
+    );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE t.typname = 'InvestmentBenefitStatus' AND n.nspname = 'public'
+  ) THEN
+    CREATE TYPE public."InvestmentBenefitStatus" AS ENUM (
+      'EXPECTED',
+      'RECEIVED',
+      'CANCELLED'
     );
   END IF;
 
@@ -144,6 +192,7 @@ CREATE TABLE IF NOT EXISTS public.app_meta_config_ref (
   "parentId" INTEGER NULL,
   "code" TEXT NOT NULL UNIQUE,
   "label" TEXT NOT NULL,
+  "accountingTreatment" public."AccountingTreatment" NULL,
   "isActive" BOOLEAN NOT NULL DEFAULT true,
   "sortOrder" INTEGER NOT NULL DEFAULT 0,
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -152,16 +201,17 @@ CREATE TABLE IF NOT EXISTS public.app_meta_config_ref (
     FOREIGN KEY ("parentId") REFERENCES public.app_meta_config_ref("id") ON DELETE SET NULL
 );
 
-INSERT INTO public.app_meta_config_ref ("module", "configType", "parentId", "code", "label", "sortOrder")
+INSERT INTO public.app_meta_config_ref ("module", "configType", "parentId", "code", "label", "sortOrder", "accountingTreatment")
 VALUES
-  ('INVESTMENT', 'ASSET_TYPE', NULL, 'DEPOSIT', 'Deposit', 10),
-  ('INVESTMENT', 'ASSET_TYPE', NULL, 'EQUITY', 'Equity', 20),
-  ('INVESTMENT', 'ASSET_TYPE', NULL, 'DEBT', 'Debt', 30),
-  ('INVESTMENT', 'ASSET_TYPE', NULL, 'RETIREMENT', 'Retirement', 40),
-  ('INVESTMENT', 'ASSET_TYPE', NULL, 'INSURANCE', 'Insurance', 50),
-  ('INVESTMENT', 'ASSET_TYPE', NULL, 'COMMODITY', 'Commodity', 60),
-  ('INVESTMENT', 'ASSET_TYPE', NULL, 'REAL_ESTATE', 'Real Estate', 70),
-  ('INVESTMENT', 'ASSET_TYPE', NULL, 'ALTERNATIVE', 'Alternative', 80)
+  ('INVESTMENT', 'ASSET_TYPE', NULL, 'DEPOSIT', 'Deposit', 10, 'INVESTMENT'),
+  ('INVESTMENT', 'ASSET_TYPE', NULL, 'EQUITY', 'Equity', 20, 'INVESTMENT'),
+  ('INVESTMENT', 'ASSET_TYPE', NULL, 'DEBT', 'Debt', 30, 'INVESTMENT'),
+  ('INVESTMENT', 'ASSET_TYPE', NULL, 'RETIREMENT', 'Retirement', 40, 'INVESTMENT'),
+  -- INSURANCE has no type-level default: its categories mix INSURANCE_SAVINGS and PROTECTION_EXPENSE, so treatment is resolved per category.
+  ('INVESTMENT', 'ASSET_TYPE', NULL, 'INSURANCE', 'Insurance', 50, NULL),
+  ('INVESTMENT', 'ASSET_TYPE', NULL, 'COMMODITY', 'Commodity', 60, 'INVESTMENT'),
+  ('INVESTMENT', 'ASSET_TYPE', NULL, 'REAL_ESTATE', 'Real Estate', 70, 'INVESTMENT'),
+  ('INVESTMENT', 'ASSET_TYPE', NULL, 'ALTERNATIVE', 'Alternative', 80, 'INVESTMENT')
 ON CONFLICT ("code") DO UPDATE
 SET
   "module" = EXCLUDED."module",
@@ -169,41 +219,47 @@ SET
   "parentId" = EXCLUDED."parentId",
   "label" = EXCLUDED."label",
   "sortOrder" = EXCLUDED."sortOrder",
+  "accountingTreatment" = EXCLUDED."accountingTreatment",
   "isActive" = true,
   "updatedAt" = now();
 
-INSERT INTO public.app_meta_config_ref ("module", "configType", "parentId", "code", "label", "sortOrder")
-SELECT 'INVESTMENT', 'ASSET_CATEGORY', parent."id", child."code", child."label", child."sortOrder"
+INSERT INTO public.app_meta_config_ref ("module", "configType", "parentId", "code", "label", "sortOrder", "accountingTreatment")
+SELECT 'INVESTMENT', 'ASSET_CATEGORY', parent."id", child."code", child."label", child."sortOrder", child."accountingTreatment"::public."AccountingTreatment"
 FROM (
   VALUES
-    ('DEPOSIT', 'BANK_DEPOSIT', 'Bank Deposit', 11),
-    ('DEPOSIT', 'FIXED_DEPOSIT', 'Fixed Deposit', 12),
-    ('DEPOSIT', 'RECURRING_DEPOSIT', 'Recurring Deposit', 13),
-    ('EQUITY', 'STOCK', 'Stock', 21),
-    ('EQUITY', 'MUTUAL_FUND', 'Mutual Fund', 22),
-    ('EQUITY', 'ETF', 'ETF', 23),
-    ('EQUITY', 'INDEX_FUND', 'Index Fund', 24),
-    ('DEBT', 'BOND', 'Bond', 31),
-    ('DEBT', 'DEBT_MUTUAL_FUND', 'Debt Mutual Fund', 32),
-    ('DEBT', 'GOVERNMENT_SECURITY', 'Government Security', 33),
-    ('RETIREMENT', 'PPF', 'PPF', 41),
-    ('RETIREMENT', 'NPS', 'NPS', 42),
-    ('RETIREMENT', 'EPF', 'EPF', 43),
-    ('RETIREMENT', 'PENSION_PLAN', 'Pension Plan', 44),
-    ('INSURANCE', 'LIFE_INSURANCE', 'Life Insurance', 51),
-    ('INSURANCE', 'ULIP', 'ULIP', 52),
-    ('INSURANCE', 'HEALTH_INSURANCE', 'Health Insurance', 53),
-    ('COMMODITY', 'GOLD', 'Gold', 61),
-    ('COMMODITY', 'SILVER', 'Silver', 62),
-    ('COMMODITY', 'COMMODITY_FUND', 'Commodity Fund', 63),
-    ('REAL_ESTATE', 'PROPERTY', 'Property', 71),
-    ('REAL_ESTATE', 'REIT', 'REIT', 72),
-    ('REAL_ESTATE', 'LAND', 'Land', 73),
-    ('ALTERNATIVE', 'CRYPTO', 'Crypto', 81),
-    ('ALTERNATIVE', 'PRIVATE_EQUITY', 'Private Equity', 82),
-    ('ALTERNATIVE', 'COLLECTIBLE', 'Collectible', 83),
-    ('ALTERNATIVE', 'OTHER_ALTERNATIVE', 'Other Alternative', 84)
-) AS child("parentCode", "code", "label", "sortOrder")
+    ('DEPOSIT', 'BANK_DEPOSIT', 'Bank Deposit', 11, 'INVESTMENT'),
+    ('DEPOSIT', 'FIXED_DEPOSIT', 'Fixed Deposit', 12, 'INVESTMENT'),
+    ('DEPOSIT', 'RECURRING_DEPOSIT', 'Recurring Deposit', 13, 'INVESTMENT'),
+    ('EQUITY', 'STOCK', 'Stock', 21, 'INVESTMENT'),
+    ('EQUITY', 'MUTUAL_FUND', 'Mutual Fund', 22, 'INVESTMENT'),
+    ('EQUITY', 'ETF', 'ETF', 23, 'INVESTMENT'),
+    ('EQUITY', 'INDEX_FUND', 'Index Fund', 24, 'INVESTMENT'),
+    ('DEBT', 'BOND', 'Bond', 31, 'INVESTMENT'),
+    ('DEBT', 'DEBT_MUTUAL_FUND', 'Debt Mutual Fund', 32, 'INVESTMENT'),
+    ('DEBT', 'GOVERNMENT_SECURITY', 'Government Security', 33, 'INVESTMENT'),
+    ('RETIREMENT', 'PPF', 'PPF', 41, 'INVESTMENT'),
+    ('RETIREMENT', 'NPS', 'NPS', 42, 'INVESTMENT'),
+    ('RETIREMENT', 'EPF', 'EPF', 43, 'INVESTMENT'),
+    ('RETIREMENT', 'PENSION_PLAN', 'Pension Plan', 44, 'INVESTMENT'),
+    -- Kept as a generic/legacy bucket for existing rows; prefer the finer categories below for new products.
+    ('INSURANCE', 'LIFE_INSURANCE', 'Life Insurance', 51, 'INSURANCE_SAVINGS'),
+    ('INSURANCE', 'ULIP', 'ULIP', 52, 'INSURANCE_SAVINGS'),
+    ('INSURANCE', 'HEALTH_INSURANCE', 'Health Insurance', 53, 'PROTECTION_EXPENSE'),
+    ('INSURANCE', 'LIC_MONEY_BACK', 'LIC Money Back', 54, 'INSURANCE_SAVINGS'),
+    ('INSURANCE', 'ENDOWMENT', 'Endowment', 55, 'INSURANCE_SAVINGS'),
+    ('INSURANCE', 'TERM_INSURANCE', 'Term Insurance', 56, 'PROTECTION_EXPENSE'),
+    ('INSURANCE', 'RETURN_OF_PREMIUM_TERM', 'Return of Premium Term Insurance', 57, 'INSURANCE_SAVINGS'),
+    ('COMMODITY', 'GOLD', 'Gold', 61, 'INVESTMENT'),
+    ('COMMODITY', 'SILVER', 'Silver', 62, 'INVESTMENT'),
+    ('COMMODITY', 'COMMODITY_FUND', 'Commodity Fund', 63, 'INVESTMENT'),
+    ('REAL_ESTATE', 'PROPERTY', 'Property', 71, 'INVESTMENT'),
+    ('REAL_ESTATE', 'REIT', 'REIT', 72, 'INVESTMENT'),
+    ('REAL_ESTATE', 'LAND', 'Land', 73, 'INVESTMENT'),
+    ('ALTERNATIVE', 'CRYPTO', 'Crypto', 81, 'INVESTMENT'),
+    ('ALTERNATIVE', 'PRIVATE_EQUITY', 'Private Equity', 82, 'INVESTMENT'),
+    ('ALTERNATIVE', 'COLLECTIBLE', 'Collectible', 83, 'INVESTMENT'),
+    ('ALTERNATIVE', 'OTHER_ALTERNATIVE', 'Other Alternative', 84, 'INVESTMENT')
+) AS child("parentCode", "code", "label", "sortOrder", "accountingTreatment")
 JOIN public.app_meta_config_ref parent
   ON parent."module" = 'INVESTMENT'
  AND parent."configType" = 'ASSET_TYPE'
@@ -215,6 +271,7 @@ SET
   "parentId" = EXCLUDED."parentId",
   "label" = EXCLUDED."label",
   "sortOrder" = EXCLUDED."sortOrder",
+  "accountingTreatment" = EXCLUDED."accountingTreatment",
   "isActive" = true,
   "updatedAt" = now();
 
@@ -281,6 +338,7 @@ CREATE TABLE IF NOT EXISTS public.investments (
   "lastValuationAt" TIMESTAMPTZ NULL,
   "insuranceCover" DOUBLE PRECISION NULL,
   "contributionMode" public."InvestmentContributionMode" NOT NULL DEFAULT 'ONE_TIME',
+  "accountingTreatmentOverride" public."AccountingTreatment" NULL,
   "notes" TEXT NULL,
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
   "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -297,6 +355,23 @@ CREATE TABLE IF NOT EXISTS public.investments (
     FOREIGN KEY ("assetTypeMetaId") REFERENCES public.app_meta_config_ref("id") ON DELETE RESTRICT,
   CONSTRAINT "investments_assetCategoryMetaId_fkey"
     FOREIGN KEY ("assetCategoryMetaId") REFERENCES public.app_meta_config_ref("id") ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS public.investment_benefits (
+  "id" INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  "investmentId" INTEGER NOT NULL,
+  "benefitType" public."InvestmentBenefitType" NOT NULL,
+  "amount" DECIMAL(18,2) NOT NULL,
+  "benefitDate" TIMESTAMPTZ NOT NULL,
+  "status" public."InvestmentBenefitStatus" NOT NULL DEFAULT 'EXPECTED',
+  "notes" TEXT NULL,
+  "linkedEventId" INTEGER NULL,
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+  "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT "investment_benefits_investmentId_fkey"
+    FOREIGN KEY ("investmentId") REFERENCES public.investments("id") ON DELETE CASCADE,
+  CONSTRAINT "investment_benefits_linkedEventId_fkey"
+    FOREIGN KEY ("linkedEventId") REFERENCES public.investment_events("id") ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS public.transactions (
@@ -541,5 +616,9 @@ CREATE INDEX IF NOT EXISTS "investment_contribution_plans_nextDueDate_idx" ON pu
 CREATE INDEX IF NOT EXISTS "valuation_snapshots_userId_idx" ON public.valuation_snapshots ("userId");
 CREATE INDEX IF NOT EXISTS "valuation_snapshots_investmentId_idx" ON public.valuation_snapshots ("investmentId");
 CREATE INDEX IF NOT EXISTS "valuation_snapshots_snapshotDate_idx" ON public.valuation_snapshots ("snapshotDate");
+
+CREATE INDEX IF NOT EXISTS "investment_benefits_investmentId_idx" ON public.investment_benefits ("investmentId");
+CREATE INDEX IF NOT EXISTS "investment_benefits_status_idx" ON public.investment_benefits ("status");
+CREATE INDEX IF NOT EXISTS "investment_benefits_benefitDate_idx" ON public.investment_benefits ("benefitDate");
 
 COMMIT;

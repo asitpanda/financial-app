@@ -2,6 +2,8 @@ import { InvestmentEventType } from '@prisma/client';
 import type { CreateInvestmentDto } from './dto/create-investment.dto';
 import type { InvestmentActiveContributionPlanResponseDto } from './dto/investment-detail-response.dto';
 
+export type AccountingTreatment = 'INVESTMENT' | 'INSURANCE_SAVINGS' | 'PROTECTION_EXPENSE';
+
 export type InvestmentRecord = {
   id: number;
   userId: number;
@@ -12,6 +14,9 @@ export type InvestmentRecord = {
   name: string;
   assetType: string;
   assetCategory: string;
+  // Resolved treatment (category default, or type default, falling back to INVESTMENT) - see resolveAccountingTreatment.
+  accountingTreatment: AccountingTreatment;
+  accountingTreatmentOverride: AccountingTreatment | null;
   institutionName: string | null;
   referenceNumber: string | null;
   status: string;
@@ -28,6 +33,17 @@ export type InvestmentRecord = {
   createdAt: Date;
   updatedAt: Date;
 };
+
+/** Single source of truth for how a product participates financially: per-row override wins, else category default, else type default, else INVESTMENT. */
+export const resolveAccountingTreatment = (input: {
+  accountingTreatmentOverride?: AccountingTreatment | null;
+  assetCategoryAccountingTreatment?: AccountingTreatment | null;
+  assetTypeAccountingTreatment?: AccountingTreatment | null;
+}): AccountingTreatment =>
+  input.accountingTreatmentOverride ??
+  input.assetCategoryAccountingTreatment ??
+  input.assetTypeAccountingTreatment ??
+  'INVESTMENT';
 
 export type ActivePlanLike = {
   id: string | number;
@@ -72,6 +88,7 @@ export type ResolvedAnalyticsRecord = {
   id: string | number;
   investment: SummaryInvestment;
   category: string;
+  accountingTreatment: AccountingTreatment;
   investedAmount: number;
   currentValue: number;
   returnAmount: number;

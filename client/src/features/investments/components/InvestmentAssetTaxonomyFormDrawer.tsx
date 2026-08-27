@@ -267,17 +267,43 @@ export default function InvestmentAssetTaxonomyFormDrawer({
     [selectedNode, taxonomyNodesById],
   );
 
+  const editingDescendantCount = useMemo(() => {
+    if (!selectedNode) return 0;
+
+    const childrenByParentId = new Map();
+    taxonomyNodes.forEach((node) => {
+      if (node.parentId == null) return;
+      const key = String(node.parentId);
+      if (!childrenByParentId.has(key)) childrenByParentId.set(key, []);
+      childrenByParentId.get(key).push(node);
+    });
+
+    let count = 0;
+    const queue = [...(childrenByParentId.get(String(selectedNode.id)) || [])];
+    while (queue.length) {
+      const node = queue.shift();
+      count += 1;
+      queue.push(...(childrenByParentId.get(String(node.id)) || []));
+    }
+
+    return count;
+  }, [selectedNode, taxonomyNodes]);
+
   const parentOptions = useMemo(() => {
     const parentLevel = Number(form.level) - 1;
     if (parentLevel < 1) return [];
 
-    return selectedLineage
+    // Offer every node at the previous level (not just the current node's
+    // own lineage) so a node can be re-parented into a different branch.
+    return sortedTaxonomyNodes
       .filter((node) => Number(node.level) === parentLevel)
       .map((node) => ({
         value: String(node.id),
-        label: node.label,
+        label: buildLineage(node, taxonomyNodesById)
+          .map((ancestor) => ancestor.label)
+          .join(" > "),
       }));
-  }, [form.level, selectedLineage]);
+  }, [form.level, sortedTaxonomyNodes, taxonomyNodesById]);
 
   const taxonomyTree = useMemo(
     () => buildTaxonomyTree(sortedTaxonomyNodes),
@@ -393,7 +419,7 @@ export default function InvestmentAssetTaxonomyFormDrawer({
           next.parentId = "";
         } else if (next.parentId) {
           const allowedParentIds = new Set(
-            selectedLineage
+            taxonomyNodes
               .filter((node) => Number(node.level) === nextLevel - 1)
               .map((node) => String(node.id)),
           );
@@ -695,6 +721,14 @@ export default function InvestmentAssetTaxonomyFormDrawer({
             </Stack>
           ) : (
             <Stack spacing={2}>
+              {isEditing && editingDescendantCount > 0 ? (
+                <Alert severity="info">
+                  This node has {editingDescendantCount} descendant node
+                  {editingDescendantCount === 1 ? "" : "s"}. Moving it to a new
+                  parent or level carries the whole branch along and shifts
+                  descendant levels to match, so the tree stays intact.
+                </Alert>
+              ) : null}
               <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 1 }}>
                 <Box
                   sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mb: 1 }}
@@ -766,7 +800,7 @@ export default function InvestmentAssetTaxonomyFormDrawer({
                   helperText={
                     Number(form.level) === 1
                       ? "Level 1 nodes do not need a parent"
-                      : "Only nodes from the selected hierarchy path are available"
+                      : "Pick any node from the previous level to move this node into a different branch"
                   }
                   disabled={Number(form.level) === 1}
                 />

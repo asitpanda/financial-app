@@ -1,6 +1,10 @@
 // @ts-nocheck
 import dayjs from 'dayjs';
-import type { InvestmentAssetTypeConfig } from '../features/investments/types/investment.types';
+import type {
+  FrequencyCadenceOption,
+  InvestmentAssetTypeConfig,
+  InvestmentFrequency,
+} from '../features/investments/types/investment.types';
 
 export const STATUS_OPTIONS = [
   { value: 'all', label: 'All Status' },
@@ -8,6 +12,59 @@ export const STATUS_OPTIONS = [
   { value: 'matured', label: 'Matured' },
   { value: 'closed', label: 'Closed' },
 ];
+
+// Single source of truth for recurring-plan frequency <-> {cadenceUnit, cadenceInterval} mapping.
+// Add/remove a frequency by editing this table only - every consumer derives from it.
+export const FREQUENCY_CADENCE_OPTIONS: FrequencyCadenceOption[] = [
+  { frequency: 'weekly', label: 'Weekly', cadenceUnit: 'week', cadenceInterval: 1 },
+  { frequency: 'monthly', label: 'Monthly', cadenceUnit: 'month', cadenceInterval: 1 },
+  { frequency: 'quarterly', label: 'Quarterly', cadenceUnit: 'quarter', cadenceInterval: 1 },
+  { frequency: 'halfyearly', label: 'Half-yearly', cadenceUnit: 'month', cadenceInterval: 6 },
+  { frequency: 'yearly', label: 'Yearly', cadenceUnit: 'year', cadenceInterval: 1 },
+];
+
+export const DEFAULT_FREQUENCY: InvestmentFrequency = 'monthly';
+
+export const FREQUENCY_SELECT_OPTIONS = FREQUENCY_CADENCE_OPTIONS.map(
+  ({ frequency, label }) => ({ value: frequency, label }),
+);
+
+const getDefaultCadenceOption = () =>
+  FREQUENCY_CADENCE_OPTIONS.find((option) => option.frequency === DEFAULT_FREQUENCY)!;
+
+/** frequency -> { cadenceUnit, cadenceInterval } for building API payloads. */
+export const frequencyToCadence = (frequency?: string | null) => {
+  const match =
+    FREQUENCY_CADENCE_OPTIONS.find((option) => option.frequency === frequency) ??
+    getDefaultCadenceOption();
+  return { cadenceUnit: match.cadenceUnit, cadenceInterval: match.cadenceInterval };
+};
+
+/** { cadenceUnit, cadenceInterval } -> frequency for seeding the edit form from a saved plan. */
+export const cadenceToFrequency = (
+  cadenceUnit?: string | null,
+  cadenceInterval?: number | string | null,
+): InvestmentFrequency => {
+  const interval = Number(cadenceInterval) || 1;
+  const match = FREQUENCY_CADENCE_OPTIONS.find(
+    (option) => option.cadenceUnit === cadenceUnit && option.cadenceInterval === interval,
+  );
+  return match ? match.frequency : DEFAULT_FREQUENCY;
+};
+
+/** { cadenceUnit, cadenceInterval } -> display label, with a generic fallback for unmapped combinations. */
+export const getCadenceLabel = (
+  cadenceUnit?: string | null,
+  cadenceInterval?: number | string | null,
+): string => {
+  if (!cadenceUnit) return '—';
+  const interval = Math.max(Number(cadenceInterval) || 1, 1);
+  const match = FREQUENCY_CADENCE_OPTIONS.find(
+    (option) => option.cadenceUnit === cadenceUnit && option.cadenceInterval === interval,
+  );
+  if (match) return match.label;
+  return `Every ${interval} ${cadenceUnit}${interval === 1 ? '' : 's'}`;
+};
 
 export const createEmptyInvestmentForm = () => ({
   accountId: '',

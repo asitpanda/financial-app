@@ -51,7 +51,25 @@ const ASSET_CATEGORY_META_ID_BY_CODE: Record<string, number> = {
   PRIVATE_EQUITY: 33,
   COLLECTIBLE: 34,
   OTHER_ALTERNATIVE: 35,
+  LIC_MONEY_BACK: 36,
+  ENDOWMENT: 37,
+  TERM_INSURANCE: 38,
+  RETURN_OF_PREMIUM_TERM: 39,
 };
+
+// Mirrors the accountingTreatment defaults seeded in core_schema.sql; category default, not a per-product override.
+const ACCOUNTING_TREATMENT_BY_CATEGORY_CODE: Record<string, 'INVESTMENT' | 'INSURANCE_SAVINGS' | 'PROTECTION_EXPENSE'> = {
+  LIFE_INSURANCE: 'INSURANCE_SAVINGS',
+  ULIP: 'INSURANCE_SAVINGS',
+  HEALTH_INSURANCE: 'PROTECTION_EXPENSE',
+  LIC_MONEY_BACK: 'INSURANCE_SAVINGS',
+  ENDOWMENT: 'INSURANCE_SAVINGS',
+  TERM_INSURANCE: 'PROTECTION_EXPENSE',
+  RETURN_OF_PREMIUM_TERM: 'INSURANCE_SAVINGS',
+};
+
+const resolveMockAccountingTreatment = (assetCategory: string) =>
+  ACCOUNTING_TREATMENT_BY_CATEGORY_CODE[assetCategory] ?? 'INVESTMENT';
 
 @Injectable()
 export class InvestmentMockRepository implements IInvestmentDataSourcePort {
@@ -66,6 +84,11 @@ export class InvestmentMockRepository implements IInvestmentDataSourcePort {
       assetTaxonomyId: normalizeNullableNumber(data.assetTaxonomyId),
       assetTypeMetaId,
       assetCategoryMetaId,
+      accountingTreatment:
+        (data as { accountingTreatmentOverride?: 'INVESTMENT' | 'INSURANCE_SAVINGS' | 'PROTECTION_EXPENSE' | null }).accountingTreatmentOverride ??
+        resolveMockAccountingTreatment(data.assetCategory),
+      accountingTreatmentOverride:
+        (data as { accountingTreatmentOverride?: 'INVESTMENT' | 'INSURANCE_SAVINGS' | 'PROTECTION_EXPENSE' | null }).accountingTreatmentOverride ?? null,
       institutionName: data.institutionName ?? null,
       referenceNumber: data.referenceNumber ?? null,
       currentValue: data.currentValue ?? 0,
@@ -114,6 +137,10 @@ export class InvestmentMockRepository implements IInvestmentDataSourcePort {
         data.assetCategory !== undefined
           ? ASSET_CATEGORY_META_ID_BY_CODE[data.assetCategory]
           : mockInvestments[index].assetCategoryMetaId,
+      accountingTreatment:
+        data.assetCategory !== undefined
+          ? resolveMockAccountingTreatment(data.assetCategory)
+          : mockInvestments[index].accountingTreatment,
       institutionName: data.institutionName !== undefined ? data.institutionName : mockInvestments[index].institutionName,
       referenceNumber: data.referenceNumber !== undefined ? data.referenceNumber : mockInvestments[index].referenceNumber,
       currentValue: data.currentValue !== undefined ? data.currentValue : mockInvestments[index].currentValue,

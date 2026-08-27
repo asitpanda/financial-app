@@ -39,6 +39,7 @@ const invalidateInvestmentSummaryQueries = (queryClient: ReturnType<typeof useQu
   queryClient.invalidateQueries({ queryKey: ['investments'], exact: true });
   queryClient.invalidateQueries({ queryKey: ['investments', 'dashboard'], exact: true });
   queryClient.invalidateQueries({ queryKey: ['investments', 'reference-data'], exact: true });
+  queryClient.invalidateQueries({ queryKey: ['dashboard'] });
 };
 
 const invalidateInvestmentDetailQuery = (

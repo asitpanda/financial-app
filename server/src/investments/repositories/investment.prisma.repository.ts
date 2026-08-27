@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import type { InvestmentRecord } from '../investment.types';
+import { resolveAccountingTreatment } from '../investment.types';
 import { CreateInvestmentDto } from '../dto/create-investment.dto';
 import { UpdateInvestmentDto } from '../dto/update-investment.dto';
 import { IInvestmentDataSourcePort } from './investment.datasource.port';
@@ -21,6 +22,12 @@ const mapInvestmentOutput = (investment: PrismaInvestmentRow): InvestmentRecord 
   name: investment.name,
   assetType: investment.assetTypeRef.code,
   assetCategory: investment.assetCategoryRef.code,
+  accountingTreatment: resolveAccountingTreatment({
+    accountingTreatmentOverride: investment.accountingTreatmentOverride ?? null,
+    assetCategoryAccountingTreatment: investment.assetCategoryRef.accountingTreatment ?? null,
+    assetTypeAccountingTreatment: investment.assetTypeRef.accountingTreatment ?? null,
+  }),
+  accountingTreatmentOverride: investment.accountingTreatmentOverride ?? null,
   institutionName: investment.institutionName,
   referenceNumber: investment.referenceNumber,
   status: investment.status,
@@ -37,6 +44,7 @@ const mapInvestmentOutput = (investment: PrismaInvestmentRow): InvestmentRecord 
   createdAt: investment.createdAt,
   updatedAt: investment.updatedAt,
 });
+
 
 @Injectable()
 export class InvestmentPrismaRepository implements IInvestmentDataSourcePort {

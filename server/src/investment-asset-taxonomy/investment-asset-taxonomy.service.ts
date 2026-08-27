@@ -171,7 +171,56 @@ export class InvestmentAssetTaxonomyService {
       id,
     );
 
-    return this.repository.update(id, userId, updateDto);
+    // Reparenting across branches can change this node's depth; shift the whole
+    // subtree by the same delta so descendant levels stay consistent with it.
+    const nextLevel = updateDto.level !== undefined ? Number(updateDto.level) : Number(existingNode.level);
+    const levelDelta = nextLevel - Number(existingNode.level);
+    const descendantLevelUpdates = levelDelta !== 0
+      ? await this.collectDescendantLevelShifts(id, levelDelta, userId)
+      : [];
+
+    const updated = await this.repository.update(id, userId, updateDto);
+
+    if (descendantLevelUpdates.length) {
+      await this.repository.updateLevelsForDescendants(userId, descendantLevelUpdates);
+    }
+
+    return updated;
+  }
+
+  private async collectDescendantLevelShifts(
+    rootId: number,
+    delta: number,
+    userId: number,
+  ): Promise<Array<{ id: number; level: number }>> {
+    const allNodes = await this.repository.findAll(userId);
+    const childrenByParentId = new Map<number, typeof allNodes>();
+    for (const node of allNodes) {
+      if (node.parentId == null) continue;
+      const key = Number(node.parentId);
+      if (!childrenByParentId.has(key)) childrenByParentId.set(key, []);
+      childrenByParentId.get(key)!.push(node);
+    }
+
+    const updates: Array<{ id: number; level: number }> = [];
+    const queue = [...(childrenByParentId.get(Number(rootId)) || [])];
+
+    while (queue.length) {
+      const node = queue.shift()!;
+      const newLevel = Number(node.level) + delta;
+
+      if (newLevel < 1 || newLevel > 5) {
+        throw new BadRequestException({
+          message: 'Moving this node would push part of its subtree outside the supported hierarchy depth (levels 1-5)',
+          field: 'level',
+        });
+      }
+
+      updates.push({ id: Number(node.id), level: newLevel });
+      queue.push(...(childrenByParentId.get(Number(node.id)) || []));
+    }
+
+    return updates;
   }
 
   async remove(id: number, userId: number) {

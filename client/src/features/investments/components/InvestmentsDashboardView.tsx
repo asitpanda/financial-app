@@ -284,7 +284,7 @@ export default function InvestmentsDashboardView({
           gridTemplateColumns: {
             xs: "1fr",
             md: "repeat(2, minmax(0, 1fr))",
-            xl: "repeat(4, minmax(0, 1fr))",
+            xl: "repeat(5, minmax(0, 1fr))",
           },
           gap: 1.5,
         }}
@@ -362,6 +362,13 @@ export default function InvestmentsDashboardView({
         <KpiCard
           title="Insurance Cover"
           value={formatCurrency(dashboardKpis.insuranceCover)}
+          icon={<Icon path={mdiShieldCheckOutline} size={1} />}
+        />
+        <KpiCard
+          title="Insurance Premiums Paid"
+          value={formatCurrency(
+            dashboardKpis.insuranceSavingsContribution + dashboardKpis.protectionExpenseTotal,
+          )}
           icon={<Icon path={mdiShieldCheckOutline} size={1} />}
         />
       </Box>

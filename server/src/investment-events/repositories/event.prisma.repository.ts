@@ -73,13 +73,31 @@ export class EventPrismaRepository implements IEventDataSourcePort {
     tx: Prisma.TransactionClient,
     investmentId: number,
   ) {
+    const investmentWithMeta = await tx.investment.findUnique({
+      where: { id: investmentId },
+      include: { assetTypeRef: true, assetCategoryRef: true },
+    });
+    if (!investmentWithMeta) return;
+
+    const accountingTreatment: 'INVESTMENT' | 'INSURANCE_SAVINGS' | 'PROTECTION_EXPENSE' =
+      (investmentWithMeta as any).accountingTreatmentOverride ??
+      (investmentWithMeta as any).assetCategoryRef?.accountingTreatment ??
+      (investmentWithMeta as any).assetTypeRef?.accountingTreatment ??
+      'INVESTMENT';
+
+    // Premiums on protection products are a pure expense - never written back to invested capital or value.
+    if (accountingTreatment === 'PROTECTION_EXPENSE') return;
+
     const [contributionAgg, withdrawalAgg, incomeAgg, latestConfirmedEvent] =
       await Promise.all([
         tx.investmentEvent.aggregate({
           where: {
             investmentId,
             status: 'CONFIRMED',
-            eventType: { in: [InvestmentEventType.CONTRIBUTION, InvestmentEventType.OPENING_BALANCE] },
+            eventType:
+              accountingTreatment === 'INSURANCE_SAVINGS'
+                ? { in: [InvestmentEventType.CONTRIBUTION, InvestmentEventType.OPENING_BALANCE, InvestmentEventType.PREMIUM] }
+                : { in: [InvestmentEventType.CONTRIBUTION, InvestmentEventType.OPENING_BALANCE] },
           },
           _sum: { amount: true },
         }),
@@ -116,6 +134,17 @@ export class EventPrismaRepository implements IEventDataSourcePort {
     const contributionTotal = contributionAgg._sum.amount?.toNumber() ?? 0;
     const withdrawalTotal = withdrawalAgg._sum.amount?.toNumber() ?? 0;
     const incomeTotal = incomeAgg._sum.amount?.toNumber() ?? 0;
+
+    if (accountingTreatment === 'INSURANCE_SAVINGS') {
+      // Premium-paid history is permanent; a money-back payout (WITHDRAWAL_PRINCIPAL) must not retroactively reduce
+      // it, and currentValue is never manufactured here - only an explicit ValuationSnapshot should set it.
+      await tx.investment.update({
+        where: { id: investmentId },
+        data: { totalInvested: contributionTotal },
+      });
+      return;
+    }
+
     const principalTotal = contributionTotal - withdrawalTotal;
     const currentValue = principalTotal + incomeTotal;
 

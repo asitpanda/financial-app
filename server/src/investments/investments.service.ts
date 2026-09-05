@@ -235,7 +235,54 @@ export class InvestmentsService {
   async create(createInvestmentDto: CreateInvestmentDto, userId: number) {
     await this.assertInvestmentCrudRules(createInvestmentDto);
     await this.assertTaxonomyOwnership(createInvestmentDto.assetTaxonomyId, userId);
-    return this.repository.create(createInvestmentDto, userId);
+    const created = await this.repository.create(createInvestmentDto, userId);
+
+    // Seed opening events so totalInvested/currentValue are event-sourced from day one.
+    // Recurring plans seed their own opening events via contribution-plan confirm, so skip here.
+    if (String(createInvestmentDto.contributionMode || '').toUpperCase() === 'ONE_TIME') {
+      const openingPrincipal = Number(createInvestmentDto.totalInvested || 0);
+      const openingIncome =
+        Number(createInvestmentDto.currentValue ?? createInvestmentDto.totalInvested ?? 0) - openingPrincipal;
+      const eventDate = createInvestmentDto.startDate;
+
+      if (openingPrincipal > 0) {
+        await this.investmentEventsService.create({
+          investmentId: String(created.id),
+          eventType: InvestmentEventType.OPENING_BALANCE,
+          status: 'CONFIRMED',
+          eventSource: 'MANUAL',
+          eventDate,
+          amount: openingPrincipal,
+          netAmount: openingPrincipal,
+        });
+      }
+
+      if (openingIncome > 0) {
+        await this.investmentEventsService.create({
+          investmentId: String(created.id),
+          eventType: InvestmentEventType.OPENING_INCOME_CREDIT,
+          status: 'CONFIRMED',
+          eventSource: 'MANUAL',
+          eventDate,
+          amount: openingIncome,
+          netAmount: openingIncome,
+        });
+      }
+    }
+
+    for (const benefit of createInvestmentDto.expectedBenefits ?? []) {
+      await this.prisma.investmentBenefit.create({
+        data: {
+          investmentId: created.id,
+          benefitType: benefit.benefitType,
+          amount: benefit.amount,
+          benefitDate: new Date(benefit.benefitDate),
+          notes: benefit.notes,
+        },
+      });
+    }
+
+    return created;
   }
 
   async getMetadata() {
@@ -706,7 +753,34 @@ export class InvestmentsService {
     return 'invested';
   }
 
+  private shouldProductHaveCurrentValue(investment: InvestmentLike): boolean {
+    const treatment = investment?.accountingTreatment ?? 'INVESTMENT';
+
+    // INVESTMENT products should have current value (flag as stale if missing)
+    if (treatment === 'INVESTMENT') {
+      return true;
+    }
+
+    // INSURANCE_SAVINGS products may or may not have current value (immature policies, awaiting surrender value)
+    // Never flag as stale - lack of value is by design, not missing data
+    if (treatment === 'INSURANCE_SAVINGS') {
+      return false;
+    }
+
+    // PROTECTION_EXPENSE (pure insurance premiums) should NOT have current value
+    if (treatment === 'PROTECTION_EXPENSE') {
+      return false;
+    }
+
+    return true;
+  }
+
   private isStaleValuation(investment: InvestmentLike) {
+    // Insurance products without value are not stale - they lack value by design
+    if (!this.shouldProductHaveCurrentValue(investment)) {
+      return false;
+    }
+
     if (!investment?.lastValuationAt) {
       return true;
     }
@@ -1030,7 +1104,9 @@ export class InvestmentsService {
       (summary, investment) => {
         const source = this.getValueSourceKey(investment);
         const currentValue = this.getEffectiveCurrentValue(investment);
+        const treatment = investment?.accountingTreatment ?? 'INVESTMENT';
 
+        // Group by value source: snapshot | estimated | invested
         if (source === 'snapshot') {
           summary.snapshotBackedValue += currentValue;
           summary.snapshotBackedCount += 1;
@@ -1045,6 +1121,20 @@ export class InvestmentsService {
           summary.investedOnlyIds.push(investment.id);
         }
 
+        // Track INSURANCE_SAVINGS separately: with value vs without value
+        if (treatment === 'INSURANCE_SAVINGS') {
+          if (currentValue > 0) {
+            summary.insuranceSavingsWithValueCount += 1;
+            summary.insuranceSavingsWithValueValue += currentValue;
+            summary.insuranceSavingsWithValueIds.push(investment.id);
+          } else {
+            // INSURANCE_SAVINGS without known current value (immature, awaiting statement, etc.)
+            summary.insuranceSavingsWithoutValueCount += 1;
+            summary.insuranceSavingsWithoutValueIds.push(investment.id);
+          }
+        }
+
+        // Flag stale valuations (only for products that should have current value)
         if (investment.status === 'active' && this.isStaleValuation(investment)) {
           summary.staleValuationCount += 1;
           summary.staleValuationValue += currentValue;
@@ -1062,10 +1152,15 @@ export class InvestmentsService {
         investedOnlyCount: 0,
         staleValuationCount: 0,
         staleValuationValue: 0,
+        insuranceSavingsWithValueCount: 0,
+        insuranceSavingsWithValueValue: 0,
+        insuranceSavingsWithoutValueCount: 0,
         snapshotBackedIds: [],
         estimatedIds: [],
         investedOnlyIds: [],
         staleValuationIds: [],
+        insuranceSavingsWithValueIds: [],
+        insuranceSavingsWithoutValueIds: [],
       },
     );
   }
@@ -1129,6 +1224,8 @@ export class InvestmentsService {
     // Only products participate in portfolio totals/gain-loss when their accounting treatment is INVESTMENT.
     const investmentRecords = records.filter((record) => record.accountingTreatment === 'INVESTMENT');
     const investmentRows = investments.filter((investment) => (investment.accountingTreatment ?? 'INVESTMENT') === 'INVESTMENT');
+    const insuranceSavingsRows = investments.filter((investment) => investment.accountingTreatment === 'INSURANCE_SAVINGS');
+    const protectionExpenseRows = investments.filter((investment) => investment.accountingTreatment === 'PROTECTION_EXPENSE');
 
     const totalInvested = investmentRows.reduce(
       (sum, investment) => sum + Number(investment.totalInvested || 0),
@@ -1141,6 +1238,8 @@ export class InvestmentsService {
     const totalReturn = totalCurrentValue - totalInvested;
     const returnPercentage =
       totalInvested > 0 ? (totalReturn / totalInvested) * 100 : 0;
+
+    // KPI 1: Upcoming Maturity (INVESTMENT only, within 90 days)
     const upcomingMaturity = investmentRecords
       .filter(
         (record) =>
@@ -1148,37 +1247,68 @@ export class InvestmentsService {
           this.isWithinDays(record.investment.maturityDate, 90),
       )
       .reduce((sum, record) => sum + Number(record.currentValue || 0), 0);
-    const insuranceCover = records
+
+    // KPI 3 Extended: Upcoming maturity/benefits from INSURANCE_SAVINGS (within 90 days)
+    const upcomingMaturityFromInsuranceSavings = insuranceSavingsRows
       .filter(
-        (record) =>
-          record.investment.status === 'active' &&
-          String(record.investment.assetType || '').trim().toUpperCase() === 'INSURANCE',
+        (investment) =>
+          investment.status === 'active' &&
+          this.isWithinDays(investment.maturityDate, 90),
       )
+      .reduce((sum, investment) => sum + Number(investment.currentValue || 0), 0);
+
+    // KPI 4: Insurance Cover breakdown
+    const insuranceCoverProtection = protectionExpenseRows
+      .filter((investment) => investment.status === 'active')
       .reduce(
-        (sum, record) => sum + Number(record.investment.insuranceCover || 0),
+        (sum, investment) => sum + Number(investment.insuranceCover || 0),
         0,
       );
-    const insuranceSavingsContribution = investments
-      .filter(
-        (investment) =>
-          investment.status === 'active' && investment.accountingTreatment === 'INSURANCE_SAVINGS',
-      )
+
+    const insuranceCoverSavings = insuranceSavingsRows
+      .filter((investment) => investment.status === 'active')
+      .reduce(
+        (sum, investment) => sum + Number(investment.insuranceCover || 0),
+        0,
+      );
+
+    const insuranceCover = insuranceCoverProtection + insuranceCoverSavings;
+
+    // KPI 2: Total Contributions (INVESTMENT + INSURANCE_SAVINGS)
+    const insuranceSavingsContribution = insuranceSavingsRows
+      .filter((investment) => investment.status === 'active')
       .reduce((sum, investment) => sum + Number(investment.totalInvested || 0), 0);
-    const protectionExpenseTotal = investments
+
+    const totalContributions = totalInvested + insuranceSavingsContribution;
+
+    // KPI 2 Extended: Current value from INSURANCE_SAVINGS products
+    const totalCurrentValueFromInsuranceSavings = insuranceSavingsRows
       .filter(
         (investment) =>
-          investment.status === 'active' && investment.accountingTreatment === 'PROTECTION_EXPENSE',
+          investment.status === 'active' &&
+          Number.isFinite(Number(investment.currentValue || 0)) &&
+          Number(investment.currentValue || 0) > 0,
       )
+      .reduce((sum, investment) => sum + Number(investment.currentValue || 0), 0);
+
+    // KPI 5: Protection Expense (PROTECTION_EXPENSE premiums)
+    const protectionExpenseTotal = protectionExpenseRows
+      .filter((investment) => investment.status === 'active')
       .reduce((sum, investment) => sum + Number(investment.totalInvested || 0), 0);
 
     return {
       totalInvestments: investments.length,
+      totalContributions,
       totalInvested,
       totalCurrentValue,
       totalReturn,
       returnPercentage,
+      totalCurrentValueFromInsuranceSavings,
       upcomingMaturity,
+      upcomingMaturityFromInsuranceSavings,
       insuranceCover,
+      insuranceCoverProtection,
+      insuranceCoverSavings,
       insuranceSavingsContribution,
       protectionExpenseTotal,
       valueSourceSummary: this.buildValueSourceSummary(investments),
@@ -1296,16 +1426,22 @@ export class InvestmentsService {
   private async buildDashboardUpcoming(userId: number) {
     const investments = await this.getSummaryInvestments(userId);
 
+    // Includes overdue contributions and anything due within the next 60 days.
+    const contributionHorizon = new Date();
+    contributionHorizon.setDate(contributionHorizon.getDate() + 60);
+
     const upcomingContributions = investments
       .filter(
         (investment) =>
-          investment.status === 'active' && investment.activeContributionPlan?.nextDueDate,
+          investment.status === 'active' &&
+          investment.activeContributionPlan?.nextDueDate &&
+          new Date(investment.activeContributionPlan.nextDueDate).getTime() <=
+            contributionHorizon.getTime(),
       )
       .sort((left, right) =>
         new Date(left.activeContributionPlan?.nextDueDate || 0).getTime() -
         new Date(right.activeContributionPlan?.nextDueDate || 0).getTime(),
-      )
-      .slice(0, 6);
+      );
 
     const recentInvestments = [...investments]
       .sort((left, right) =>
@@ -1316,7 +1452,13 @@ export class InvestmentsService {
       )
       .slice(0, 5);
 
-    const topCurrentValueItems = [...investments]
+    const topCurrentValueItems = investments
+      .filter(
+        (investment) =>
+          investment.status === 'active' &&
+          (investment.accountingTreatment ?? 'INVESTMENT') !== 'PROTECTION_EXPENSE' &&
+          this.getEffectiveCurrentValue(investment) > 0,
+      )
       .sort(
         (left, right) =>
           this.getEffectiveCurrentValue(right) - this.getEffectiveCurrentValue(left),
@@ -1353,22 +1495,26 @@ export class InvestmentsService {
         snapshotsByInvestment.get(String(investment.id)) ?? [],
       ),
     );
-    // Growth/allocation/category-performance analytics only ever consider INVESTMENT-treatment products.
-    const investmentOnlyRecords = records.filter((record) => record.accountingTreatment === 'INVESTMENT');
+    // Growth/allocation/timeline analytics include INVESTMENT + INSURANCE_SAVINGS (valued), exclude PROTECTION_EXPENSE.
+    const valuedRecords = records.filter((record) => record.accountingTreatment !== 'PROTECTION_EXPENSE');
+    // Asset Type Performance analytics strictly focus on pure INVESTMENT products (exclude all insurance).
+    const investmentOnlyRecords = records.filter(
+      (record) => (record.accountingTreatment ?? 'INVESTMENT') === 'INVESTMENT',
+    );
     const investmentOnlyInvestments = investments.filter(
       (investment) => (investment.accountingTreatment ?? 'INVESTMENT') === 'INVESTMENT',
     );
-    const yearly = this.buildYearlyTimeSeriesData(investmentOnlyRecords);
+    const yearly = this.buildYearlyTimeSeriesData(valuedRecords);
 
     return {
       summary: this.buildDashboardSummary(investments, records),
       upcoming,
       analytics: {
-        portfolioGrowthData: this.buildPortfolioGrowthData(investmentOnlyRecords),
+        portfolioGrowthData: this.buildPortfolioGrowthData(valuedRecords),
         timeSeries: {
           yearly,
           monthlyByYear: yearly.reduce<Record<string, TimeSeriesPoint[]>>((acc, point) => {
-            acc[point.label] = this.buildMonthlyTimeSeriesData(investmentOnlyRecords, point.label);
+            acc[point.label] = this.buildMonthlyTimeSeriesData(valuedRecords, point.label);
             return acc;
           }, {}),
         },

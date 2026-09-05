@@ -27,6 +27,8 @@ interface InvestmentsAssetsViewProps {
   categoryFilter: string;
   onCategoryFilterChange: (value: string) => void;
   categoryOptions: Array<{ value: string; label: string }>;
+  treatmentFilter?: string;
+  onTreatmentFilterChange?: (value: string) => void;
   onResetFilters: () => void;
   onCreateInvestment: () => void;
   isFirstInvestmentSetup: boolean;
@@ -46,6 +48,8 @@ export default function InvestmentsAssetsView({
   categoryFilter,
   onCategoryFilterChange,
   categoryOptions,
+  treatmentFilter = "all",
+  onTreatmentFilterChange,
   onResetFilters,
   onCreateInvestment,
   isFirstInvestmentSetup,
@@ -101,6 +105,19 @@ export default function InvestmentsAssetsView({
           onChange={onSearchChange}
           placeholder="Search by name, type, institution, or reference"
         />
+        {onTreatmentFilterChange ? (
+          <Select
+            size="small"
+            value={treatmentFilter}
+            onChange={(event) => onTreatmentFilterChange(event.target.value)}
+            fullWidth
+          >
+            <MenuItem value="all">All Treatments</MenuItem>
+            <MenuItem value="INVESTMENT">Investments</MenuItem>
+            <MenuItem value="INSURANCE_SAVINGS">Insurance Savings</MenuItem>
+            <MenuItem value="PROTECTION_EXPENSE">Protection Insurance</MenuItem>
+          </Select>
+        ) : null}
         <Select
           size="small"
           value={statusFilter}

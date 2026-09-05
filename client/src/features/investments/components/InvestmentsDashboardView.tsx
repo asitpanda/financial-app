@@ -24,12 +24,15 @@ import CategoryPerformanceTable from "./CategoryPerformanceTable";
 import PortfolioGrowthChart from "./PortfolioGrowthChart";
 import SourceOfValueCard from "./SourceOfValueCard";
 import TimeSeriesVisualization from "./TimeSeriesVisualization";
+import UpcomingMaturitiesBenefitsCard from "./UpcomingMaturitiesBenefitsCard";
+import InsurancePositionWidget from "./InsurancePositionWidget";
 import {
   formatInvestmentDate,
   getInvestmentTypeLabel,
 } from "../../../utils/investmentHelpers";
 import { getProfitLossHexColor } from "../../../colors";
 import type { Investment } from "../types/investment.types";
+import type { InvestmentAssetTaxonomyNode } from "../types/investmentAssetTaxonomy.types";
 import type { GridColDef } from "@mui/x-data-grid";
 import type {
   InvestmentAllocationSegment,
@@ -56,9 +59,14 @@ interface InvestmentDashboardViewProps {
   categorySubBreakdown: InvestmentAllocationSegment[];
   categoryPerformanceSubRows: InvestmentCategoryPerformanceRow[];
   holdingRows: InvestmentCategoryPerformanceRow[];
+  currentValueBreakdown?: InvestmentAllocationSegment[];
+  currentValueSubBreakdown?: InvestmentAllocationSegment[];
+  holdingCurrentValueRows?: InvestmentAllocationSegment[];
+  holdingContributionRows?: InvestmentAllocationSegment[];
   topCurrentValueItems: Investment[];
   upcomingContributions: InvestmentContributionViewItem[];
   recentInvestments: Investment[];
+  taxonomyNodes?: InvestmentAssetTaxonomyNode[];
   columns: readonly GridColDef<Investment>[];
   search: string;
   onSearchChange: (value: string) => void;
@@ -66,6 +74,8 @@ interface InvestmentDashboardViewProps {
   onStatusFilterChange: (value: string) => void;
   categoryFilter: string;
   onCategoryFilterChange: (value: string) => void;
+  treatmentFilter?: string;
+  onTreatmentFilterChange?: (value: string) => void;
   categoryOptions: Array<{ value: string; label: string }>;
   onResetFilters: () => void;
   onCreateInvestment: () => void;
@@ -91,9 +101,14 @@ export default function InvestmentsDashboardView({
   categorySubBreakdown,
   categoryPerformanceSubRows,
   holdingRows,
+  currentValueBreakdown,
+  currentValueSubBreakdown,
+  holdingCurrentValueRows,
+  holdingContributionRows,
   topCurrentValueItems,
   upcomingContributions,
   recentInvestments,
+  taxonomyNodes = [],
   columns,
   search,
   onSearchChange,
@@ -101,6 +116,8 @@ export default function InvestmentsDashboardView({
   onStatusFilterChange,
   categoryFilter,
   onCategoryFilterChange,
+  treatmentFilter = "all",
+  onTreatmentFilterChange,
   categoryOptions,
   onResetFilters,
   onCreateInvestment,
@@ -126,40 +143,11 @@ export default function InvestmentsDashboardView({
     pr: { lg: 0.5 },
   } as const;
   const fixedListWidgetContentSx = {
-    minHeight: 320,
-    maxHeight: 320,
+    minHeight: 340,
+    maxHeight: 340,
     overflowY: "auto",
     pr: 0.5,
   } as const;
-
-  const allocationReturnBreakdown = useMemo(
-    () =>
-      categoryPerformanceRows
-        .filter((row) => Number(row.returnAmount || 0) !== 0)
-        .map((row) => ({
-          key: row.key,
-          label: row.label,
-          value: row.returnAmount,
-          investmentIds: row.investmentIds,
-        }))
-        .sort((left, right) => Math.abs(right.value) - Math.abs(left.value)),
-    [categoryPerformanceRows],
-  );
-
-  const allocationReturnSubBreakdown = useMemo(
-    () =>
-      categoryPerformanceSubRows
-        .filter((row) => Number(row.returnAmount || 0) !== 0)
-        .map((row) => ({
-          key: row.key,
-          label: row.label,
-          value: row.returnAmount,
-          investmentIds: row.investmentIds,
-          assetType: row.assetType,
-        }))
-        .sort((left, right) => Math.abs(right.value) - Math.abs(left.value)),
-    [categoryPerformanceSubRows],
-  );
 
   const holdingAllocationBreakdown = useMemo(
     () =>
@@ -171,22 +159,6 @@ export default function InvestmentsDashboardView({
         assetType: row.assetType,
         assetCategory: row.assetCategory,
       })),
-    [holdingRows],
-  );
-
-  const holdingReturnAllocationBreakdown = useMemo(
-    () =>
-      holdingRows
-        .filter((row) => Number(row.returnAmount || 0) !== 0)
-        .map((row) => ({
-          key: row.key,
-          label: row.label,
-          value: row.returnAmount,
-          investmentIds: row.investmentIds,
-          assetType: row.assetType,
-          assetCategory: row.assetCategory,
-        }))
-        .sort((left, right) => Math.abs(right.value) - Math.abs(left.value)),
     [holdingRows],
   );
 
@@ -217,9 +189,14 @@ export default function InvestmentsDashboardView({
       const matchesCategory =
         categoryFilter === "all" || investmentAssetType === categoryFilter;
 
-      return matchesSearch && matchesStatus && matchesCategory;
+      const matchesTreatment =
+        !treatmentFilter ||
+        treatmentFilter === "all" ||
+        (investment.accountingTreatment || "INVESTMENT") === treatmentFilter;
+
+      return matchesSearch && matchesStatus && matchesCategory && matchesTreatment;
     });
-  }, [focusedInvestments, search, statusFilter, categoryFilter]);
+  }, [focusedInvestments, search, statusFilter, categoryFilter, treatmentFilter]);
 
   useEffect(() => {
     if (!focusedAssetIds || !focusedSectionRef.current) {
@@ -278,6 +255,7 @@ export default function InvestmentsDashboardView({
 
   return (
     <Stack spacing={2}>
+      {/* 5 KPI Cards */}
       <Box
         sx={{
           display: "grid",
@@ -289,11 +267,45 @@ export default function InvestmentsDashboardView({
           gap: 1.5,
         }}
       >
-        <KpiCard
-          title="Total Invested Amount"
-          value={formatCurrency(dashboardKpis.totalInvested)}
-          icon={<Icon path={mdiTrendingUp} size={1} />}
-        />
+        <Paper
+          sx={{
+            p: 2,
+            borderRadius: 1,
+            border: "1px solid",
+            borderColor: "divider",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              mb: 1,
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{ fontWeight: 600, color: "text.secondary" }}
+            >
+              Total Contributions
+            </Typography>
+            <Icon path={mdiTrendingUp} size={0.9} />
+          </Box>
+          <Typography variant="h6" sx={{ fontWeight: 800, mb: 0.75 }}>
+            {formatCurrency(dashboardKpis.totalContributions)}
+          </Typography>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
+            <Typography variant="caption" color="text.secondary">
+              Investments: {formatCurrency(dashboardKpis.totalInvested)}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Insurance Savings: {formatCurrency(dashboardKpis.insuranceSavingsContribution)}
+            </Typography>
+          </Box>
+        </Paper>
         <Paper
           sx={{
             p: 2,
@@ -322,7 +334,7 @@ export default function InvestmentsDashboardView({
             <Icon path={mdiTrendingUp} size={0.9} />
           </Box>
           <Typography variant="h6" sx={{ fontWeight: 800, mb: 0.75 }}>
-            {formatCurrency(dashboardKpis.totalCurrentValue)}
+            {formatCurrency(dashboardKpis.totalCurrentValue + dashboardKpis.totalCurrentValueFromInsuranceSavings)}
           </Typography>
           <Box
             sx={{
@@ -330,6 +342,7 @@ export default function InvestmentsDashboardView({
               alignItems: "center",
               gap: 0.75,
               flexWrap: "wrap",
+              mb: 0.5,
             }}
           >
             <Typography
@@ -353,26 +366,98 @@ export default function InvestmentsDashboardView({
               {dashboardKpis.returnPercentage.toFixed(2)}%)
             </Typography>
           </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: "10px" }}>
+            (Investment return only)
+          </Typography>
         </Paper>
         <KpiCard
           title="Upcoming Maturity"
-          value={formatCurrency(dashboardKpis.upcomingMaturity)}
+          value={formatCurrency(dashboardKpis.upcomingMaturity + dashboardKpis.upcomingMaturityFromInsuranceSavings)}
           icon={<Icon path={mdiCalendarClockOutline} size={1} />}
         />
-        <KpiCard
-          title="Insurance Cover"
-          value={formatCurrency(dashboardKpis.insuranceCover)}
-          icon={<Icon path={mdiShieldCheckOutline} size={1} />}
-        />
-        <KpiCard
-          title="Insurance Premiums Paid"
-          value={formatCurrency(
-            dashboardKpis.insuranceSavingsContribution + dashboardKpis.protectionExpenseTotal,
-          )}
-          icon={<Icon path={mdiShieldCheckOutline} size={1} />}
-        />
+        <Paper
+          sx={{
+            p: 2,
+            borderRadius: 1,
+            border: "1px solid",
+            borderColor: "divider",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              mb: 1,
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{ fontWeight: 600, color: "text.secondary" }}
+            >
+              Insurance Cover
+            </Typography>
+            <Icon path={mdiShieldCheckOutline} size={0.9} />
+          </Box>
+          <Typography variant="h6" sx={{ fontWeight: 800, mb: 0.75 }}>
+            {formatCurrency(dashboardKpis.insuranceCover)}
+          </Typography>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
+            <Typography variant="caption" color="text.secondary">
+              Protection: {formatCurrency(dashboardKpis.insuranceCoverProtection)}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Savings-linked: {formatCurrency(dashboardKpis.insuranceCoverSavings)}
+            </Typography>
+          </Box>
+        </Paper>
+        <Paper
+          sx={{
+            p: 2,
+            borderRadius: 1,
+            border: "1px solid",
+            borderColor: "divider",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              mb: 1,
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{ fontWeight: 600, color: "text.secondary" }}
+            >
+              Insurance Premiums Paid
+            </Typography>
+            <Icon path={mdiShieldCheckOutline} size={0.9} />
+          </Box>
+          <Typography variant="h6" sx={{ fontWeight: 800, mb: 0.75 }}>
+            {formatCurrency(
+              dashboardKpis.insuranceSavingsContribution + dashboardKpis.protectionExpenseTotal,
+            )}
+          </Typography>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
+            <Typography variant="caption" color="text.secondary">
+              Savings-linked: {formatCurrency(dashboardKpis.insuranceSavingsContribution)}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Protection: {formatCurrency(dashboardKpis.protectionExpenseTotal)}
+            </Typography>
+          </Box>
+        </Paper>
       </Box>
 
+      {/* Row 2: Portfolio Growth (left) + Source of Value (right) */}
       <Box
         sx={{
           display: "grid",
@@ -425,6 +510,7 @@ export default function InvestmentsDashboardView({
         </SectionCard>
       </Box>
 
+      {/* Row 3: Asset Type Performance (left) + Capital Deployment Timeline (right) */}
       <Box
         sx={{
           display: "grid",
@@ -459,8 +545,8 @@ export default function InvestmentsDashboardView({
         </SectionCard>
 
         <SectionCard
-          title="Investment Deployment Timeline"
-          subtitle="Distribution of capital added by fiscal period. Click year to see monthly breakdown."
+          title="Capital Deployment Timeline"
+          subtitle="Distribution of capital added toward long-term assets by fiscal period. Click year to see monthly breakdown."
           sx={widgetCardSx}
           contentSx={widgetContentSx}
           empty={timeSeriesData.length === 0}
@@ -481,6 +567,37 @@ export default function InvestmentsDashboardView({
         </SectionCard>
       </Box>
 
+      {/* Row 4: Insurance Position (left) + Upcoming Maturities & Benefits (right) */}
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1.4fr) minmax(360px, 1fr)" },
+          gap: 2,
+        }}
+      >
+        <InsurancePositionWidget
+          investments={investments}
+          taxonomyNodes={taxonomyNodes}
+          formatCurrency={formatCurrency}
+          onSelectPolicies={(investmentIds, title, description) =>
+            focusAssets(investmentIds, title, description)
+          }
+          sx={widgetCardSx}
+          contentSx={widgetContentSx}
+        />
+
+        <UpcomingMaturitiesBenefitsCard
+          investments={investments}
+          formatCurrency={formatCurrency}
+          onSelectInvestment={(investmentId, name) =>
+            focusAssets([investmentId], name, "Focused from Upcoming Maturities & Benefits.")
+          }
+          sx={widgetCardSx}
+          contentSx={widgetContentSx}
+        />
+      </Box>
+
+      {/* Row 5: 4-Column Bottom Grid */}
       <Box
         sx={{
           display: "grid",
@@ -494,7 +611,7 @@ export default function InvestmentsDashboardView({
       >
         <SectionCard
           title="Allocation Mix"
-          subtitle="Where the current invested base is concentrated by asset type."
+          subtitle="Where long-term capital or current valuation is concentrated."
           sx={widgetCardSx}
           contentSx={widgetContentSx}
           empty={categoryBreakdown.length === 0}
@@ -511,21 +628,21 @@ export default function InvestmentsDashboardView({
               (sum, item) => sum + Number(item.value || 0),
               0,
             )}
-            returnData={allocationReturnBreakdown}
+            currentValueData={currentValueBreakdown}
             subData={categorySubBreakdown}
-            subReturnData={allocationReturnSubBreakdown}
-            holdingData={holdingAllocationBreakdown}
-            holdingReturnData={holdingReturnAllocationBreakdown}
+            subCurrentValueData={currentValueSubBreakdown}
+            holdingData={holdingContributionRows || holdingAllocationBreakdown}
+            holdingCurrentValueData={holdingCurrentValueRows}
             formatValue={formatCurrency}
             onSelectSegment={(segment, mode) =>
               focusAssets(
                 segment.investmentIds,
-                mode === "return"
-                  ? `${segment.label} Return Contribution`
-                  : `${segment.label} Asset Type Allocation`,
-                mode === "return"
-                  ? `Assets contributing to the ${segment.label} gain or loss profile.`
-                  : `Assets contributing to the ${segment.label} asset-type allocation mix.`,
+                mode === "currentValue"
+                  ? `${segment.label} Current Value Allocation`
+                  : `${segment.label} Contribution Allocation`,
+                mode === "currentValue"
+                  ? `Assets contributing to the ${segment.label} valuation share.`
+                  : `Assets contributing to the ${segment.label} long-term contribution base.`,
               )
             }
           />
@@ -561,9 +678,18 @@ export default function InvestmentsDashboardView({
                   <ListItemText
                     disableTypography
                     primary={
-                      <Typography sx={{ fontWeight: 700 }}>
-                        {item.name}
-                      </Typography>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+                        <Typography sx={{ fontWeight: 700 }}>
+                          {item.name}
+                        </Typography>
+                        <Chip
+                          size="small"
+                          label={item.treatmentLabel}
+                          color={item.treatmentBadgeTone}
+                          variant="outlined"
+                          sx={{ height: 18, fontSize: 10, fontWeight: 600 }}
+                        />
+                      </Box>
                     }
                     secondary={
                       <Box
@@ -627,13 +753,13 @@ export default function InvestmentsDashboardView({
         </SectionCard>
 
         <SectionCard
-          title="Current Value Snapshot"
+          title="Top Holdings by Current Value"
           subtitle="Highest-value assets based on the latest stored values."
           sx={widgetCardSx}
           contentSx={fixedListWidgetContentSx}
           empty={topCurrentValueItems.length === 0}
           emptyState={{
-            title: "No current value snapshot",
+            title: "No top holdings",
             description:
               "Assets with captured current values will surface here.",
           }}
@@ -648,7 +774,7 @@ export default function InvestmentsDashboardView({
                     focusAssets(
                       [item.id],
                       item.name,
-                      "Focused from the current value snapshot widget.",
+                      "Focused from the top holdings widget.",
                     )
                   }
                   sx={{ py: 1.5, cursor: "pointer" }}
@@ -677,7 +803,7 @@ export default function InvestmentsDashboardView({
         </SectionCard>
 
         <SectionCard
-          title="Recent Investments"
+          title="Recently Added"
           subtitle="The latest additions to the organizer."
           sx={widgetCardSx}
           contentSx={fixedListWidgetContentSx}
@@ -697,7 +823,7 @@ export default function InvestmentsDashboardView({
                   focusAssets(
                     [item.id],
                     item.name,
-                    "Focused from the recent investments widget.",
+                    "Focused from the recently added widget.",
                   )
                 }
                 sx={{ p: 1.5, borderRadius: 1, cursor: "pointer" }}
@@ -761,6 +887,7 @@ export default function InvestmentsDashboardView({
         </SectionCard>
       </Box>
 
+      {/* Primary Workspace */}
       <Box ref={focusedSectionRef} sx={{ scrollMarginTop: 88 }}>
         <InvestmentsAssetsView
           filteredInvestments={focusedFilteredInvestments}
@@ -771,6 +898,8 @@ export default function InvestmentsDashboardView({
           onStatusFilterChange={onStatusFilterChange}
           categoryFilter={categoryFilter}
           onCategoryFilterChange={onCategoryFilterChange}
+          treatmentFilter={treatmentFilter}
+          onTreatmentFilterChange={onTreatmentFilterChange}
           categoryOptions={categoryOptions}
           onResetFilters={onResetFilters}
           onCreateInvestment={onCreateInvestment}

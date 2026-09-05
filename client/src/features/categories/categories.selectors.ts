@@ -1,5 +1,4 @@
 import dayjs, { type Dayjs } from "dayjs";
-import type { GlobalDateFilterState } from "../../store/pageDateFilterStore";
 import type {
   CategoryRecord,
   CategoryTableDrilldown,
@@ -64,19 +63,6 @@ export interface TopCategoryActivityItem {
 
 const getTransactionCategory = (transaction: TransactionRecord) =>
   transaction.category || transaction.categoryLabelSnapshot || "";
-
-export const getFilteredCategoryTransactions = (
-  transactions: TransactionRecord[],
-  filterState: GlobalDateFilterState,
-  matchesGlobalDateFilter: (date: Date, state: GlobalDateFilterState) => boolean,
-) => {
-  return transactions.filter((transaction: TransactionRecord) => {
-    const transactionDate = new Date(
-      transaction.date || transaction.createdAt || Date.now(),
-    );
-    return matchesGlobalDateFilter(transactionDate, filterState);
-  });
-};
 
 export const getFilteredCategories = (
   categories: CategoryRecord[],

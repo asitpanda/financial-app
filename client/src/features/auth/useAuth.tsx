@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { queryClient } from "../../api/queryClient";
+import { authEvents } from "../../api/authEvents";
 import { authApi } from "./auth.api";
 import { AuthResponse, LoginDto, RegisterDto, User } from "./auth.types";
 import { useAppStore } from "../../store/appStore";
@@ -49,6 +50,12 @@ export const useAuth = create<AuthState>((set) => ({
     set({ user: null, token: null, isAuthenticated: false });
   },
 }));
+
+// Any 401 response (e.g. token no longer maps to a valid user) forces an immediate
+// in-memory logout, not just a storage clear, so stale UI can't linger post-refresh.
+authEvents.onUnauthorized(() => {
+  useAuth.getState().logout();
+});
 
 export const useLogin = () => {
   const setCredentials = useAuth((state) => state.setCredentials);

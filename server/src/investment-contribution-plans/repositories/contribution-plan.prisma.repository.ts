@@ -28,6 +28,7 @@ type PrismaEventRow = {
   investmentId: number;
   recurringPlanId: number | null;
   linkedTransactionId: number | null;
+  linkedBenefitId: number | null;
   eventType: InvestmentEventType;
   dueDate: Date | null;
   status: InvestmentEventRecord['status'];
@@ -72,6 +73,7 @@ const mapPlanOutput = (plan: PrismaPlanRow): InvestmentContributionPlanRecord =>
 
 const mapEventOutput = (event: PrismaEventRow): InvestmentEventRecord => ({
   ...event,
+  linkedBenefitId: event.linkedBenefitId ?? null,
   amount: toNumber(event.amount),
   units: toNumber(event.units),
   pricePerUnit: toNumber(event.pricePerUnit),

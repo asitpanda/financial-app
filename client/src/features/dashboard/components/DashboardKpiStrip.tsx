@@ -8,8 +8,6 @@ import {
 
 interface DashboardKpiStripProps {
   balance: number;
-  income: number;
-  expense: number;
   investmentSummary: Pick<
     DashboardInvestmentSummary,
     | "periodCurrentValue"
@@ -17,7 +15,6 @@ interface DashboardKpiStripProps {
     | "periodUnrealisedGain"
     | "periodUnrealisedGainPct"
   >;
-  activeGoalsCount: number;
 }
 
 const formatCurrency = (value: number) =>
@@ -25,27 +22,15 @@ const formatCurrency = (value: number) =>
 
 export default function DashboardKpiStrip({
   balance,
-  income,
-  expense,
   investmentSummary,
-  activeGoalsCount,
 }: DashboardKpiStripProps) {
   return (
-    <section className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-7">
-      <KpiCard title="Balance" value={formatCurrency(balance)} />
+    <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
       <KpiCard
-        title="Income"
+        title="Balance"
         value={
-          <span style={{ color: PROFIT_LOSS_COLORS.gainHex }}>
-            {formatCurrency(income)}
-          </span>
-        }
-      />
-      <KpiCard
-        title="Expenses"
-        value={
-          <span style={{ color: PROFIT_LOSS_COLORS.lossHex }}>
-            {formatCurrency(expense)}
+          <span style={{ color: getProfitLossHexColor(balance, "gain") }}>
+            {formatCurrency(balance)}
           </span>
         }
       />
@@ -96,12 +81,6 @@ export default function DashboardKpiStrip({
               {investmentSummary.periodUnrealisedGainPct.toFixed(1)}%)
             </div>
           </div>
-        }
-      />
-      <KpiCard
-        title="Goals"
-        value={
-          <span style={{ color: "#2563eb" }}>{activeGoalsCount} Active</span>
         }
       />
     </section>

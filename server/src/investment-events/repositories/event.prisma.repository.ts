@@ -19,6 +19,7 @@ type PrismaInvestmentEventRow = {
   investmentId: number;
   recurringPlanId: number | null;
   linkedTransactionId: number | null;
+  linkedBenefitId?: number | null;
   eventType: InvestmentEventType;
   dueDate: Date | null;
   status: InvestmentEventRecord['status'];
@@ -58,6 +59,7 @@ const toNumber = (value: unknown): number | null => {
 
 const mapEventOutput = (event: PrismaInvestmentEventRow): InvestmentEventRecord => ({
   ...event,
+  linkedBenefitId: event.linkedBenefitId ?? null,
   amount: toNumber(event.amount),
   units: toNumber(event.units),
   pricePerUnit: toNumber(event.pricePerUnit),
@@ -166,6 +168,7 @@ export class EventPrismaRepository implements IEventDataSourcePort {
         investmentId: Number(data.investmentId),
         recurringPlanId: normalizeNullableNumber(data.recurringPlanId),
         linkedTransactionId: normalizeNullableNumber(data.linkedTransactionId),
+        linkedBenefitId: normalizeNullableNumber(data.linkedBenefitId),
         eventType: data.eventType,
         dueDate: parseOptionalDateInput(data.dueDate, 'dueDate'),
         status: data.status as InvestmentEventStatus | undefined,
@@ -229,6 +232,7 @@ export class EventPrismaRepository implements IEventDataSourcePort {
         investmentId: data.investmentId !== undefined ? Number(data.investmentId) : undefined,
         recurringPlanId: data.recurringPlanId !== undefined ? normalizeNullableNumber(data.recurringPlanId) : undefined,
         linkedTransactionId: data.linkedTransactionId !== undefined ? normalizeNullableNumber(data.linkedTransactionId) : undefined,
+        linkedBenefitId: data.linkedBenefitId !== undefined ? normalizeNullableNumber(data.linkedBenefitId) : undefined,
         eventType: data.eventType !== undefined ? data.eventType : undefined,
         dueDate: data.dueDate !== undefined ? parseOptionalDateInput(data.dueDate, 'dueDate') : undefined,
         status: data.status as InvestmentEventStatus | undefined,
@@ -255,7 +259,12 @@ export class EventPrismaRepository implements IEventDataSourcePort {
         await this.syncInvestmentDerivedValues(tx, investmentId);
       }
 
-      return mapEventOutput(updated);
+      const linkedBenefitId =
+        data.linkedBenefitId !== undefined
+          ? normalizeNullableNumber(data.linkedBenefitId)
+          : (existing as { linkedBenefitId?: number | null } | null)?.linkedBenefitId ?? null;
+
+      return mapEventOutput({ ...updated, linkedBenefitId });
     });
   }
 

@@ -13,6 +13,7 @@ const invalidateInvestmentSnapshotOwnership = (
   queryClient.invalidateQueries({ queryKey: ['investment-snapshots'] });
   queryClient.invalidateQueries({ queryKey: ['investments'] });
   queryClient.invalidateQueries({ queryKey: ['investments', 'dashboard'] });
+  queryClient.invalidateQueries({ queryKey: ['dashboard'] });
 
   if (investmentId == null || investmentId === '') return;
   // Normalize to number so string IDs from payload (String(id)) match numeric query keys

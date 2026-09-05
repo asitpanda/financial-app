@@ -16,9 +16,9 @@ export const mockUser: UserRecord = {
 // Login accepts: email OR userId OR mobile
 export const mockCredentials = {
   email: 'demo@example.com',
-  userId: 'demo123',
+  userId: 'demo1',
   mobile: '+1234567890',
-  password: 'password123',
+  password: '123456',
 };
 
 // Mock JWT token
@@ -39,7 +39,7 @@ export const registeredUsers: UserRecord[] = [
   },
   {
     id: 2,
-    userId: 'demo124',
+    userId: 'demo2',
     email: 'demo2@example.com',
     mobile: '+1234567891',
     name: 'Demo User 2',

@@ -5,6 +5,7 @@ export type InvestmentEventRecord = {
   investmentId: number;
   recurringPlanId: number | null;
   linkedTransactionId: number | null;
+  linkedBenefitId: number | null;
   eventType: InvestmentEventType;
   dueDate: Date | null;
   status:

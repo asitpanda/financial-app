@@ -1,4 +1,3 @@
-import { PAGE_MONTH_OPTIONS, FISCAL_YEAR_START_MONTH, type GlobalDateFilterState } from '../../store/pageDateFilterStore';
 import { getInvestmentCategoryOptions, normalizeInvestmentForUi } from '../../utils/investmentHelpers';
 import { getStableSeriesColorMap } from '../../colors';
 import type { CategoryRecord } from '../categories/categories.types';
@@ -16,96 +15,16 @@ import type {
 const getTransactionDate = (transaction: TransactionRecord) =>
   new Date(transaction.date || transaction.createdAt || Date.now());
 
-const summarizeSources = (
-  items: TransactionRecord[],
-  accountNameById: Record<number, string>,
-) => {
-  return items.reduce<Record<string, { name: string; income: number; expense: number; balance: number; transactions: number }>>(
-    (acc, item) => {
-      const sourceId = Number(item.sourceAccountId);
-      const sourceName =
-        accountNameById[sourceId] ||
-        String(item.source || 'Unknown source').trim() ||
-        'Unknown source';
-
-      if (!acc[sourceName]) {
-        acc[sourceName] = {
-          name: sourceName,
-          income: 0,
-          expense: 0,
-          balance: 0,
-          transactions: 0,
-        };
-      }
-
-      const amount = Number(item.amount) || 0;
-      if (item.type === 'income') {
-        acc[sourceName].income += amount;
-      } else {
-        acc[sourceName].expense += amount;
-      }
-
-      acc[sourceName].balance = acc[sourceName].income - acc[sourceName].expense;
-      acc[sourceName].transactions += 1;
-      return acc;
-    },
-    {},
-  );
-};
-
-export const getDashboardPeriodLabel = (filterState: GlobalDateFilterState) => {
-  if (filterState.scopeMode === 'tillNow') return 'Till Now';
-
-  if (filterState.scopeMode === 'range') {
-    if (!filterState.rangeStart || !filterState.rangeEnd) return 'Custom Range';
-    const start = new Date(filterState.rangeStart).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-    const end = new Date(filterState.rangeEnd).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-    return `${start} – ${end}`;
-  }
-
-  const { selectedYear, selectedMonth } = filterState;
-  if (filterState.mode === 'monthly') {
-    const fiscalYear = selectedMonth >= FISCAL_YEAR_START_MONTH ? selectedYear : selectedYear + 1;
-    return `${PAGE_MONTH_OPTIONS[selectedMonth]} ${fiscalYear}`;
-  }
-
-  return `FY ${selectedYear}-${String(selectedYear + 1).slice(-2)}`;
-};
-
-export const getDashboardFilteredTransactions = (
-  transactions: TransactionRecord[],
-  filterState: GlobalDateFilterState,
-  matchesGlobalDateFilter: (date: Date, state: GlobalDateFilterState) => boolean,
-) => {
-  return transactions.filter((transaction) => {
-    const date = getTransactionDate(transaction);
-    return matchesGlobalDateFilter(date, filterState);
-  });
-};
-
 export const getDashboardAccountOverviewRows = (
   accounts: DashboardPageData['accounts'],
-  periodBankSummaries: ReturnType<typeof summarizeSources>,
+  transactionCountByAccountId: Record<number, number>,
 ) => {
-  const openingBalanceByName = accounts.reduce<Record<string, number>>((acc, account) => {
-    const name = account.displayName || account.institutionName || account.name;
-    if (name) acc[name] = Number(account.openingBalance) || 0;
-    return acc;
-  }, {});
-
-  const allSources = new Set([
-    ...accounts.map((account) => account.displayName || account.institutionName || account.name),
-    ...Object.keys(periodBankSummaries),
-  ]);
-
-  const sourceNames = Array.from(allSources).filter((name): name is string => Boolean(name));
-
-  return sourceNames
-    .map<DashboardAccountOverviewRow>((name) => ({
-      name,
-      // account balance = opening balance + net of transactions within the selected period
-      balance: (openingBalanceByName[name] || 0) + (periodBankSummaries[name]?.balance || 0),
-      transactions: periodBankSummaries[name]?.transactions || 0,
+  return accounts
+    .map<DashboardAccountOverviewRow>((account) => ({
+      // Balance comes straight from the server (financial-accounts.currentBalance); no client-side recompute.
+      name: account.displayName || account.institutionName || account.name || 'Account',
+      balance: Number(account.currentBalance ?? account.openingBalance) || 0,
+      transactions: transactionCountByAccountId[Number(account.id)] || 0,
     }))
     .sort((left, right) => {
       if (right.balance !== left.balance) return right.balance - left.balance;
@@ -114,7 +33,7 @@ export const getDashboardAccountOverviewRows = (
 };
 
 export const getDashboardCategoryPieData = (filteredTransactions: TransactionRecord[]) => {
-  const filtered = filteredTransactions.filter((transaction) => transaction.type === 'expense');
+  const filtered = filteredTransactions.filter((transaction) => transaction.type === 'EXPENSE');
   const byCategory = filtered.reduce<Record<string, number>>((acc, transaction) => {
     const key = transaction.category || 'Uncategorized';
     acc[key] = (acc[key] || 0) + (Number(transaction.amount) || 0);
@@ -195,10 +114,10 @@ export const getDashboardMonthlySummary = (
   totals: { income: number; expense: number; balance: number },
 ) => {
   const incomeTransactions = filteredTransactions
-    .filter((transaction) => transaction.type === 'income')
+    .filter((transaction) => transaction.type === 'INCOME')
     .sort((left, right) => (Number(right.amount) || 0) - (Number(left.amount) || 0));
   const expenseTransactions = filteredTransactions
-    .filter((transaction) => transaction.type === 'expense')
+    .filter((transaction) => transaction.type === 'EXPENSE')
     .sort((left, right) => (Number(right.amount) || 0) - (Number(left.amount) || 0));
   const expenseDays = new Set(expenseTransactions.map((transaction) => getTransactionDate(transaction).toISOString().slice(0, 10)));
   const averageExpense = expenseDays.size > 0 ? totals.expense / expenseDays.size : 0;
@@ -213,33 +132,8 @@ export const getDashboardMonthlySummary = (
   } satisfies DashboardMonthlySummary;
 };
 
-export const getDashboardInvestmentPeriodBounds = (filterState: GlobalDateFilterState) => {
-  // Far-future/epoch bounds effectively mean "no restriction" for tillNow/open range ends.
-  if (filterState.scopeMode === 'tillNow') {
-    return { start: new Date(0), end: new Date(8640000000000000) };
-  }
-
-  if (filterState.scopeMode === 'range') {
-    const start = filterState.rangeStart ? new Date(filterState.rangeStart) : new Date(0);
-    const end = filterState.rangeEnd
-      ? new Date(new Date(filterState.rangeEnd).setHours(23, 59, 59, 999))
-      : new Date(8640000000000000);
-    return { start, end };
-  }
-
-  const { selectedYear, selectedMonth } = filterState;
-  if (filterState.mode === 'monthly') {
-    return {
-      start: new Date(selectedYear, selectedMonth, 1),
-      end: new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59, 999),
-    };
-  }
-
-  return {
-    start: new Date(selectedYear, FISCAL_YEAR_START_MONTH, 1),
-    end: new Date(selectedYear + 1, FISCAL_YEAR_START_MONTH, 0, 23, 59, 59, 999),
-  };
-};
+// Covers the entire investment history since there is no date filter on this screen.
+export const DASHBOARD_ALL_TIME_BOUNDS = { start: new Date(0), end: new Date(8640000000000000) };
 
 export const getDashboardInvestmentSummary = (
   investments: DashboardInvestmentRecord[],

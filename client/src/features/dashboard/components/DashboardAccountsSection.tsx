@@ -5,7 +5,6 @@ import { getProfitLossHexColor } from "../../../colors";
 
 interface DashboardAccountsSectionProps {
   accountOverviewRows: DashboardAccountOverviewRow[];
-  periodBalance: number;
   onAddAccount: () => void;
   onEditAccount: (accountName: string) => void;
 }
@@ -15,7 +14,6 @@ const formatCurrency = (value: number) =>
 
 export default function DashboardAccountsSection({
   accountOverviewRows,
-  periodBalance,
   onAddAccount,
   onEditAccount,
 }: DashboardAccountsSectionProps) {
@@ -42,21 +40,6 @@ export default function DashboardAccountsSection({
       }}
     >
       <div className="space-y-2">
-        <div className="grid gap-3">
-          <div className="rounded-[24px] border border-slate-100 bg-gradient-to-br from-white via-white to-emerald-50/40">
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-sm font-medium text-slate-500">Balance</p>
-              <div
-                className="text-right text-[30px] font-semibold tracking-tight"
-                style={{ color: getProfitLossHexColor(periodBalance, "gain") }}
-              >
-                {periodBalance >= 0 ? "+" : "-"}
-                {formatCurrency(Math.abs(periodBalance))}
-              </div>
-            </div>
-          </div>
-        </div>
-
         <div className="max-h-[324px] space-y-3 overflow-y-auto pr-1">
           {accountOverviewRows.map((bank) => {
             const isPositive = bank.balance >= 0;

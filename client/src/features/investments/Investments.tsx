@@ -43,7 +43,6 @@ import {
 } from "./hooks/useInvestmentAssetTaxonomy";
 import {
   getInvestmentCalendarGroups,
-  getInvestmentCategoryPerformanceRows,
   getInvestmentCategoryLabelMap,
   getInvestmentDashboardKpis,
   getInvestmentHoldingPerformanceRows,
@@ -55,12 +54,19 @@ import {
   getRecentInvestments,
   getTopInvestmentCurrentValueItems,
   getInvestmentContributionViewItems,
+  getInvestmentContributionAllocation,
+  getInvestmentContributionSubAllocation,
+  getInvestmentContributionHoldingAllocation,
+  getInvestmentCurrentValueAllocation,
+  getInvestmentCurrentValueSubAllocation,
+  getInvestmentCurrentValueHoldingAllocation,
 } from "./investments.selectors";
 import type { InvestmentDrawerData } from "./types/investment.types";
 import {
   useConfirmRecurringInvestmentContributionPlan,
   useUpdateInvestmentContributionPlan,
 } from "./hooks/useContributionPlans";
+import { useInvestmentBenefits } from "./hooks/useInvestmentBenefits";
 
 const VIEW_OPTIONS = [
   { value: "dashboard", label: "Dashboard" },
@@ -333,6 +339,7 @@ export default function Investments() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [treatmentFilter, setTreatmentFilter] = useState("all");
   const [uiError, setUiError] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [assetTaxonomyDrawerOpen, setAssetTaxonomyDrawerOpen] = useState(false);
@@ -373,10 +380,13 @@ export default function Investments() {
   const dashboardEnabled = activeView === "dashboard";
   const investmentEventsQuery = useInvestmentEventsData(activeView === "calendar");
   const dashboardAnalyticsQuery = useInvestmentDashboardAnalytics(dashboardEnabled);
+  const investmentBenefitsQuery = useInvestmentBenefits();
+  const investmentBenefitsData = investmentBenefitsQuery.data;
   const investmentEvents = investmentEventsQuery.data || [];
   const loading =
     investmentsLoading ||
     referenceDataLoading ||
+    investmentBenefitsQuery.isLoading ||
     (dashboardEnabled && dashboardAnalyticsQuery.isLoading);
   const error =
     uiError ||
@@ -384,17 +394,29 @@ export default function Investments() {
       ? "Failed to load investments"
       : referenceDataError
         ? "Failed to load investment reference data"
+          : investmentBenefitsQuery.error
+            ? "Failed to load investment benefits"
         : dashboardEnabled && dashboardAnalyticsQuery.error
           ? "Failed to load investment dashboard"
         : "");
 
-  const summaryInvestments = useMemo(
-    () =>
-      Array.isArray(rawInvestments)
-        ? getNormalizedInvestments(rawInvestments, taxonomyNodes)
-        : [],
-    [rawInvestments, taxonomyNodes],
-  );
+  const summaryInvestments = useMemo(() => {
+    if (!Array.isArray(rawInvestments)) return [];
+
+    const investmentBenefits = investmentBenefitsData ?? [];
+    const benefitsByInvestmentId = new Map<string, typeof investmentBenefits>();
+    for (const benefit of investmentBenefits) {
+      const key = String(benefit.investmentId);
+      const benefits = benefitsByInvestmentId.get(key) ?? [];
+      benefits.push(benefit);
+      benefitsByInvestmentId.set(key, benefits);
+    }
+
+    return getNormalizedInvestments(rawInvestments, taxonomyNodes).map((investment) => ({
+      ...investment,
+      benefits: benefitsByInvestmentId.get(String(investment.id)) ?? [],
+    }));
+  }, [rawInvestments, taxonomyNodes, investmentBenefitsData]);
 
   const selectedInvestmentSummary = getInvestmentSelectedById(
     summaryInvestments,
@@ -476,7 +498,8 @@ export default function Investments() {
   const hasInvestmentFilters =
     Boolean(search.trim()) ||
     statusFilter !== "all" ||
-    categoryFilter !== "all";
+    categoryFilter !== "all" ||
+    treatmentFilter !== "all";
   const isFirstInvestmentSetup =
     summaryInvestments.length === 0 && !hasInvestmentFilters;
 
@@ -539,26 +562,31 @@ export default function Investments() {
     () => getInvestmentHoldingPerformanceRows(summaryInvestments, 12),
     [summaryInvestments],
   );
+
   const categoryBreakdown = useMemo(
-    () =>
-      categoryPerformanceRows.map((row) => ({
-        key: row.key,
-        label: row.label,
-        value: row.invested,
-        investmentIds: row.investmentIds,
-      })),
-    [categoryPerformanceRows],
+    () => getInvestmentContributionAllocation(summaryInvestments, taxonomyNodes),
+    [summaryInvestments, taxonomyNodes],
   );
   const categorySubBreakdown = useMemo(
-    () =>
-      categoryPerformanceSubRows.map((row) => ({
-        key: row.key,
-        label: row.label,
-        value: row.invested,
-        investmentIds: row.investmentIds,
-        assetType: row.assetType,
-      })),
-    [categoryPerformanceSubRows],
+    () => getInvestmentContributionSubAllocation(summaryInvestments, taxonomyNodes),
+    [summaryInvestments, taxonomyNodes],
+  );
+  const holdingContributionRows = useMemo(
+    () => getInvestmentContributionHoldingAllocation(summaryInvestments),
+    [summaryInvestments],
+  );
+
+  const currentValueBreakdown = useMemo(
+    () => getInvestmentCurrentValueAllocation(summaryInvestments, taxonomyNodes),
+    [summaryInvestments, taxonomyNodes],
+  );
+  const currentValueSubBreakdown = useMemo(
+    () => getInvestmentCurrentValueSubAllocation(summaryInvestments, taxonomyNodes),
+    [summaryInvestments, taxonomyNodes],
+  );
+  const holdingCurrentValueRows = useMemo(
+    () => getInvestmentCurrentValueHoldingAllocation(summaryInvestments),
+    [summaryInvestments],
   );
 
   const timeSeriesData = useMemo(() => {
@@ -583,11 +611,18 @@ export default function Investments() {
         totalInvestments: Number(
           dashboardAnalyticsQuery.data.summary.totalInvestments ?? localDashboardKpis.totalInvestments,
         ),
+        totalContributions: Number(
+          dashboardAnalyticsQuery.data.summary.totalContributions ?? localDashboardKpis.totalContributions,
+        ),
         totalInvested: Number(
           dashboardAnalyticsQuery.data.summary.totalInvested ?? localDashboardKpis.totalInvested,
         ),
         totalCurrentValue: Number(
           dashboardAnalyticsQuery.data.summary.totalCurrentValue ?? localDashboardKpis.totalCurrentValue,
+        ),
+        totalCurrentValueFromInsuranceSavings: Number(
+          dashboardAnalyticsQuery.data.summary.totalCurrentValueFromInsuranceSavings ??
+            localDashboardKpis.totalCurrentValueFromInsuranceSavings,
         ),
         totalReturn: Number(
           dashboardAnalyticsQuery.data.summary.totalReturn ?? localDashboardKpis.totalReturn,
@@ -598,8 +633,20 @@ export default function Investments() {
         upcomingMaturity: Number(
           dashboardAnalyticsQuery.data.summary.upcomingMaturity ?? localDashboardKpis.upcomingMaturity,
         ),
+        upcomingMaturityFromInsuranceSavings: Number(
+          dashboardAnalyticsQuery.data.summary.upcomingMaturityFromInsuranceSavings ??
+            localDashboardKpis.upcomingMaturityFromInsuranceSavings,
+        ),
         insuranceCover: Number(
           dashboardAnalyticsQuery.data.summary.insuranceCover ?? localDashboardKpis.insuranceCover,
+        ),
+        insuranceCoverProtection: Number(
+          dashboardAnalyticsQuery.data.summary.insuranceCoverProtection ??
+            localDashboardKpis.insuranceCoverProtection,
+        ),
+        insuranceCoverSavings: Number(
+          dashboardAnalyticsQuery.data.summary.insuranceCoverSavings ??
+            localDashboardKpis.insuranceCoverSavings,
         ),
         insuranceSavingsContribution: Number(
           dashboardAnalyticsQuery.data.summary.insuranceSavingsContribution ??
@@ -655,9 +702,14 @@ export default function Investments() {
     setRecordActivityModalOpen(true);
   };
 
-  const openEditInvestmentActivity = (investment, event) => {
-    setSelectedInvestmentActivity({ investment, contributionPlan: null, editingEvent: event });
-    setRecordActivityMode("income_credit");
+  const openEditInvestmentActivity = (investment, item, activityType = "income_credit") => {
+    setSelectedInvestmentActivity({
+      investment,
+      contributionPlan: null,
+      editingEvent: activityType === "benefit" ? null : item,
+      editingBenefit: activityType === "benefit" ? item : null,
+    });
+    setRecordActivityMode(activityType === "benefit" ? "benefit" : "income_credit");
     setRecordActivityModalOpen(true);
   };
 
@@ -668,10 +720,6 @@ export default function Investments() {
 
   const openRecordContributionModal = (investment, contributionPlan) => {
     openRecordInvestmentActivity(investment, contributionPlan, "contribution");
-  };
-
-  const openRecordWithdrawalModal = (investment) => {
-    openRecordInvestmentActivity(investment, null, "withdrawal");
   };
 
   const closeInvestmentDrawer = () => {
@@ -689,6 +737,7 @@ export default function Investments() {
     setSearch("");
     setStatusFilter("all");
     setCategoryFilter("all");
+    setTreatmentFilter("all");
   };
 
   const handleSaveInvestment = async (formValues) => {
@@ -955,9 +1004,14 @@ export default function Investments() {
       categorySubBreakdown={categorySubBreakdown}
       categoryPerformanceSubRows={categoryPerformanceSubRows}
       holdingRows={holdingRows}
+      currentValueBreakdown={currentValueBreakdown}
+      currentValueSubBreakdown={currentValueSubBreakdown}
+      holdingCurrentValueRows={holdingCurrentValueRows}
+      holdingContributionRows={holdingContributionRows}
       topCurrentValueItems={topCurrentValueItems}
       upcomingContributions={upcomingContributions}
       recentInvestments={recentInvestments}
+      taxonomyNodes={taxonomyNodes}
       columns={columns}
       search={search}
       onSearchChange={setSearch}
@@ -965,11 +1019,12 @@ export default function Investments() {
       onStatusFilterChange={setStatusFilter}
       categoryFilter={categoryFilter}
       onCategoryFilterChange={setCategoryFilter}
+      treatmentFilter={treatmentFilter}
+      onTreatmentFilterChange={setTreatmentFilter}
       categoryOptions={assetTypeOptions}
       onResetFilters={handleResetFilters}
       onCreateInvestment={openCreateDrawer}
       onRecordContribution={openRecordContributionModal}
-      onRecordWithdrawal={openRecordWithdrawalModal}
       formatCurrency={formatInvestmentCurrency}
     />
   );
@@ -1152,6 +1207,7 @@ export default function Investments() {
         accounts={accounts}
         initialMode={recordActivityMode}
         editingEvent={selectedInvestmentActivity?.editingEvent}
+        editingBenefit={selectedInvestmentActivity?.editingBenefit}
       />
 
       <RecurringOccurrencesReviewDialog

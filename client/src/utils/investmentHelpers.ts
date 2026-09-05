@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import type {
   FrequencyCadenceOption,
   InvestmentAssetTypeConfig,
+  InvestmentBenefitType,
   InvestmentFrequency,
 } from '../features/investments/types/investment.types';
 
@@ -28,6 +29,25 @@ export const DEFAULT_FREQUENCY: InvestmentFrequency = 'monthly';
 export const FREQUENCY_SELECT_OPTIONS = FREQUENCY_CADENCE_OPTIONS.map(
   ({ frequency, label }) => ({ value: frequency, label }),
 );
+
+// Keep client labels aligned with the server InvestmentBenefitType enum.
+export const INVESTMENT_BENEFIT_OPTIONS: Array<{
+  value: InvestmentBenefitType;
+  label: string;
+}> = [
+  { label: 'Maturity', value: 'MATURITY' },
+  { label: 'Surrender', value: 'SURRENDER' },
+  { label: 'Coupon', value: 'COUPON' },
+  { label: 'Interest', value: 'INTEREST' },
+  { label: 'Principal Redemption', value: 'PRINCIPAL_REDEMPTION' },
+  { label: 'Annuity', value: 'ANNUITY' },
+  { label: 'Money Back', value: 'MONEY_BACK' },
+  { label: 'Survival Benefit', value: 'SURVIVAL' },
+  { label: 'Bonus', value: 'BONUS' },
+  { label: 'Return of Premium', value: 'RETURN_OF_PREMIUM' },
+  { label: 'Death Benefit', value: 'DEATH_BENEFIT' },
+  { label: 'Other', value: 'OTHER' },
+];
 
 const getDefaultCadenceOption = () =>
   FREQUENCY_CADENCE_OPTIONS.find((option) => option.frequency === DEFAULT_FREQUENCY)!;
@@ -340,5 +360,13 @@ export const buildInvestmentFromForm = (form, existingId, taxonomyNodes = []) =>
     contributionMode: form.contributionType === 'recurring' ? 'RECURRING' : 'ONE_TIME',
     referenceNumber: form.referenceNumber.trim() || null,
     notes: form.notes.trim() || null,
+    expectedBenefits: Array.isArray(form.expectedBenefits) && form.expectedBenefits.length > 0
+      ? form.expectedBenefits.map((benefit) => ({
+          benefitType: benefit.benefitType,
+          amount: Number(benefit.amount || 0),
+          benefitDate: normalizeDateValue(benefit.benefitDate),
+          notes: benefit.notes || undefined,
+        }))
+      : undefined,
   };
 };

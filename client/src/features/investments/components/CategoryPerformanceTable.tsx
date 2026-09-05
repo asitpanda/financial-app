@@ -59,7 +59,7 @@ export default function CategoryPerformanceTable({
     ? (holdingRows ?? []).filter((r) => r.assetType === drilledType && r.assetCategory === drilledCategory)
     : drilledType
     ? (subRows ?? []).filter((r) => r.assetType === drilledType)
-    : rows.slice(0, 6);
+    : rows;
 
   const handleBack = () => {
     if (drilledCategory) {

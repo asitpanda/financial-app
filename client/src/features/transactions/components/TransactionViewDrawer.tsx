@@ -2,6 +2,7 @@ import { Box, Divider, Stack, Typography } from "@mui/material";
 import Button from "../../../components/common/AppButton";
 import { SectionCard, StatusChip } from "../../../components/common";
 import AppDrawer from "../../../components/drawers/AppDrawer";
+import { getTransactionMovementHexColor } from "../../../colors";
 import type { TransactionRecord } from "../transaction.types";
 
 interface TransactionViewDrawerProps {
@@ -64,6 +65,11 @@ export function TransactionViewDrawer({
     </Box>
   );
 
+  const isMovementType =
+    transaction?.type === "TRANSFER" || transaction?.type === "INVESTMENT";
+  const movementHexColor = isMovementType
+    ? getTransactionMovementHexColor(transaction!.type as "TRANSFER" | "INVESTMENT")
+    : undefined;
   const amountTone = transaction?.type === "EXPENSE" ? "error" : "success";
   const sourceLabel = transaction?.sourceAccountId != null
     ? accountNameById[Number(transaction.sourceAccountId)] || String(transaction.sourceAccountId)
@@ -125,16 +131,17 @@ export function TransactionViewDrawer({
                     sx={{
                       mt: 0.5,
                       fontWeight: 800,
-                      color: `${amountTone}.main`,
+                      color: movementHexColor || `${amountTone}.main`,
                     }}
                   >
-                    {transaction.type === "EXPENSE" ? "-" : "+"}{" "}
+                    {transaction.type === "EXPENSE" ? "-" : isMovementType ? "" : "+"}{" "}
                     {formatCurrency(transaction.amount)}
                   </Typography>
                 </Box>
                 <StatusChip
                   label={transaction.type || "Unknown"}
                   tone={amountTone}
+                  hexColor={movementHexColor}
                 />
               </Box>
 

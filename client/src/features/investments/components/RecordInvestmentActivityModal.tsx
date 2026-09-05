@@ -15,10 +15,12 @@ import AppButton from '../../../components/common/AppButton';
 import {
   LabelCurrencyField,
   LabeledDateField,
+  LabeledSelectField,
   LabeledTextField,
   LabeledTextareaField,
 } from '../../../components/common';
 import { getProfitLossHexColor } from '../../../colors';
+import { INVESTMENT_BENEFIT_OPTIONS } from '../../../utils/investmentHelpers';
 import {
   useRecordInvestmentContribution,
   useRecordInvestmentIncomeCredit,
@@ -26,6 +28,7 @@ import {
   useSkipCurrentInvestmentContribution,
   useUpdateInvestmentEvent,
 } from '../hooks/useContributionPlans';
+import { useCreateInvestmentBenefit, useUpdateInvestmentBenefit } from '../hooks/useInvestmentBenefits';
 import { useNotificationStore } from '../../../store/notificationStore';
 import { INVESTMENT_EVENT_TYPES } from '../../../types/investmentEventTypes';
 
@@ -65,6 +68,13 @@ const MODES = {
     dateLabel: 'Credit date',
     helperText: 'Records income retained inside this investment. No money enters a financial account.',
   },
+  benefit: {
+    label: 'Benefit',
+    title: 'Add Investment Benefit',
+    submitLabel: 'Add Benefit',
+    dateLabel: 'Expected benefit date',
+    helperText: 'Adds a future contractual payout to this investment.',
+  },
 };
 
 const formatCurrency = (value) => {
@@ -80,11 +90,14 @@ export default function RecordInvestmentActivityModal({
   accounts = [],
   initialMode = 'contribution',
   editingEvent = null,
+  editingBenefit = null,
 }) {
   const isEditing = Boolean(editingEvent?.id);
-  const [mode, setMode] = useState(isEditing ? 'income_credit' : initialMode);
+  const isEditingBenefit = Boolean(editingBenefit?.id);
+  const [mode, setMode] = useState(isEditingBenefit ? 'benefit' : isEditing ? 'income_credit' : initialMode);
   const [date, setDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [amount, setAmount] = useState('');
+  const [benefitType, setBenefitType] = useState('MATURITY');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
   const [action, setAction] = useState(null);
@@ -92,6 +105,8 @@ export default function RecordInvestmentActivityModal({
   const recordWithdrawal = useRecordInvestmentWithdrawal();
   const recordIncomeCredit = useRecordInvestmentIncomeCredit();
   const updateInvestmentEvent = useUpdateInvestmentEvent();
+  const createInvestmentBenefit = useCreateInvestmentBenefit();
+  const updateInvestmentBenefit = useUpdateInvestmentBenefit();
   const skipContribution = useSkipCurrentInvestmentContribution();
   const pushNotification = useNotificationStore((state) => state.pushNotification);
   const pending = Boolean(action);
@@ -115,6 +130,16 @@ export default function RecordInvestmentActivityModal({
 
   useEffect(() => {
     if (!open) return;
+    if (isEditingBenefit) {
+      setMode('benefit');
+      setDate(editingBenefit?.benefitDate ? dayjs(editingBenefit.benefitDate).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'));
+      setAmount(editingBenefit?.amount != null ? String(editingBenefit.amount) : '');
+      setBenefitType(editingBenefit?.benefitType || 'MATURITY');
+      setNotes(editingBenefit?.notes || '');
+      setError('');
+      setAction(null);
+      return;
+    }
     if (isEditing) {
       setMode('income_credit');
       setDate(editingEvent?.eventDate ? dayjs(editingEvent.eventDate).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'));
@@ -127,10 +152,11 @@ export default function RecordInvestmentActivityModal({
     setMode(initialMode);
     setDate(dayjs().format('YYYY-MM-DD'));
     setAmount(contributionPlan?.amount && initialMode === 'contribution' ? String(contributionPlan.amount) : '');
+    setBenefitType('MATURITY');
     setNotes('');
     setError('');
     setAction(null);
-  }, [open, investment?.id, contributionPlan?.id, contributionPlan?.amount, initialMode, isEditing, editingEvent]);
+  }, [open, investment?.id, contributionPlan?.id, contributionPlan?.amount, initialMode, isEditing, editingEvent, isEditingBenefit, editingBenefit]);
 
   const handleModeChange = (_event, nextMode) => {
     if (!nextMode || pending || isEditing) return;
@@ -154,7 +180,18 @@ export default function RecordInvestmentActivityModal({
     setAction('record');
     setError('');
     try {
-      if (isEditing) {
+      if (isEditingBenefit) {
+        await updateInvestmentBenefit.mutateAsync({
+          investmentId: String(investment.id),
+          benefitId: editingBenefit.id,
+          payload: {
+            benefitType,
+            amount: numericAmount,
+            benefitDate: date,
+            notes: notes || undefined,
+          },
+        });
+      } else if (isEditing) {
         await updateInvestmentEvent.mutateAsync({
           investmentId: String(investment.id),
           eventId: editingEvent.id,
@@ -180,6 +217,16 @@ export default function RecordInvestmentActivityModal({
           transactionDate: date,
           notes: notes || undefined,
         });
+      } else if (mode === 'benefit') {
+        await createInvestmentBenefit.mutateAsync({
+          investmentId: String(investment.id),
+          payload: {
+            benefitType,
+            amount: numericAmount,
+            benefitDate: date,
+            notes: notes || undefined,
+          },
+        });
       } else {
         await recordIncomeCredit.mutateAsync({
           investmentId: String(investment.id),
@@ -195,7 +242,7 @@ export default function RecordInvestmentActivityModal({
         });
       }
 
-      pushNotification({ type: 'success', message: isEditing ? 'Income credit updated successfully' : `${modeConfig.label} recorded successfully` });
+      pushNotification({ type: 'success', message: isEditingBenefit ? 'Investment benefit updated successfully' : isEditing ? 'Income credit updated successfully' : `${modeConfig.label} recorded successfully` });
       onClose();
     } catch (requestError) {
       setError(requestError?.response?.data?.message || requestError?.message || `Failed to record ${modeConfig.label.toLowerCase()}`);
@@ -224,9 +271,9 @@ export default function RecordInvestmentActivityModal({
     }
   };
 
-  const showAccount = !isEditing && (mode === 'contribution' || mode === 'withdrawal');
+  const showAccount = !isEditing && !isEditingBenefit && (mode === 'contribution' || mode === 'withdrawal');
   const accountLabelText = mode === 'contribution' ? 'Funding account' : 'Receiving account';
-  const showSkip = !isEditing && mode === 'contribution' && Boolean(contributionPlan?.id && contributionPlan?.nextDueDate);
+  const showSkip = !isEditing && !isEditingBenefit && mode === 'contribution' && Boolean(contributionPlan?.id && contributionPlan?.nextDueDate);
 
   return (
     <Modal open={open} onClose={pending ? undefined : onClose} aria-labelledby="record-investment-activity-modal">
@@ -242,7 +289,7 @@ export default function RecordInvestmentActivityModal({
         >
           <Box sx={{ minWidth: 0 }}>
             <Typography id="record-investment-activity-modal" variant="h6" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>
-              {isEditing ? 'Edit Income Credit' : 'Record Investment Activity'}
+              {isEditingBenefit ? 'Edit Investment Benefit' : isEditing ? 'Edit Income Credit' : 'Record Investment Activity'}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               {investment?.name}
@@ -268,7 +315,7 @@ export default function RecordInvestmentActivityModal({
           </Box>
         </Box>
 
-        {!isEditing ? (
+        {!isEditing && !isEditingBenefit ? (
           <ToggleButtonGroup
             exclusive
             fullWidth
@@ -304,7 +351,16 @@ export default function RecordInvestmentActivityModal({
         ) : null}
 
         <Stack spacing={1} sx={{ mt: 2.25 }}>
-          <Alert severity={mode === 'income_credit' ? 'info' : 'warning'}>{modeConfig.helperText}</Alert>
+          <Alert severity={mode === 'income_credit' || mode === 'benefit' ? 'info' : 'warning'}>{modeConfig.helperText}</Alert>
+
+          {mode === 'benefit' ? (
+            <LabeledSelectField
+              labelText="Benefit type"
+              value={benefitType}
+              onChange={(event) => setBenefitType(event.target.value)}
+              options={INVESTMENT_BENEFIT_OPTIONS}
+            />
+          ) : null}
 
           {showAccount ? (
             <LabeledTextField
@@ -382,7 +438,7 @@ export default function RecordInvestmentActivityModal({
               sx={{ whiteSpace: 'nowrap' }}
             >
               {action === 'record' ? <CircularProgress size={18} sx={{ mr: 0.75 }} /> : null}
-              {isEditing ? 'Save Changes' : modeConfig.submitLabel}
+              {isEditingBenefit || isEditing ? 'Save Changes' : modeConfig.submitLabel}
             </AppButton>
           </Box>
         </Box>

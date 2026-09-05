@@ -18,6 +18,7 @@ const invalidateInvestmentContributionQueries = (
 ) => {
   queryClient.invalidateQueries({ queryKey: ['investments'] });
   queryClient.invalidateQueries({ queryKey: ['investments', 'dashboard'] });
+  queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   queryClient.invalidateQueries({ queryKey: ['investment-events'] });
   queryClient.invalidateQueries({ queryKey: ['investment-events', investmentId] });
   queryClient.invalidateQueries({ queryKey: ['investment', investmentId] });
@@ -40,6 +41,7 @@ export const useUpdateInvestmentContributionPlan = () => {
     onSuccess: (_result, variables) => {
       queryClient.invalidateQueries({ queryKey: ['investments'] });
       queryClient.invalidateQueries({ queryKey: ['investments', 'dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['investment', variables.investmentId] });
     },
   });

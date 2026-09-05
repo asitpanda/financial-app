@@ -1,12 +1,13 @@
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import type { TransactionRecord } from "./transaction.types";
-import type { GlobalDateFilterState } from "../../store/pageDateFilterStore";
 
 interface TransactionFilterInput {
   dateRange: [Dayjs | null, Dayjs | null];
   typeFilter: string;
   categoryFilter: string;
+  sourceAccountFilter: string;
+  destinationAccountFilter: string;
   search: string;
   goalNameById: Record<string, string>;
   accountNameById: Record<number, string>;
@@ -32,19 +33,8 @@ interface TransactionTableRow {
   notes: string;
 }
 
-export const getSortedTransactions = (
-  transactions: TransactionRecord[],
-  filterState: GlobalDateFilterState,
-  matchesGlobalDateFilter: (date: Date, state: GlobalDateFilterState) => boolean,
-) => {
-  const pageFilteredTransactions = transactions.filter(
-    (tx: TransactionRecord) => {
-      const transactionDate = new Date(tx.date || tx.createdAt || Date.now());
-      return matchesGlobalDateFilter(transactionDate, filterState);
-    },
-  );
-
-  return [...pageFilteredTransactions].sort(
+export const getSortedTransactions = (transactions: TransactionRecord[]) => {
+  return [...transactions].sort(
     (a: TransactionRecord, b: TransactionRecord) =>
       new Date(b.date || b.createdAt).getTime() -
       new Date(a.date || a.createdAt).getTime(),
@@ -57,6 +47,8 @@ export const getFilteredTransactions = (
     dateRange,
     typeFilter,
     categoryFilter,
+    sourceAccountFilter,
+    destinationAccountFilter,
     search,
     goalNameById,
     accountNameById,
@@ -83,6 +75,16 @@ export const getFilteredTransactions = (
 
     if (typeFilter !== "all" && tx.type !== typeFilter) return false;
     if (categoryFilter !== "all" && txCategory !== categoryFilter) return false;
+    if (
+      sourceAccountFilter !== "all" &&
+      String(tx.sourceAccountId) !== sourceAccountFilter
+    )
+      return false;
+    if (
+      destinationAccountFilter !== "all" &&
+      String(tx.destinationAccountId) !== destinationAccountFilter
+    )
+      return false;
 
     const haystack =
       `${txCategory} ${tx.type || ""} ${sourceLabel} ${goalName} ${tx.notes || ""}`.toLowerCase();

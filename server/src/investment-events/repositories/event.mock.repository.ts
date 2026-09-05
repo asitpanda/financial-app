@@ -75,6 +75,7 @@ export class EventMockRepository implements IEventDataSourcePort {
       investmentId: Number(data.investmentId),
       recurringPlanId: normalizeNullableNumber(data.recurringPlanId),
       linkedTransactionId: normalizeNullableNumber(data.linkedTransactionId),
+      linkedBenefitId: normalizeNullableNumber(data.linkedBenefitId),
       eventType: data.eventType,
       dueDate: normalizeDate(data.dueDate),
       status: (data.status || 'PENDING') as InvestmentEventRecord['status'],
@@ -126,6 +127,7 @@ export class EventMockRepository implements IEventDataSourcePort {
       investmentId: data.investmentId !== undefined ? Number(data.investmentId) : mockInvestmentEvents[index].investmentId,
       recurringPlanId: data.recurringPlanId !== undefined ? normalizeNullableNumber(data.recurringPlanId) : mockInvestmentEvents[index].recurringPlanId,
       linkedTransactionId: data.linkedTransactionId !== undefined ? normalizeNullableNumber(data.linkedTransactionId) : mockInvestmentEvents[index].linkedTransactionId,
+      linkedBenefitId: data.linkedBenefitId !== undefined ? normalizeNullableNumber(data.linkedBenefitId) : mockInvestmentEvents[index].linkedBenefitId,
       eventType: data.eventType !== undefined ? data.eventType : mockInvestmentEvents[index].eventType,
       dueDate: data.dueDate !== undefined ? normalizeDate(data.dueDate) : mockInvestmentEvents[index].dueDate,
       status:

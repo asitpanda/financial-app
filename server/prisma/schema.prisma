@@ -56,6 +56,7 @@ enum AccountingTreatment {
 
 enum InvestmentBenefitType {
   MATURITY
+  SURRENDER
   COUPON
   INTEREST
   PRINCIPAL_REDEMPTION
@@ -304,6 +305,7 @@ model InvestmentEvent {
   investmentId          Int
   recurringPlanId       Int?
   linkedTransactionId   Int?
+  linkedBenefitId       Int?
   eventType             InvestmentEventType
   dueDate               DateTime?
   status                InvestmentEventStatus @default(PENDING)
@@ -322,10 +324,11 @@ model InvestmentEvent {
   investment            Investment         @relation(fields: [investmentId], references: [id], onDelete: Cascade)
   recurringPlan         InvestmentContributionPlan? @relation(fields: [recurringPlanId], references: [id], onDelete: SetNull)
   linkedTransaction     Transaction?       @relation("InvestmentEventLinkedTransaction", fields: [linkedTransactionId], references: [id], onDelete: SetNull)
-  linkedBenefits        InvestmentBenefit[]
+  linkedBenefit         InvestmentBenefit? @relation(fields: [linkedBenefitId], references: [id], onDelete: SetNull)
 
   @@index([investmentId])
   @@index([recurringPlanId])
+  @@index([linkedBenefitId])
   @@index([dueDate])
   @@index([status])
   @@unique([linkedTransactionId])
@@ -341,12 +344,11 @@ model InvestmentBenefit {
   benefitDate  DateTime
   status       InvestmentBenefitStatus @default(EXPECTED)
   notes        String?
-  linkedEventId Int?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   investment   Investment       @relation(fields: [investmentId], references: [id], onDelete: Cascade)
-  linkedEvent  InvestmentEvent? @relation(fields: [linkedEventId], references: [id], onDelete: SetNull)
+  realizedEvents InvestmentEvent[]
 
   @@index([investmentId])
   @@index([status])

@@ -6,16 +6,21 @@ type StatusTone = 'success' | 'error' | 'warning' | 'info' | 'default';
 interface StatusChipProps {
   label: string;
   tone?: StatusTone;
+  hexColor?: string;
 }
 
-export default function StatusChip({ label, tone = 'default' }: StatusChipProps) {
+export default function StatusChip({ label, tone = 'default', hexColor }: StatusChipProps) {
   return (
     <Chip
       size="small"
       label={label}
       variant="outlined"
-      color={tone === 'default' ? 'default' : tone}
-      sx={{ textTransform: 'capitalize', fontWeight: 600 }}
+      color={hexColor ? undefined : tone === 'default' ? 'default' : tone}
+      sx={{
+        textTransform: 'capitalize',
+        fontWeight: 600,
+        ...(hexColor ? { color: hexColor, borderColor: hexColor } : {}),
+      }}
     />
   );
 }

@@ -6,16 +6,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { DatabaseModule } from '../database/database.module';
-
-function requireJwtSecret(configService: ConfigService): string {
-  const jwtSecret = String(configService.get('JWT_SECRET') ?? '').trim();
-
-  if (!jwtSecret) {
-    throw new Error('JWT_SECRET is required. Refusing to start without a signing secret.');
-  }
-
-  return jwtSecret;
-}
+import { requireJwtSecret, resolveJwtExpiresIn } from './jwt-config.util';
 
 @Module({
   imports: [
@@ -26,7 +17,7 @@ function requireJwtSecret(configService: ConfigService): string {
       useFactory: (configService: ConfigService) => ({
         secret: requireJwtSecret(configService),
         signOptions: {
-          expiresIn: configService.get('JWT_EXPIRES_IN', '7d'),
+          expiresIn: resolveJwtExpiresIn(configService),
         },
       }),
       inject: [ConfigService],

@@ -7,7 +7,7 @@ import type {
 import { getStableSeriesColorMap } from "../../../colors";
 
 interface DashboardInvestmentsSectionProps {
-  selectedPeriodLabel: string;
+  selectedPeriodLabel?: string;
   investments: DashboardPageData["investments"];
   investmentSummary: DashboardInvestmentSummary;
   onOpenInvestments: () => void;
@@ -44,7 +44,6 @@ const ACTION_AMOUNT_STYLES: Record<DashboardInvestmentActionItem["kind"], string
 };
 
 export default function DashboardInvestmentsSection({
-  selectedPeriodLabel,
   investments,
   investmentSummary,
   onOpenInvestments,
@@ -59,18 +58,13 @@ export default function DashboardInvestmentsSection({
     <SectionCard
       title="Investments Snapshot"
       action={
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500">
-            {selectedPeriodLabel}
-          </span>
-          <button
-            type="button"
-            onClick={onOpenInvestments}
-            className="text-sm font-semibold text-emerald-600 transition hover:text-emerald-700"
-          >
-            Open Investments
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onOpenInvestments}
+          className="text-sm font-semibold text-emerald-600 transition hover:text-emerald-700"
+        >
+          Open Investments
+        </button>
       }
       className="h-full xl:col-span-2 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
       empty={investments.length === 0}
@@ -83,66 +77,6 @@ export default function DashboardInvestmentsSection({
       }}
     >
       <div className="space-y-3">
-        <div className="rounded-[18px] border border-slate-100 bg-slate-50 px-4 py-3">
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {investmentSummary.actionItemsTotalCount === 0 ? (
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                ✓ All caught up
-              </span>
-            ) : (
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                  investmentSummary.actionItems[0]?.kind === "overdue"
-                    ? "bg-rose-100 text-rose-700"
-                    : "bg-amber-100 text-amber-700"
-                }`}
-              >
-                ⚠ {investmentSummary.actionItemsTotalCount} need
-                {investmentSummary.actionItemsTotalCount === 1 ? "s" : ""}{" "}
-                attention
-              </span>
-            )}
-            {investmentSummary.staleValuationCount > 0 && (
-              <button
-                type="button"
-                onClick={onOpenInvestments}
-                className="text-[11px] font-semibold text-slate-400 transition hover:text-slate-600"
-              >
-                {investmentSummary.staleValuationCount} holding
-                {investmentSummary.staleValuationCount === 1 ? "" : "s"}{" "}
-                unvalued 90+ days →
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-              Investable portfolio
-            </div>
-            <div className="mt-1 text-lg font-bold text-slate-900">
-              {formatCurrency(investmentSummary.periodTotalInvested)}
-            </div>
-          </div>
-          <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-              Insurance savings
-            </div>
-            <div className="mt-1 text-lg font-bold text-sky-700">
-              {formatCurrency(investmentSummary.insuranceSavingsContribution)}
-            </div>
-          </div>
-          <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-              Protection expense
-            </div>
-            <div className="mt-1 text-lg font-bold text-rose-600">
-              {formatCurrency(investmentSummary.protectionExpenseTotal)}
-            </div>
-          </div>
-        </div>
-
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <div className="rounded-[18px] border border-slate-200 bg-slate-50/80 px-4 py-3">
             <div className="mb-3 flex items-center justify-between">
@@ -157,7 +91,7 @@ export default function DashboardInvestmentsSection({
               <div className="space-y-2.5">
                 {investmentSummary.allocationBreakdown
                   .slice(0, ALLOCATION_VISIBLE_LIMIT)
-                  .map((item, index) => (
+                  .map((item) => (
                     <div
                       key={item.key}
                       className="grid grid-cols-[80px_minmax(0,1fr)_56px_72px] items-center gap-2"
@@ -206,8 +140,27 @@ export default function DashboardInvestmentsSection({
           </div>
 
           <div className="rounded-[18px] border border-slate-200 bg-slate-50/80 px-4 py-3">
-            <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-              Needs Attention
+            <div className="mb-2.5 flex items-center justify-between gap-2">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                Needs Attention
+              </div>
+              {investmentSummary.actionItemsTotalCount === 0 ? (
+                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                  ✓ All caught up
+                </span>
+              ) : (
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
+                    investmentSummary.actionItems[0]?.kind === "overdue"
+                      ? "bg-rose-100 text-rose-700"
+                      : "bg-amber-100 text-amber-700"
+                  }`}
+                >
+                  ⚠ {investmentSummary.actionItemsTotalCount} need
+                  {investmentSummary.actionItemsTotalCount === 1 ? "s" : ""}{" "}
+                  attention
+                </span>
+              )}
             </div>
             {investmentSummary.actionItems.length > 0 ? (
               <div className="space-y-2">
@@ -257,30 +210,35 @@ export default function DashboardInvestmentsSection({
                 No contributions or maturities need attention
               </div>
             )}
+            {investmentSummary.staleValuationCount > 0 && (
+              <div className="mt-2.5 flex items-center justify-between border-t border-slate-200/80 pt-2 text-[11px]">
+                <span className="font-medium text-slate-400">Valuation alert</span>
+                <button
+                  type="button"
+                  onClick={onOpenInvestments}
+                  className="font-semibold text-amber-700 transition hover:text-amber-800"
+                >
+                  {investmentSummary.staleValuationCount} holding
+                  {investmentSummary.staleValuationCount === 1 ? "" : "s"}{" "}
+                  unvalued 90+ days →
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-slate-200 px-4 py-3 text-sm">
-          <div>
-            <span className="font-semibold text-slate-900">
-              {investmentSummary.activeCount}
+        <div className="rounded-[14px] border border-slate-200 px-4 py-3 text-sm">
+          <span className="font-semibold text-slate-900">
+            {investmentSummary.activeCount}
+          </span>
+          <span className="ml-1 text-slate-500">
+            active investments tracked
+          </span>
+          {investmentSummary.insuranceCover > 0 && (
+            <span className="ml-2 text-slate-400">
+              · {formatCurrency(investmentSummary.insuranceCover)} insured
             </span>
-            <span className="ml-1 text-slate-500">
-              active investments tracked
-            </span>
-            {investmentSummary.insuranceCover > 0 && (
-              <span className="ml-2 text-slate-400">
-                · {formatCurrency(investmentSummary.insuranceCover)} insured
-              </span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={onOpenInvestments}
-            className="font-semibold text-emerald-600 transition hover:text-emerald-700"
-          >
-            Review assets →
-          </button>
+          )}
         </div>
       </div>
     </SectionCard>

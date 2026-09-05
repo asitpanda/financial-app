@@ -11,11 +11,14 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   Paper,
   Stack,
   Typography,
 } from "@mui/material";
 import { RichTreeView } from "@mui/x-tree-view/RichTreeView";
+import { mdiPlus, mdiDeleteOutline } from "@mdi/js";
+import Icon from "@mdi/react";
 import AppDrawer from "../../../components/drawers/AppDrawer";
 import AppButton from "../../../components/common/AppButton";
 import {
@@ -38,6 +41,7 @@ import {
   cadenceToFrequency,
   DEFAULT_FREQUENCY,
   FREQUENCY_SELECT_OPTIONS,
+  INVESTMENT_BENEFIT_OPTIONS,
 } from "../../../utils/investmentHelpers";
 
 const toDayjsOrNull = (value) => {
@@ -125,6 +129,15 @@ export default function InvestmentFormDrawer({
   });
   const [pastInvestmentChoice, setPastInvestmentChoice] = useState("no");
   const [recurringErrors, setRecurringErrors] = useState({});
+  const [expectedBenefits, setExpectedBenefits] = useState([]);
+  const [benefitFormOpen, setBenefitFormOpen] = useState(false);
+  const [newBenefit, setNewBenefit] = useState({
+    benefitType: "MATURITY",
+    amount: "",
+    benefitDate: null,
+    notes: "",
+  });
+  const [benefitErrors, setBenefitErrors] = useState({});
 
   useEffect(() => {
     if (!open) return;
@@ -152,6 +165,23 @@ export default function InvestmentFormDrawer({
     setErrors({});
     setRecurringErrors({});
     setLocalSubmitError("");
+    setBenefitErrors({});
+    setBenefitFormOpen(false);
+    setNewBenefit({
+      benefitType: "MATURITY",
+      amount: "",
+      benefitDate: null,
+      notes: "",
+    });
+    setExpectedBenefits(
+      (Array.isArray(initialValues?.benefits) ? initialValues.benefits : []).map((benefit) => ({
+        id: benefit.id,
+        benefitType: benefit.benefitType,
+        amount: benefit.amount,
+        benefitDate: benefit.benefitDate,
+        notes: benefit.notes,
+      }))
+    );
     setContributionType(existingPlan ? "recurring" : "one-time");
     setRecurringPlan({
       frequency: cadenceToFrequency(
@@ -322,10 +352,50 @@ export default function InvestmentFormDrawer({
       ...form,
       contributionType,
       recurringPlan: contributionType === "recurring" ? recurringPlan : null,
+      expectedBenefits: expectedBenefits.length > 0 ? expectedBenefits : null,
     });
     if (typeof result === "string" && result.trim()) {
       setLocalSubmitError(result);
     }
+  };
+
+  const handleAddBenefit = () => {
+    const errors = {};
+    if (!newBenefit.benefitType) {
+      errors.benefitType = "Benefit type is required";
+    }
+    if (!newBenefit.amount || Number(newBenefit.amount) <= 0) {
+      errors.amount = "Amount must be greater than 0";
+    }
+    if (!newBenefit.benefitDate) {
+      errors.benefitDate = "Benefit date is required";
+    }
+    if (Object.keys(errors).length > 0) {
+      setBenefitErrors(errors);
+      return;
+    }
+    setBenefitErrors({});
+    setExpectedBenefits((current) => [
+      ...current,
+      {
+        id: `temp_${Date.now()}`,
+        benefitType: newBenefit.benefitType,
+        amount: Number(newBenefit.amount),
+        benefitDate: newBenefit.benefitDate,
+        notes: newBenefit.notes || null,
+      },
+    ]);
+    setNewBenefit({
+      benefitType: "MATURITY",
+      amount: "",
+      benefitDate: null,
+      notes: "",
+    });
+    setBenefitFormOpen(false);
+  };
+
+  const handleRemoveBenefit = (id) => {
+    setExpectedBenefits((current) => current.filter((benefit) => benefit.id !== id));
   };
 
   const resolvedSubmitError = submitError || localSubmitError;
@@ -860,11 +930,13 @@ export default function InvestmentFormDrawer({
               value={displayCurrentValue}
               onValueChange={(value) => handleFormChange("currentValue", value)}
               helperText={
-                isInsuranceSavings
-                  ? "Optional policy value; excluded from portfolio return totals."
-                  : "System-calculated from valuation import/history."
+                isRecurring && !isInsuranceSavings
+                  ? "System-calculated from valuation import/history."
+                  : isInsuranceSavings
+                    ? "Optional policy value; excluded from portfolio return totals."
+                    : "Enter today's value if it differs from the invested amount; any difference is recorded as opening gain."
               }
-              disabled={!isInsuranceSavings}
+              disabled={isRecurring && !isInsuranceSavings}
             />
             <LabeledDateField
               labelText={isInsurance ? "Policy Term End Date (Optional)" : "Maturity Date (Optional)"}
@@ -1113,6 +1185,163 @@ export default function InvestmentFormDrawer({
             </Stack>
           </SectionCard>
         ) : null}
+
+        <SectionCard
+          title="Expected Benefits"
+          subtitle="Optional: Add contractual future payouts (maturity, surrender, interest, bonuses, etc.)."
+        >
+          <Stack spacing={1.5}>
+            {expectedBenefits.length > 0 ? (
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {expectedBenefits.map((benefit) => (
+                  <Box
+                    key={benefit.id}
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 1,
+                      border: "1px solid",
+                      borderColor: "divider",
+                      bgcolor: "action.hover",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      gap: 1,
+                    }}
+                  >
+                    <Box sx={{ flex: 1 }}>
+                      <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 0.5 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                          {String(benefit.benefitType || "").replace(/_/g, " ")}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 1, mt: 0.75 }}>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                            Amount
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                            ₹{Number(benefit.amount || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                            Expected Date
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                            {benefit.benefitDate ? dayjs(benefit.benefitDate).format("DD MMM YYYY") : "—"}
+                          </Typography>
+                        </Box>
+                      </Box>
+                      {benefit.notes ? (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75, fontStyle: "italic" }}>
+                          {benefit.notes}
+                        </Typography>
+                      ) : null}
+                    </Box>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleRemoveBenefit(benefit.id)}
+                      sx={{ color: "error.main", flexShrink: 0 }}
+                    >
+                      <Icon path={mdiDeleteOutline} size={0.85} />
+                    </IconButton>
+                  </Box>
+                ))}
+              </Box>
+            ) : null}
+
+            <AppButton
+              size="small"
+              variant="outlined"
+              onClick={() => setBenefitFormOpen(true)}
+              sx={{ alignSelf: "flex-start" }}
+            >
+              <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+                <Icon path={mdiPlus} size={0.75} />
+                Add Benefit
+              </Box>
+            </AppButton>
+
+            {benefitFormOpen ? (
+              <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 1, bgcolor: "action.hover" }}>
+                <Stack spacing={1.25}>
+                  <LabeledSelectField
+                    labelText="Benefit Type"
+                    value={newBenefit.benefitType}
+                    onChange={(e) => {
+                      setNewBenefit((current) => ({ ...current, benefitType: e.target.value }));
+                      setBenefitErrors((current) => {
+                        const next = { ...current };
+                        delete next.benefitType;
+                        return next;
+                      });
+                    }}
+                    options={INVESTMENT_BENEFIT_OPTIONS}
+                    error={Boolean(benefitErrors.benefitType)}
+                    helperText={benefitErrors.benefitType}
+                  />
+
+                  <LabelCurrencyField
+                    labelText="Benefit Amount"
+                    value={newBenefit.amount}
+                    onChange={(e) => {
+                      setNewBenefit((current) => ({ ...current, amount: e.target.value }));
+                      setBenefitErrors((current) => {
+                        const next = { ...current };
+                        delete next.amount;
+                        return next;
+                      });
+                    }}
+                    error={Boolean(benefitErrors.amount)}
+                    helperText={benefitErrors.amount}
+                  />
+
+                  <LabeledDateField
+                    labelText="Expected Benefit Date"
+                    value={newBenefit.benefitDate}
+                    onChange={(date) => {
+                      setNewBenefit((current) => ({ ...current, benefitDate: date }));
+                      setBenefitErrors((current) => {
+                        const next = { ...current };
+                        delete next.benefitDate;
+                        return next;
+                      });
+                    }}
+                    error={Boolean(benefitErrors.benefitDate)}
+                    helperText={benefitErrors.benefitDate}
+                  />
+
+                  <LabeledTextareaField
+                    labelText="Notes (Optional)"
+                    value={newBenefit.notes}
+                    onChange={(e) => setNewBenefit((current) => ({ ...current, notes: e.target.value }))}
+                    helperText="E.g., 5-year money-back, survival benefit, declared bonus distribution"
+                  />
+
+                  <Box sx={{ display: "flex", gap: 1 }}>
+                    <AppButton
+                      size="small"
+                      variant="outlined"
+                      onClick={() => {
+                        setBenefitFormOpen(false);
+                        setBenefitErrors({});
+                      }}
+                    >
+                      Cancel
+                    </AppButton>
+                    <AppButton
+                      size="small"
+                      variant="contained"
+                      onClick={handleAddBenefit}
+                    >
+                      Add Benefit
+                    </AppButton>
+                  </Box>
+                </Stack>
+              </Paper>
+            ) : null}
+          </Stack>
+        </SectionCard>
 
         <SectionCard title="Notes">
           <LabeledTextareaField

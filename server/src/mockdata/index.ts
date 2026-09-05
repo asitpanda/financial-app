@@ -5,6 +5,7 @@ export { mockFinancialAccountsData } from './financialAccounts';
 export { mockInvestmentAssetTaxonomyData } from './investmentAssetTaxonomy';
 export { mockInvestmentsData } from './investments';
 export { mockInvestmentEventsData } from './investmentEvents';
+export { mockInvestmentBenefitsData } from './investmentBenefits';
 export { mockInvestmentContributionPlansData } from './investmentContributionPlans';
 export { mockTransactionsData, mockTransactionsStore } from './transactions';
 export { mockGoalsData } from './goals';

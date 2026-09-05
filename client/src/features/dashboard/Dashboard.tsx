@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNotificationStore } from "../../store/notificationStore";
 import { useDashboard } from "./useDashboard";
 import AddTransactionModal from "../transactions/components/TransactionsAddEditDrawer";
@@ -22,21 +23,15 @@ import {
 } from "../../utils/investmentHelpers";
 import { getRuntimeErrorMessage } from "../../utils/errorMessage";
 import { navigateTo } from "../../services/navigation";
-import {
-  usePageDateFilterStore,
-  matchesGlobalDateFilter,
-} from "../../store/pageDateFilterStore";
 import InvestmentFormDrawer from "../investments/components/InvestmentFormDrawer";
 import {
+  DASHBOARD_ALL_TIME_BOUNDS,
   getDashboardAccountOverviewRows,
   getDashboardActiveGoalsCount,
   getDashboardCategoryLookup,
   getDashboardCategoryPieData,
-  getDashboardFilteredTransactions,
-  getDashboardInvestmentPeriodBounds,
   getDashboardInvestmentSummary,
   getDashboardMonthlySummary,
-  getDashboardPeriodLabel,
   getDashboardRecentTransactions,
   getDashboardSortedGoals,
   getDashboardVisibleGoals,
@@ -51,60 +46,27 @@ import DashboardRecentTransactionsSection from "./components/DashboardRecentTran
 import DashboardTopCategoriesSection from "./components/DashboardTopCategoriesSection";
 
 const getGoalId = (goal) => goal?._id || goal?.id;
+const getTransactionType = (item) =>
+  String(item?.type || "").toUpperCase();
 const summarizeTransactions = (items) => {
   const income = items
-    .filter((item) => item.type === "income")
+    .filter((item) => getTransactionType(item) === "INCOME")
     .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const expense = items
-    .filter((item) => item.type === "expense")
+    .filter((item) => getTransactionType(item) === "EXPENSE")
     .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
   return { income, expense, balance: income - expense };
 };
-const summarizeSources = (items, accountNameById = {}) => {
-  return items.reduce((acc, item) => {
-    const sourceId = Number(item.sourceAccountId);
-    const sourceName =
-      accountNameById[sourceId] ||
-      String(item.source || "Unknown source").trim() ||
-      "Unknown source";
-
-    if (!acc[sourceName]) {
-      acc[sourceName] = {
-        name: sourceName,
-        income: 0,
-        expense: 0,
-        balance: 0,
-        transactions: 0,
-      };
-    }
-
-    const amount = Number(item.amount) || 0;
-    if (item.type === "income") {
-      acc[sourceName].income += amount;
-    } else {
-      acc[sourceName].expense += amount;
-    }
-
-    acc[sourceName].balance = acc[sourceName].income - acc[sourceName].expense;
-    acc[sourceName].transactions += 1;
-    return acc;
-  }, {});
-};
 
 export default function Dashboard({ onOpenTransactionsFromDashboard }) {
+  const queryClient = useQueryClient();
   const [transactions, setTransactions] = useState([]);
   const [goals, setGoals] = useState([]);
   const [categories, setCategories] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [investments, setInvestments] = useState([]);
   const [taxonomyNodes, setTaxonomyNodes] = useState([]);
-  const periodMode = usePageDateFilterStore((state) => state.mode);
-  const selectedYear = usePageDateFilterStore((state) => state.selectedYear);
-  const selectedMonth = usePageDateFilterStore((state) => state.selectedMonth);
-  const scopeMode = usePageDateFilterStore((state) => state.scopeMode);
-  const rangeStart = usePageDateFilterStore((state) => state.rangeStart);
-  const rangeEnd = usePageDateFilterStore((state) => state.rangeEnd);
 
   const {
     data: dashboardData,
@@ -168,57 +130,38 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
     }
   }, [dashboardQueryError]);
 
-  const accountNameById = useMemo(
+  const transactionCountByAccountId = useMemo(
     () =>
-      accounts.reduce((acc, account) => {
-        acc[Number(account.id)] =
-          account.displayName || account.institutionName || account.name;
+      transactions.reduce((acc, transaction) => {
+        const sourceId = Number(transaction.sourceAccountId);
+        if (!sourceId) return acc;
+        acc[sourceId] = (acc[sourceId] || 0) + 1;
         return acc;
       }, {}),
-    [accounts],
+    [transactions],
   );
-
-  const dateFilterState = useMemo(
-    () => ({ scopeMode, mode: periodMode, selectedYear, selectedMonth, rangeStart, rangeEnd }),
-    [scopeMode, periodMode, selectedYear, selectedMonth, rangeStart, rangeEnd],
-  );
-
-  const filteredTransactions = useMemo(() => {
-    return getDashboardFilteredTransactions(
-      transactions,
-      dateFilterState,
-      matchesGlobalDateFilter,
-    );
-  }, [transactions, dateFilterState]);
 
   const totals = useMemo(() => {
-    return summarizeTransactions(filteredTransactions);
-  }, [filteredTransactions]);
-
-  const periodBankSummaries = useMemo(() => {
-    return summarizeSources(filteredTransactions, accountNameById);
-  }, [filteredTransactions, accountNameById]);
+    return summarizeTransactions(transactions);
+  }, [transactions]);
 
   const accountOverviewRows = useMemo(() => {
-    return getDashboardAccountOverviewRows(accounts, periodBankSummaries);
-  }, [accounts, periodBankSummaries]);
+    return getDashboardAccountOverviewRows(accounts, transactionCountByAccountId);
+  }, [accounts, transactionCountByAccountId]);
 
   const totalAccountBalance = useMemo(() => {
     return accountOverviewRows.reduce((sum, row) => sum + row.balance, 0);
   }, [accountOverviewRows]);
 
   const categoryPieData = useMemo(() => {
-    return getDashboardCategoryPieData(filteredTransactions);
-  }, [filteredTransactions]);
+    return getDashboardCategoryPieData(transactions);
+  }, [transactions]);
 
-  const selectedPeriodLabel = useMemo(
-    () => getDashboardPeriodLabel(dateFilterState),
-    [dateFilterState],
-  );
+  const selectedPeriodLabel = "All Time";
 
   const recentTransactions = useMemo(() => {
-    return getDashboardRecentTransactions(filteredTransactions);
-  }, [filteredTransactions]);
+    return getDashboardRecentTransactions(transactions);
+  }, [transactions]);
 
   const categoryLookup = useMemo(() => {
     return getDashboardCategoryLookup(categories);
@@ -238,8 +181,8 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
   }, [goals]);
 
   const monthlySummary = useMemo(() => {
-    return getDashboardMonthlySummary(filteredTransactions, totals);
-  }, [filteredTransactions, totals]);
+    return getDashboardMonthlySummary(transactions, totals);
+  }, [transactions, totals]);
 
   const categoryLabelMap = useMemo(() => {
     const map = {};
@@ -251,17 +194,13 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
     return map;
   }, [taxonomyNodes]);
 
-  const investmentPeriodBounds = useMemo(() => {
-    return getDashboardInvestmentPeriodBounds(dateFilterState);
-  }, [dateFilterState]);
-
   const investmentSummary = useMemo(() => {
     return getDashboardInvestmentSummary(
       investments,
-      investmentPeriodBounds,
+      DASHBOARD_ALL_TIME_BOUNDS,
       categoryLabelMap,
     );
-  }, [investments, investmentPeriodBounds, categoryLabelMap]);
+  }, [investments, categoryLabelMap]);
 
   const handleAddTransaction = async (payload) => {
     try {
@@ -276,6 +215,8 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
         },
         ...prev,
       ]);
+      // Bypasses useSaveTransaction, so the Transactions screen's cache needs a manual refresh
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
       setShowAddTx(false);
       setError("");
       pushNotification({
@@ -325,6 +266,8 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
     try {
       const created = await createCategory(payload);
       setCategories((prev) => [created, ...prev]);
+      // Bypasses useCreateCategory, so the Categories screen's cache needs a manual refresh
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
       setShowAddCategory(false);
       setError("");
       pushNotification({
@@ -340,6 +283,8 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
   const handleInvestmentsUpdated = async () => {
     const nextInvestments = await getInvestments();
     setInvestments(Array.isArray(nextInvestments) ? nextInvestments : []);
+    // Bypasses the investments mutation hooks, so the Investments screen's cache needs a manual refresh
+    queryClient.invalidateQueries({ queryKey: ["investments"] });
   };
 
   const handleSaveInvestment = async (formValues) => {
@@ -404,13 +349,8 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
     if (typeof onOpenTransactionsFromDashboard !== "function") return;
 
     onOpenTransactionsFromDashboard({
-      prefetchedTransactions: filteredTransactions,
-      prefillFilter: {
-        mode: periodMode,
-        fiscalYearStart: selectedYear,
-        month: selectedMonth,
-        periodLabel: selectedPeriodLabel,
-      },
+      prefetchedTransactions: transactions,
+      prefillFilter: null,
     });
   };
 
@@ -462,23 +402,18 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
       ) : null}
 
       <DashboardKpiStrip
-        balance={totals.balance}
-        income={totals.income}
-        expense={totals.expense}
+        balance={totalAccountBalance}
         investmentSummary={investmentSummary}
-        activeGoalsCount={activeGoalsCount}
       />
 
       <section className="grid grid-cols-1 gap-3 xl:grid-cols-4">
         <DashboardAccountsSection
           accountOverviewRows={accountOverviewRows}
-          periodBalance={totalAccountBalance}
           onAddAccount={handleOpenAddAccount}
           onEditAccount={handleOpenEditAccount}
         />
 
         <DashboardInvestmentsSection
-          selectedPeriodLabel={selectedPeriodLabel}
           investments={investments}
           investmentSummary={investmentSummary}
           onOpenInvestments={() => navigateTo("investments")}

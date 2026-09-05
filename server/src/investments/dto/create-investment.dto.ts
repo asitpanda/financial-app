@@ -1,6 +1,23 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsDateString, IsDefined, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { InvestmentBenefitType } from '@prisma/client';
+import { IsDateString, IsDefined, IsEnum, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+
+export class CreateInvestmentExpectedBenefitDto {
+  @IsEnum(InvestmentBenefitType)
+  benefitType: InvestmentBenefitType;
+
+  @IsNumber()
+  @Min(0)
+  amount: number;
+
+  @IsDateString()
+  benefitDate: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
 
 export const INVESTMENT_STATUS_VALUES = ['active', 'matured', 'closed'] as const;
 export const INVESTMENT_CONTRIBUTION_MODE_VALUES = ['ONE_TIME', 'RECURRING'] as const;
@@ -107,4 +124,10 @@ export class CreateInvestmentDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiProperty({ type: [CreateInvestmentExpectedBenefitDto], required: false })
+  @IsOptional()
+  @Type(() => CreateInvestmentExpectedBenefitDto)
+  @ValidateNested({ each: true })
+  expectedBenefits?: CreateInvestmentExpectedBenefitDto[];
 }

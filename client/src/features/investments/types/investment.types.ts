@@ -93,6 +93,35 @@ export interface InvestmentEvent {
 	updatedAt?: string;
 }
 
+export type InvestmentBenefitType =
+  | 'MATURITY'
+  | 'SURRENDER'
+  | 'COUPON'
+  | 'INTEREST'
+  | 'PRINCIPAL_REDEMPTION'
+  | 'ANNUITY'
+  | 'MONEY_BACK'
+  | 'SURVIVAL'
+  | 'BONUS'
+  | 'RETURN_OF_PREMIUM'
+  | 'DEATH_BENEFIT'
+  | 'OTHER';
+
+export type InvestmentBenefitStatus = 'EXPECTED' | 'RECEIVED' | 'CANCELLED';
+
+export interface InvestmentBenefit {
+  id: string | number;
+  investmentId: string | number;
+  benefitType: InvestmentBenefitType;
+  amount: number;
+  benefitDate: string;
+  status: InvestmentBenefitStatus;
+  notes?: string | null;
+  realizedEvents?: InvestmentEvent[];
+}
+
+export type InvestmentTreatmentFilter = 'all' | AccountingTreatment;
+
 export interface InvestmentBase {
 	id: string | number;
 	accountId?: number | null;
@@ -118,6 +147,7 @@ export interface InvestmentBase {
 	insuranceCover?: number;
 	referenceNumber?: string | null;
 	notes?: string | null;
+	benefits?: InvestmentBenefit[];
 	createdAt?: string;
 	updatedAt?: string;
 }

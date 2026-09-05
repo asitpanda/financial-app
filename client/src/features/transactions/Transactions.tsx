@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Icon from "@mdi/react";
-import { mdiDeleteOutline, mdiEyeOutline, mdiPencilOutline } from "@mdi/js";
+import {
+  mdiDeleteOutline,
+  mdiEyeOutline,
+  mdiPencilOutline,
+  mdiSwapHorizontal,
+  mdiTrendingUp,
+} from "@mdi/js";
 import { Alert, Box, IconButton, Typography } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs, { type Dayjs } from "dayjs";
+import { getTransactionMovementHexColor } from "../../colors";
 import TransactionsAddEditDrawer from "./components/TransactionsAddEditDrawer";
 import { useHeaderAction } from "../../hooks/useHeaderAction";
 import { useViewportTableHeight } from "../../hooks/useViewportTableHeight";
@@ -29,11 +36,6 @@ import { TransactionViewDrawer } from "./components/TransactionViewDrawer";
 import { useDrawerStore } from "../../store/drawerStore";
 import { useDialogStore } from "../../store/dialogStore";
 import { useNotificationStore } from "../../store/notificationStore";
-import {
-  matchesGlobalDateFilter,
-  resolveFiscalMonthYear,
-  usePageDateFilterStore,
-} from "../../store/pageDateFilterStore";
 import {
   closeDialog,
   closeDrawer,
@@ -94,6 +96,11 @@ interface TransactionTableRow {
   amount: number;
   notes: string;
 }
+
+const resolveFiscalMonthYear = (fiscalYearStart: number, monthIndex: number) => {
+  const year = monthIndex >= 3 ? fiscalYearStart : fiscalYearStart + 1;
+  return { year, month: monthIndex };
+};
 
 const getInitialDateFilter = (prefillFilter: unknown): DateFilterState => {
   if (prefillFilter && typeof prefillFilter === "object") {
@@ -171,6 +178,9 @@ export default function Transactions({
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [sourceAccountFilter, setSourceAccountFilter] = useState("all");
+  const [destinationAccountFilter, setDestinationAccountFilter] =
+    useState("all");
   const [tableDrilldownFilter, setTableDrilldownFilter] =
     useState<DrilldownFilter>("all");
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([
@@ -183,12 +193,6 @@ export default function Transactions({
     page: 0,
     pageSize: 25,
   });
-  const periodMode = usePageDateFilterStore((state) => state.mode);
-  const selectedYear = usePageDateFilterStore((state) => state.selectedYear);
-  const selectedMonth = usePageDateFilterStore((state) => state.selectedMonth);
-  const scopeMode = usePageDateFilterStore((state) => state.scopeMode);
-  const rangeStart = usePageDateFilterStore((state) => state.rangeStart);
-  const rangeEnd = usePageDateFilterStore((state) => state.rangeEnd);
 
   useEffect(() => {
     const initialDateFilter = getInitialDateFilter(prefillFilter);
@@ -200,6 +204,8 @@ export default function Transactions({
     setSearch("");
     setTypeFilter("all");
     setCategoryFilter("all");
+    setSourceAccountFilter("all");
+    setDestinationAccountFilter("all");
     setTableDrilldownFilter("all");
 
     const initialDateFilter = getInitialDateFilter(prefillFilter);
@@ -273,24 +279,32 @@ export default function Transactions({
     }, {});
   }, [accounts]);
 
-  const globalDateFilterState = useMemo(
-    () => ({ scopeMode, mode: periodMode, selectedYear, selectedMonth, rangeStart, rangeEnd }),
-    [scopeMode, periodMode, selectedYear, selectedMonth, rangeStart, rangeEnd],
+  const accountOptions = useMemo(
+    () => [
+      { value: "all", label: "All Accounts" },
+      ...accounts.map((account) => ({
+        value: String(account.id),
+        label:
+          account.displayName ||
+          account.institutionName ||
+          account.name ||
+          String(account.id),
+      })),
+    ],
+    [accounts],
   );
 
   const sortedTransactions = useMemo(() => {
-    return getSortedTransactions(
-      transactions,
-      globalDateFilterState,
-      matchesGlobalDateFilter,
-    );
-  }, [transactions, globalDateFilterState]);
+    return getSortedTransactions(transactions);
+  }, [transactions]);
 
   const filteredTransactions = useMemo(() => {
     return getFilteredTransactions(sortedTransactions, {
       dateRange,
       typeFilter,
       categoryFilter,
+      sourceAccountFilter,
+      destinationAccountFilter,
       search,
       goalNameById,
       accountNameById,
@@ -299,6 +313,8 @@ export default function Transactions({
     sortedTransactions,
     typeFilter,
     categoryFilter,
+    sourceAccountFilter,
+    destinationAccountFilter,
     search,
     dateRange,
     goalNameById,
@@ -328,7 +344,15 @@ export default function Transactions({
 
   useEffect(() => {
     setPaginationModel((prev) => ({ ...prev, page: 0 }));
-  }, [search, typeFilter, categoryFilter, tableDrilldownFilter, dateRange]);
+  }, [
+    search,
+    typeFilter,
+    categoryFilter,
+    sourceAccountFilter,
+    destinationAccountFilter,
+    tableDrilldownFilter,
+    dateRange,
+  ]);
 
   const tableTransactions = useMemo(
     () =>
@@ -527,6 +551,7 @@ export default function Transactions({
             <StatusChip
               label={String(params.value)}
               tone={params.value === "EXPENSE" ? "error" : "success"}
+              hexColor={params.value === "TRANSFER" || params.value === "INVESTMENT" ? getTransactionMovementHexColor(params.value as "TRANSFER" | "INVESTMENT") : undefined}
             />
           </Box>
         ),
@@ -540,25 +565,37 @@ export default function Transactions({
         renderCell: (params) => {
           const row = params.row as TransactionTableRow;
           const isExpense = row.type === "EXPENSE";
+          const isMovement = row.type === "TRANSFER" || row.type === "INVESTMENT";
+          const movementIcon =
+            row.type === "INVESTMENT" ? mdiTrendingUp : mdiSwapHorizontal;
+          const color = isMovement
+            ? getTransactionMovementHexColor(row.type as "TRANSFER" | "INVESTMENT")
+            : isExpense
+              ? "error.main"
+              : "success.main";
           return (
             <Box
               sx={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "flex-end",
+                gap: 0.5,
                 width: "100%",
                 height: "100%",
               }}
             >
+              {isMovement ? (
+                <Icon path={movementIcon} size={0.7} color={color} />
+              ) : null}
               <Typography
                 variant="body2"
                 sx={{
-                  color: isExpense ? "error.main" : "success.main",
+                  color,
                   fontWeight: 600,
                   lineHeight: 1.2,
                 }}
               >
-                {isExpense ? "-" : "+"} {formatCurrency(params.value as number)}
+                {isMovement ? "" : isExpense ? "-" : "+"} {formatCurrency(params.value as number)}
               </Typography>
             </Box>
           );
@@ -651,6 +688,8 @@ export default function Transactions({
     Boolean(search.trim()) ||
     typeFilter !== "all" ||
     categoryFilter !== "all" ||
+    sourceAccountFilter !== "all" ||
+    destinationAccountFilter !== "all" ||
     tableDrilldownFilter !== "all" ||
     dateRangeShortcut !== "all" ||
     Boolean(dateRange[0]) ||
@@ -784,6 +823,30 @@ export default function Transactions({
                 value: name,
                 label: name,
               }))}
+              size="small"
+              fullWidth
+            />
+
+            <LabeledSelectField
+              labelText="Source Account"
+              value={sourceAccountFilter}
+              onChange={(e) =>
+                setSourceAccountFilter((e.target as HTMLInputElement).value)
+              }
+              options={accountOptions}
+              size="small"
+              fullWidth
+            />
+
+            <LabeledSelectField
+              labelText="Destination Account"
+              value={destinationAccountFilter}
+              onChange={(e) =>
+                setDestinationAccountFilter(
+                  (e.target as HTMLInputElement).value,
+                )
+              }
+              options={accountOptions}
               size="small"
               fullWidth
             />

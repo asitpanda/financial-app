@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { authEvents } from './authEvents';
 
 const API_URL = '/api';
 
@@ -30,6 +31,8 @@ apiClient.interceptors.response.use(
     if (error?.response?.status === 401) {
       sessionStorage.removeItem('token');
       sessionStorage.removeItem('user');
+      // Notify the auth store to clear in-memory state too, not just storage.
+      authEvents.emitUnauthorized();
     }
 
     return Promise.reject(error);

@@ -102,6 +102,7 @@ BEGIN
   ) THEN
     CREATE TYPE public."InvestmentBenefitType" AS ENUM (
       'MATURITY',
+      'SURRENDER',
       'COUPON',
       'INTEREST',
       'PRINCIPAL_REDEMPTION',
@@ -365,13 +366,10 @@ CREATE TABLE IF NOT EXISTS public.investment_benefits (
   "benefitDate" TIMESTAMPTZ NOT NULL,
   "status" public."InvestmentBenefitStatus" NOT NULL DEFAULT 'EXPECTED',
   "notes" TEXT NULL,
-  "linkedEventId" INTEGER NULL,
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
   "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT "investment_benefits_investmentId_fkey"
-    FOREIGN KEY ("investmentId") REFERENCES public.investments("id") ON DELETE CASCADE,
-  CONSTRAINT "investment_benefits_linkedEventId_fkey"
-    FOREIGN KEY ("linkedEventId") REFERENCES public.investment_events("id") ON DELETE SET NULL
+    FOREIGN KEY ("investmentId") REFERENCES public.investments("id") ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS public.transactions (
@@ -405,6 +403,7 @@ CREATE TABLE IF NOT EXISTS public.investment_events (
   "investmentId" INTEGER NOT NULL,
   "recurringPlanId" INTEGER NULL,
   "linkedTransactionId" INTEGER NULL,
+  "linkedBenefitId" INTEGER NULL,
   "eventType" public."InvestmentEventType" NOT NULL,
   "dueDate" TIMESTAMPTZ NULL,
   "status" public."InvestmentEventStatus" NOT NULL DEFAULT 'PENDING',
@@ -422,7 +421,9 @@ CREATE TABLE IF NOT EXISTS public.investment_events (
   CONSTRAINT "investment_events_investmentId_fkey"
     FOREIGN KEY ("investmentId") REFERENCES public.investments("id") ON DELETE CASCADE,
   CONSTRAINT "investment_events_recurringPlanId_fkey"
-    FOREIGN KEY ("recurringPlanId") REFERENCES public.investment_contribution_plans("id") ON DELETE SET NULL
+    FOREIGN KEY ("recurringPlanId") REFERENCES public.investment_contribution_plans("id") ON DELETE SET NULL,
+  CONSTRAINT "investment_events_linkedBenefitId_fkey"
+    FOREIGN KEY ("linkedBenefitId") REFERENCES public.investment_benefits("id") ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS public.investment_contribution_plans (
@@ -602,6 +603,7 @@ CREATE INDEX IF NOT EXISTS "investment_asset_taxonomy_defaultAssetCategoryMetaId
 
 CREATE INDEX IF NOT EXISTS "investment_events_investmentId_idx" ON public.investment_events ("investmentId");
 CREATE INDEX IF NOT EXISTS "investment_events_recurringPlanId_idx" ON public.investment_events ("recurringPlanId");
+CREATE INDEX IF NOT EXISTS "investment_events_linkedBenefitId_idx" ON public.investment_events ("linkedBenefitId");
 CREATE INDEX IF NOT EXISTS "investment_events_dueDate_idx" ON public.investment_events ("dueDate");
 CREATE INDEX IF NOT EXISTS "investment_events_status_idx" ON public.investment_events ("status");
 CREATE UNIQUE INDEX IF NOT EXISTS "investment_events_linkedTransactionId_key"

@@ -139,6 +139,19 @@ export const getSignedValuePrefix = (value: number, includeZero = false) => {
   return includeZero ? "+" : "";
 };
 
+// Non-P&L account movement colors (money moved between own accounts, not a gain/loss).
+export const TRANSACTION_MOVEMENT_COLORS = {
+  transferHex: "#64748b",
+  investmentHex: "#0ea5e9",
+} as const;
+
+export const getTransactionMovementHexColor = (
+  type: "TRANSFER" | "INVESTMENT",
+) =>
+  type === "INVESTMENT"
+    ? TRANSACTION_MOVEMENT_COLORS.investmentHex
+    : TRANSACTION_MOVEMENT_COLORS.transferHex;
+
 // Generic deterministic chart series colors.
 const GOLDEN_ANGLE = 137.508;
 

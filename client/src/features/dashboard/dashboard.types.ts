@@ -57,6 +57,9 @@ export interface DashboardAccountRecord {
   displayName?: string;
   institutionName?: string;
   openingBalance?: number;
+  currentBalance?: number;
+  accountType?: string;
+  currency?: string;
 }
 
 export interface DashboardPageData {

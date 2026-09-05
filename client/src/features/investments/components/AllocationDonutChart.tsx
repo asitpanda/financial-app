@@ -4,22 +4,19 @@ import AppButton from "../../../components/common/AppButton";
 import Icon from "@mdi/react";
 import { mdiChevronLeft, mdiChevronRight } from "@mdi/js";
 import type { InvestmentAllocationSegment } from "../investments.selectors";
-import {
-  getStableSeriesColorMap,
-  getProfitLossReadableHexColor,
-} from "../../../colors";
+import { getStableSeriesColorMap } from "../../../colors";
 
-type AllocationMode = "invested" | "return";
+type AllocationMode = "contribution" | "currentValue";
 
 interface AllocationDonutChartProps {
   data: InvestmentAllocationSegment[];
   total: number;
   formatValue: (value: number) => string;
-  returnData?: InvestmentAllocationSegment[];
+  currentValueData?: InvestmentAllocationSegment[];
   subData?: InvestmentAllocationSegment[];
-  subReturnData?: InvestmentAllocationSegment[];
+  subCurrentValueData?: InvestmentAllocationSegment[];
   holdingData?: InvestmentAllocationSegment[];
-  holdingReturnData?: InvestmentAllocationSegment[];
+  holdingCurrentValueData?: InvestmentAllocationSegment[];
   onSelectSegment?: (
     segment: InvestmentAllocationSegment,
     mode: AllocationMode,
@@ -30,15 +27,15 @@ export default function AllocationDonutChart({
   data,
   total,
   formatValue,
-  returnData,
+  currentValueData,
   subData,
-  subReturnData,
+  subCurrentValueData,
   holdingData,
-  holdingReturnData,
+  holdingCurrentValueData,
   onSelectSegment,
 }: AllocationDonutChartProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [mode, setMode] = useState<AllocationMode>("invested");
+  const [mode, setMode] = useState<AllocationMode>("contribution");
   const [drilledType, setDrilledType] = useState<string | null>(null);
   const [drilledCategory, setDrilledCategory] = useState<string | null>(null);
 
@@ -50,16 +47,22 @@ export default function AllocationDonutChart({
     : null;
 
   // resolve the active dataset based on drill state and mode
-  const resolvedData = drilledType && drilledCategory
-    ? (holdingData ?? []).filter((s) => s.assetType === drilledType && s.assetCategory === drilledCategory)
-    : drilledType
-    ? (subData ?? []).filter((s) => s.assetType === drilledType)
-    : data;
-  const resolvedReturnData = drilledType && drilledCategory
-    ? (holdingReturnData ?? []).filter((s) => s.assetType === drilledType && s.assetCategory === drilledCategory)
-    : drilledType
-    ? (subReturnData ?? []).filter((s) => s.assetType === drilledType)
-    : returnData;
+  const resolvedContributionData = useMemo(() => {
+    return drilledType && drilledCategory
+      ? (holdingData ?? []).filter((s) => s.assetType === drilledType && s.assetCategory === drilledCategory)
+      : drilledType
+      ? (subData ?? []).filter((s) => s.assetType === drilledType)
+      : data;
+  }, [data, drilledCategory, drilledType, holdingData, subData]);
+
+  const resolvedCurrentValueData = useMemo(() => {
+    return drilledType && drilledCategory
+      ? (holdingCurrentValueData ?? []).filter((s) => s.assetType === drilledType && s.assetCategory === drilledCategory)
+      : drilledType
+      ? (subCurrentValueData ?? []).filter((s) => s.assetType === drilledType)
+      : (currentValueData ?? []);
+  }, [currentValueData, drilledCategory, drilledType, holdingCurrentValueData, subCurrentValueData]);
+
   const size = 200;
   const cx = size / 2;
   const cy = size / 2;
@@ -67,40 +70,22 @@ export default function AllocationDonutChart({
   const innerR = 50;
   const gap = 0.018;
 
-  const hasReturnMode = Array.isArray(resolvedReturnData) && resolvedReturnData.length > 0;
+  const hasCurrentValueMode = resolvedCurrentValueData.length > 0;
   const dataset = useMemo(() => {
-    if (!(mode === "return" && hasReturnMode)) {
-      return resolvedData;
+    if (mode === "currentValue" && hasCurrentValueMode) {
+      return resolvedCurrentValueData;
     }
-
-    const investedOrder = new Map(
-      resolvedData.map((item, index) => [item.key, index]),
-    );
-
-    return [...(resolvedReturnData ?? [])].sort((left, right) => {
-      const leftOrder = investedOrder.get(left.key);
-      const rightOrder = investedOrder.get(right.key);
-
-      if (leftOrder != null && rightOrder != null) return leftOrder - rightOrder;
-      if (leftOrder != null) return -1;
-      if (rightOrder != null) return 1;
-      return String(left.label || left.key).localeCompare(
-        String(right.label || right.key),
-      );
-    });
-  }, [mode, hasReturnMode, resolvedData, resolvedReturnData]);
+    return resolvedContributionData;
+  }, [mode, hasCurrentValueMode, resolvedContributionData, resolvedCurrentValueData]);
   const totalFromData = dataset.reduce(
     (sum, item) => sum + Math.abs(Number(item.value || 0)),
     0,
   );
   const resolvedTotal = Math.max(totalFromData || Math.abs(total) || 1, 1);
-  const netReturn = hasReturnMode
-    ? resolvedReturnData!.reduce((sum, item) => sum + Number(item.value || 0), 0)
-    : 0;
   const seriesKeys = [
     ...new Set([
-      ...resolvedData.map((item) => item.key),
-      ...(resolvedReturnData ?? []).map((item) => item.key),
+      ...resolvedContributionData.map((item) => item.key),
+      ...(resolvedCurrentValueData ?? []).map((item) => item.key),
     ]),
   ];
   const colorByKey = getStableSeriesColorMap(
@@ -204,7 +189,7 @@ export default function AllocationDonutChart({
             )}
           </Box>
         ) : null}
-        {hasReturnMode ? (
+        {hasCurrentValueMode ? (
           <Box
             sx={{
               display: "inline-flex",
@@ -217,25 +202,25 @@ export default function AllocationDonutChart({
           >
             <AppButton
               size="small"
-              variant={mode === "invested" ? "contained" : "text"}
+              variant={mode === "contribution" ? "contained" : "text"}
               onClick={() => {
-                setMode("invested");
+                setMode("contribution");
                 setActiveIndex(null);
               }}
-              sx={{ minWidth: 82 }}
+              sx={{ minWidth: 96 }}
             >
-              Invested
+              Contribution
             </AppButton>
             <AppButton
               size="small"
-              variant={mode === "return" ? "contained" : "text"}
+              variant={mode === "currentValue" ? "contained" : "text"}
               onClick={() => {
-                setMode("return");
+                setMode("currentValue");
                 setActiveIndex(null);
               }}
-              sx={{ minWidth: 82 }}
+              sx={{ minWidth: 96 }}
             >
-              Return
+              Current Value
             </AppButton>
           </Box>
         ) : null}
@@ -262,9 +247,9 @@ export default function AllocationDonutChart({
             >
               {active
                 ? active.label.slice(0, 12)
-                : mode === "return"
-                  ? "Net Return"
-                  : "Total"}
+                : mode === "currentValue"
+                  ? "Current Value"
+                  : "Contribution"}
             </text>
             <text
               x={cx}
@@ -280,19 +265,13 @@ export default function AllocationDonutChart({
               textAnchor="middle"
               style={{
                 fontSize: 10,
-                fill:
-                  mode === "return"
-                    ? getProfitLossReadableHexColor(
-                        active ? active.numericValue : netReturn,
-                      )
-                    : "#6b7280",
+                fill: "#6b7280",
+                fontWeight: 600,
               }}
             >
               {active
-                ? `${active.numericValue >= 0 ? "+" : ""}${formatValue(active.numericValue)}`
-                : mode === "return"
-                  ? `${netReturn >= 0 ? "+" : ""}${formatValue(netReturn)}`
-                  : formatValue(totalFromData || total)}
+                ? formatValue(active.numericValue)
+                : formatValue(totalFromData || total)}
             </text>
           </svg>
         </Box>
@@ -310,9 +289,9 @@ export default function AllocationDonutChart({
             ? `${drilledTypeLabel} › ${drilledCategoryLabel} holdings — click a segment to focus that investment.`
             : drilledType
             ? `${drilledTypeLabel} categories — click a segment to focus matching assets.`
-            : mode === "return"
-              ? "Return mode sizes asset types by absolute gain or loss and keeps the same series colors for easier comparison."
-              : "Invested mode shows how principal is distributed across asset types."}
+            : mode === "currentValue"
+              ? "Current Value mode shows real-time valuation distribution across asset types."
+              : "Contribution mode shows how long-term capital is deployed across asset types."}
         </Typography>
         {segments.map((segment, index) => (
           <Box
@@ -370,14 +349,10 @@ export default function AllocationDonutChart({
                 fontWeight: 700,
                 textAlign: "right",
                 whiteSpace: "nowrap",
-                color:
-                  mode === "return"
-                    ? getProfitLossReadableHexColor(segment.numericValue)
-                    : "text.primary",
+                color: "text.primary",
               }}
             >
-              {mode === "return" && segment.numericValue > 0 ? "+" : ""}
-              {formatValue(mode === "return" ? segment.numericValue : segment.value)}
+              {formatValue(segment.value)}
             </Typography>
           </Box>
         ))}

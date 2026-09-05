@@ -16,6 +16,11 @@ export class CreateInvestmentEventDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  linkedBenefitId?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   linkedTransactionId?: string;
 
   @ApiProperty({ enum: InvestmentEventType })

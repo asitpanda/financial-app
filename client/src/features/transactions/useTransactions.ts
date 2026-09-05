@@ -67,6 +67,7 @@ export const useCreateTransaction = () => {
     mutationFn: (data: CreateTransactionDto) => transactionApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 };
@@ -79,6 +80,7 @@ export const useUpdateTransaction = () => {
       transactionApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 };
@@ -96,6 +98,7 @@ export const useSaveTransaction = () => {
     }) => saveTransaction({ payload, selectedTransaction }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 };
@@ -107,6 +110,7 @@ export const useRemoveTransaction = () => {
     mutationFn: (id: string) => transactionApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 };

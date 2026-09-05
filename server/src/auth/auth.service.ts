@@ -133,7 +133,7 @@ export class AuthService {
       );
 
       if (!matchedUser) {
-        return null;
+        throw new UnauthorizedException('User no longer exists');
       }
 
       return {
@@ -143,7 +143,7 @@ export class AuthService {
       };
     }
 
-    return this.prisma.user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id: Number(userId) },
       select: {
         id: true,
@@ -151,6 +151,12 @@ export class AuthService {
         name: true,
       },
     });
+
+    if (!user) {
+      throw new UnauthorizedException('User no longer exists');
+    }
+
+    return user;
   }
 
   private generateToken(userId: number | string, email: string) {

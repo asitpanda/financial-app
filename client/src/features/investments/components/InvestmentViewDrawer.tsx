@@ -11,7 +11,6 @@ import {
   Stack,
   Tab,
   Tabs,
-  TextField,
   Typography,
 } from "@mui/material";
 import {
@@ -21,12 +20,12 @@ import {
   mdiCalendarStart,
   mdiCash,
   mdiDeleteOutline,
-  mdiPauseCircleOutline,
   mdiPencilOutline,
-  mdiPlayCircleOutline,
   mdiPlus,
   mdiRepeat,
   mdiTrendingUp,
+  mdiCheckCircle,
+  mdiAlert,
 } from "@mdi/js";
 import Icon from "@mdi/react";
 import dayjs from "dayjs";
@@ -39,6 +38,10 @@ import RecordValuationModal from "./RecordValuationModal";
 import { useUpdateInvestment } from "../hooks/useInvestments";
 import { useUpdateInvestmentContributionPlan, useDeleteInvestmentEvent } from "../hooks/useContributionPlans";
 import { useDeleteInvestmentSnapshot } from "../hooks/useInvestmentSnapshots";
+import {
+  useInvestmentBenefitsByInvestment,
+  useDeleteInvestmentBenefit,
+} from "../hooks/useInvestmentBenefits";
 import { INVESTMENT_EVENT_TYPES } from "../../../types/investmentEventTypes";
 import { useNotificationStore } from "../../../store/notificationStore";
 import { getRuntimeErrorMessage } from "../../../utils/errorMessage";
@@ -55,8 +58,7 @@ import {
 } from "../../../colors";
 import { getCadenceLabel } from "../../../utils/investmentHelpers";
 
-const DRAWER_TABS = ["overview", "contribution", "valuation", "details"];
-const VALUATION_STALE_DAYS = 30;
+const DRAWER_TABS = ["overview", "contribution", "valuation", "benefits", "details"];
 const PERIOD_OPTIONS = ["3M", "6M", "1Y", "ALL"];
 const CONTRIBUTION_FILTER_OPTIONS = ["all", "contributions", "withdrawals", "other"];
 
@@ -125,16 +127,6 @@ function getContributionCadenceLabel(plan) {
   return getCadenceLabel(plan.cadenceUnit, plan.cadenceInterval);
 }
 
-function getContributionAmountSummary(plan) {
-  if (!plan) return "—";
-
-  const interval = Number(plan.cadenceInterval || 1);
-  const unit = String(plan.cadenceUnit || "").toLowerCase();
-  const cadenceSuffix = unit ? (interval > 1 ? `${interval} ${unit}` : unit) : "period";
-
-  return `${formatInvestmentCurrency(plan.amount)} / ${cadenceSuffix}`;
-}
-
 function isContributionLike(eventType) {
   return [
     INVESTMENT_EVENT_TYPES.CONTRIBUTION,
@@ -159,21 +151,6 @@ function getStatusChipColor(statusLabel) {
   }
 
   return "default";
-}
-
-function getFreshnessMeta(latestSnapshot, lastValuationAt) {
-  const dateValue = latestSnapshot?.snapshotDate || lastValuationAt || null;
-  if (!dateValue) {
-    return { label: "No valuation recorded", stale: true };
-  }
-
-  const valuationDate = dayjs(dateValue);
-  const stale = dayjs().diff(valuationDate, "day") > VALUATION_STALE_DAYS;
-
-  return {
-    label: `Valued ${valuationDate.format("DD MMM YYYY")}`,
-    stale,
-  };
 }
 
 function getPeriodStartDate(period, points) {
@@ -224,105 +201,11 @@ function SectionBlock({ title, helperText, action, children, grow = false }) {
   );
 }
 
-function MetricStat({ label, value, subtext, valueColor = "text.primary", subtle = false }) {
-  return (
-    <Box
-      sx={{
-        minWidth: 0,
-        px: 1.75,
-        py: 1.5,
-        borderRadius: 2,
-        bgcolor: subtle ? "rgba(248, 250, 252, 0.8)" : "rgba(255, 255, 255, 0.9)",
-        border: subtle
-          ? "1px solid rgba(226, 232, 240, 0.95)"
-          : "1px solid rgba(226, 232, 240, 0.72)",
-      }}
-    >
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontWeight: 600, mb: 0.5 }}>
-        {label}
-      </Typography>
-      <Typography variant="h6" sx={{ fontWeight: 700, color: valueColor, lineHeight: 1.2 }}>
-        {value}
-      </Typography>
-      {subtext ? (
-        <Typography
-          variant="caption"
-          color={subtle ? "warning.main" : "text.secondary"}
-          sx={{ display: "block", mt: 0.75 }}
-        >
-          {subtext}
-        </Typography>
-      ) : null}
-    </Box>
-  );
-}
-
-function MetadataGrid({
-  items,
-  columns = {
-    xs: "1fr",
-    sm: "repeat(2, minmax(0, 1fr))",
-    lg: "repeat(3, minmax(0, 1fr))",
-  },
-}) {
-  return (
-    <Box
-      component="dl"
-      sx={{
-        m: 0,
-        display: "grid",
-        gridTemplateColumns: columns,
-        columnGap: 1.5,
-        rowGap: 0.65,
-      }}
-    >
-      {items.map((item) => (
-        <Typography
-          key={item.label}
-          component="div"
-          variant="body2"
-          sx={{
-            minWidth: 0,
-            lineHeight: 1.45,
-          }}
-        >
-          <Typography component="span" variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
-            {item.label}:
-          </Typography>{" "}
-          <Typography component="span" variant="body2" sx={{ fontWeight: 600, color: "text.primary", wordBreak: "break-word" }}>
-            {item.value}
-          </Typography>
-        </Typography>
-      ))}
-    </Box>
-  );
-}
-
-function CompactKeyValue({ label, value, emphasize = false, valueColor = "text.primary" }) {
-  return (
-    <Box sx={{ minWidth: 0 }}>
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontWeight: 600, mb: 0.35 }}>
-        {label}
-      </Typography>
-      <Typography variant="body2" sx={{ fontWeight: emphasize ? 700 : 600, color: valueColor }}>
-        {value}
-      </Typography>
-    </Box>
-  );
-}
-
 const tableCellCenterSx = {
   display: "flex",
   alignItems: "center",
   height: "100%",
   width: "100%",
-};
-
-const tableCellStackSx = {
-  ...tableCellCenterSx,
-  justifyContent: "center",
-  flexDirection: "column",
-  alignItems: "flex-start",
 };
 
 function InvestmentPerformanceChart({ points, formatValue }) {
@@ -511,11 +394,15 @@ export function InvestmentViewDrawer({
   const [pendingInvestmentStatus, setPendingInvestmentStatus] = React.useState(null);
   const [pendingPlanStatus, setPendingPlanStatus] = React.useState(null);
   const [planActionError, setPlanActionError] = React.useState("");
+  const [deleteBenefitTarget, setDeleteBenefitTarget] = React.useState(null);
+  const [benefitActionLoading, setBenefitActionLoading] = React.useState(false);
   const pushNotification = useNotificationStore((state) => state.pushNotification);
   const updateInvestmentMutation = useUpdateInvestment();
   const updateContributionPlanMutation = useUpdateInvestmentContributionPlan();
   const deleteSnapshotMutation = useDeleteInvestmentSnapshot();
   const deleteEventMutation = useDeleteInvestmentEvent();
+  const benefitsQuery = useInvestmentBenefitsByInvestment(investment?.id, Boolean(open && investment?.id));
+  const deleteBenefitMutation = useDeleteInvestmentBenefit();
 
   React.useEffect(() => {
     if (!open) return;
@@ -634,9 +521,6 @@ export function InvestmentViewDrawer({
     );
   };
 
-  const handlePausePlan = () => handlePlanUpdate({ status: "paused" }, "Recurring plan paused");
-  const handleResumePlan = () => handlePlanUpdate({ status: "active" }, "Recurring plan resumed");
-
   const handleDeleteSnapshot = async () => {
     if (!deleteSnapshotTarget?.id || !investment?.id) return;
 
@@ -729,8 +613,6 @@ export function InvestmentViewDrawer({
   const totalReturnPercentage =
     effectiveTotalInvested > 0 ? (totalReturnValue / effectiveTotalInvested) * 100 : 0;
   const totalReturnColor = getProfitLossMuiColor(totalReturnValue, "gain");
-  const freshnessMeta = getFreshnessMeta(latestSnapshot, investment?.lastValuationAt);
-  const recurringPlanStatus = String(investment?.activeContributionPlan?.status || "active").toLowerCase();
   const categoryLabel = getInvestmentCategoryLabel(
     investment?.category || investment?.assetCategory,
     taxonomyNodes,
@@ -1513,6 +1395,18 @@ export function InvestmentViewDrawer({
             <Typography variant="body2" color="text.secondary">
               <strong>One-time investment</strong> — no recurring plan. Any manually recorded contributions appear in the activity table below.
             </Typography>
+            {onRecordActivity ? (
+              <AppButton
+                size="small"
+                variant="outlined"
+                onClick={() => onRecordActivity(investment, null, "contribution")}
+              >
+                <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+                  <Icon path={mdiPlus} size={0.8} />
+                  Record Activity
+                </Box>
+              </AppButton>
+            ) : null}
           </Box>
         )}
 
@@ -1742,6 +1636,224 @@ export function InvestmentViewDrawer({
     );
   };
 
+  const handleDeleteBenefit = async () => {
+    if (!deleteBenefitTarget || !investment?.id) return;
+    setBenefitActionLoading(true);
+    try {
+      await deleteBenefitMutation.mutateAsync({
+        investmentId: investment.id,
+        benefitId: deleteBenefitTarget.id,
+      });
+      pushNotification({
+        type: "success",
+        message: "Benefit deleted successfully",
+      });
+      setDeleteBenefitTarget(null);
+    } catch (error) {
+      const message = getRuntimeErrorMessage(error, "Failed to delete benefit");
+      pushNotification({
+        type: "error",
+        message,
+      });
+    } finally {
+      setBenefitActionLoading(false);
+    }
+  };
+
+  const handleRealizeBenefit = async (benefit) => {
+    if (!benefit || !investment?.id) return;
+    // Full realization flow (component breakdown modal) is deferred to a later phase
+    pushNotification({
+      type: "info",
+      message: "Benefit realization coming in next phase",
+    });
+  };
+
+  const renderBenefitsTab = () => {
+    const benefits = benefitsQuery.data || [];
+    const isLoading = benefitsQuery.isLoading;
+
+    if (isLoading) {
+      return <EmptyState text="Loading benefits..." />;
+    }
+
+    if (benefits.length === 0) {
+      return (
+        <Box sx={{ p: 3, textAlign: "center" }}>
+          <EmptyState 
+            text="No benefits recorded" 
+            subText="Expected benefits like maturity, surrender, or death benefits will appear here when added."
+            actionLabel={onRecordActivity ? "Add Benefit" : undefined}
+            onAction={onRecordActivity ? () => onRecordActivity(investment, null, "benefit") : undefined}
+          />
+        </Box>
+      );
+    }
+
+    const benefitRows = benefits.map((benefit) => ({
+      id: benefit.id,
+      rawBenefit: benefit,
+      type: formatCodeLabel(benefit.benefitType),
+      benefitType: benefit.benefitType,
+      amount: formatInvestmentCurrency(benefit.amount),
+      benefitDate: formatInvestmentDate(benefit.benefitDate),
+      status: benefit.status,
+      statusLabel: formatCodeLabel(benefit.status),
+      statusColor: getStatusChipColor(benefit.status),
+      notes: benefit.notes,
+      realizedEvents: benefit.realizedEvents || [],
+      isExpected: benefit.status === "EXPECTED",
+      isReceived: benefit.status === "RECEIVED",
+      isCancelled: benefit.status === "CANCELLED",
+    }));
+
+    return (
+      <Stack spacing={1.5} sx={{ pb: 0.5 }}>
+        <SectionBlock
+          title="Investment Benefits"
+          helperText="Expected contractual payouts, interest, and other benefits"
+          action={
+            onRecordActivity ? (
+              <AppButton size="small" variant="outlined" onClick={() => onRecordActivity(investment, null, "benefit")}>
+                <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+                  <Icon path={mdiPlus} size={0.8} />
+                  Add Benefit
+                </Box>
+              </AppButton>
+            ) : null
+          }
+          grow
+        >
+          <Stack spacing={1.5} sx={{ flex: 1, minHeight: 0 }}>
+            {benefitRows.length > 0 ? (
+              <Box sx={{ overflow: "auto", flex: 1, minHeight: 320 }}>
+                {benefitRows.map((benefit) => (
+                  <Box
+                    key={benefit.id}
+                    sx={{
+                      p: 1.75,
+                      mb: 1,
+                      borderRadius: 1.5,
+                      border: "1px solid",
+                      borderColor: "divider",
+                      bgcolor: "background.paper",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      gap: 2,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <Box sx={{ flex: 1, minWidth: 200 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                          {benefit.type}
+                        </Typography>
+                        <Chip
+                          size="small"
+                          label={benefit.statusLabel}
+                          color={benefit.statusColor}
+                          variant="outlined"
+                        />
+                      </Box>
+                      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 1, mt: 1 }}>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                            Amount
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                            {benefit.amount}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                            Benefit Date
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                            {benefit.benefitDate}
+                          </Typography>
+                        </Box>
+                      </Box>
+                      {benefit.notes ? (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1, fontStyle: "italic" }}>
+                          {benefit.notes}
+                        </Typography>
+                      ) : null}
+                      {benefit.realizedEvents.length > 0 && (
+                        <Box sx={{ mt: 1.5, pt: 1.5, borderTop: "1px solid", borderColor: "divider" }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: "block", mb: 0.75 }}>
+                            Realized Events:
+                          </Typography>
+                          <Stack spacing={0.5}>
+                            {benefit.realizedEvents.map((event) => (
+                              <Box key={event.id} sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                                <Icon path={mdiCheckCircle} size={0.6} color="#2e7d32" />
+                                <Typography variant="caption" sx={{ flex: 1 }}>
+                                  <strong>{formatCodeLabel(event.eventType)}</strong> {formatInvestmentCurrency(event.amount)} on {formatInvestmentDate(event.eventDate)}
+                                </Typography>
+                              </Box>
+                            ))}
+                          </Stack>
+                        </Box>
+                      )}
+                    </Box>
+
+                    {benefit.isExpected ? (
+                      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", minWidth: 140 }}>
+                        {onEditActivity ? (
+                          <AppButton
+                            size="small"
+                            variant="outlined"
+                            onClick={() => onEditActivity(investment, benefit.rawBenefit, "benefit")}
+                            sx={{ minWidth: 80 }}
+                          >
+                            <Icon path={mdiPencilOutline} size={0.8} />
+                          </AppButton>
+                        ) : null}
+                        <AppButton
+                          size="small"
+                          variant="outlined"
+                          color="error"
+                          onClick={() => setDeleteBenefitTarget(benefit)}
+                          disabled={benefitActionLoading}
+                          sx={{ minWidth: 80 }}
+                        >
+                          <Icon path={mdiDeleteOutline} size={0.8} />
+                        </AppButton>
+                        <AppButton
+                          size="small"
+                          variant="contained"
+                          onClick={() => handleRealizeBenefit(benefit)}
+                          disabled={benefitActionLoading}
+                          sx={{ minWidth: 100 }}
+                        >
+                          Realize
+                        </AppButton>
+                      </Box>
+                    ) : (
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 140 }}>
+                        <Icon 
+                          path={benefit.isCancelled ? mdiAlert : mdiCheckCircle} 
+                          size={0.9} 
+                          color={benefit.isCancelled ? "#ed6c02" : "#2e7d32"}
+                        />
+                        <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                          {benefit.isCancelled ? "Cancelled" : "Received"}
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+                ))}
+              </Box>
+            ) : (
+              <Alert severity="info">No benefits recorded for this investment.</Alert>
+            )}
+          </Stack>
+        </SectionBlock>
+      </Stack>
+    );
+  };
+
   const renderDetailsTab = () => (
     <Stack spacing={1.5} sx={{ pb: 0.5 }}>
       <SectionCard
@@ -1814,6 +1926,7 @@ export function InvestmentViewDrawer({
     if (activeTab === "overview") return renderOverviewTab();
     if (activeTab === "contribution") return renderContributionTab();
     if (activeTab === "valuation") return renderValuationTab();
+    if (activeTab === "benefits") return renderBenefitsTab();
     return renderDetailsTab();
   };
 
@@ -1871,7 +1984,8 @@ export function InvestmentViewDrawer({
               <Tab value={DRAWER_TABS[0]} label="Overview" />
               <Tab value={DRAWER_TABS[1]} label="Contribution" />
               <Tab value={DRAWER_TABS[2]} label="Valuation" />
-              <Tab value={DRAWER_TABS[3]} label="Details" />
+              <Tab value={DRAWER_TABS[3]} label="Benefits" />
+              <Tab value={DRAWER_TABS[4]} label="Details" />
             </Tabs>
 
             <Box sx={{ flex: 1, minHeight: 0, overflow: "auto", pt: 2.5 }}>
@@ -1936,6 +2050,17 @@ export function InvestmentViewDrawer({
         loading={planActionLoading}
         onCancel={() => setPendingPlanStatus(null)}
         onConfirm={handleConfirmPlanStatusChange}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteBenefitTarget)}
+        title="Delete benefit"
+        description={deleteBenefitTarget ? `Remove the ${formatCodeLabel(deleteBenefitTarget.benefitType)} benefit of ${deleteBenefitTarget.amount} expected on ${deleteBenefitTarget.benefitDate}?` : ""}
+        confirmLabel="Delete"
+        confirmColor="error"
+        loading={benefitActionLoading}
+        onCancel={() => setDeleteBenefitTarget(null)}
+        onConfirm={handleDeleteBenefit}
       />
     </AppDrawer>
   );

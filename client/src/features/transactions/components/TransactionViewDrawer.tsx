@@ -188,6 +188,22 @@ export function TransactionViewDrawer({
                 </Box>
                 <Box>
                   <Typography variant="caption" color="text.secondary">
+                    Investment
+                  </Typography>
+                  <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 600 }}>
+                    {transaction.investment?.name || "No linked investment"}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Investment event
+                  </Typography>
+                  <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 600 }}>
+                    {transaction.investmentEventType || "Not applicable"}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
                     Date
                   </Typography>
                   <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 600 }}>

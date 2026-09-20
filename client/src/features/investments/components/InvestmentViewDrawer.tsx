@@ -26,6 +26,8 @@ import {
   mdiTrendingUp,
   mdiCheckCircle,
   mdiAlert,
+  mdiArrowRight,
+  mdiBank,
 } from "@mdi/js";
 import Icon from "@mdi/react";
 import dayjs from "dayjs";
@@ -52,8 +54,9 @@ import {
   getInvestmentStatusTone,
 } from "../../../utils/investmentHelpers";
 import {
+  CHART_TOOLTIP_COLORS,
   INVESTMENT_CHART_SERIES_COLORS,
-  PROFIT_LOSS_COLORS,
+  getProfitLossTooltipHexColor,
   getProfitLossMuiColor,
 } from "../../../colors";
 import { getCadenceLabel } from "../../../utils/investmentHelpers";
@@ -333,16 +336,16 @@ function InvestmentPerformanceChart({ points, formatValue }) {
 
               {hoveredIndex === pointIdx ? (
                 <g>
-                  <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} rx="6" fill="#1f2937" opacity="0.96" />
-                  <text x={tooltipX + tooltipWidth / 2} y={tooltipY + 15} textAnchor="middle" style={{ fontSize: 13, fontWeight: 700, fill: "#fff" }}>
+                  <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} rx="6" fill={CHART_TOOLTIP_COLORS.backgroundHex} stroke={CHART_TOOLTIP_COLORS.borderHex} opacity="0.98" />
+                  <text x={tooltipX + tooltipWidth / 2} y={tooltipY + 15} textAnchor="middle" style={{ fontSize: 14, fontWeight: 700, fill: CHART_TOOLTIP_COLORS.titleHex }}>
                     {dayjs(point.date).format("DD MMM YYYY")}
                   </text>
-                  <text x={tooltipX + 10} y={tooltipY + 42} style={{ fontSize: 11, fill: "#e5e7eb" }}>Current Value</text>
-                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 42} textAnchor="end" style={{ fontSize: 11, fill: INVESTMENT_CHART_SERIES_COLORS.investedAltHex, fontWeight: 700 }}>{formatValue(point.currentValue)}</text>
-                  <text x={tooltipX + 10} y={tooltipY + 58} style={{ fontSize: 11, fill: "#e5e7eb" }}>Total Invested</text>
-                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 58} textAnchor="end" style={{ fontSize: 11, fill: INVESTMENT_CHART_SERIES_COLORS.investedHex, fontWeight: 700 }}>{formatValue(point.investedValue)}</text>
-                  <text x={tooltipX + 10} y={tooltipY + 74} style={{ fontSize: 11, fill: "#e5e7eb" }}>Return</text>
-                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 74} textAnchor="end" style={{ fontSize: 11, fill: point.gainLossValue >= 0 ? PROFIT_LOSS_COLORS.gainSoftHex : PROFIT_LOSS_COLORS.lossSoftHex, fontWeight: 700 }}>
+                  <text x={tooltipX + 10} y={tooltipY + 42} style={{ fontSize: 12, fill: CHART_TOOLTIP_COLORS.labelHex, fontWeight: 600 }}>Current Value</text>
+                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 42} textAnchor="end" style={{ fontSize: 12, fill: CHART_TOOLTIP_COLORS.currentValueHex, fontWeight: 700 }}>{formatValue(point.currentValue)}</text>
+                  <text x={tooltipX + 10} y={tooltipY + 58} style={{ fontSize: 12, fill: CHART_TOOLTIP_COLORS.labelHex, fontWeight: 600 }}>Total Invested</text>
+                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 58} textAnchor="end" style={{ fontSize: 12, fill: CHART_TOOLTIP_COLORS.investedHex, fontWeight: 700 }}>{formatValue(point.investedValue)}</text>
+                  <text x={tooltipX + 10} y={tooltipY + 74} style={{ fontSize: 12, fill: CHART_TOOLTIP_COLORS.labelHex, fontWeight: 600 }}>Return</text>
+                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 74} textAnchor="end" style={{ fontSize: 12, fill: getProfitLossTooltipHexColor(point.gainLossValue, "gain"), fontWeight: 700 }}>
                     {point.gainLossValue >= 0 ? "+" : ""}
                     {formatValue(point.gainLossValue)} ({point.gainLossPercentage >= 0 ? "+" : ""}
                     {point.gainLossPercentage.toFixed(2)}%)
@@ -365,6 +368,7 @@ export default InvestmentViewDrawer;
  *   open: boolean,
  *   onClose: () => void,
  *   investment: InvestmentDrawerData | null,
+ *   accounts?: unknown[],
  *   taxonomyNodes?: unknown[],
  *   onEdit?: (investment: InvestmentDrawerData) => void,
  * }} props
@@ -373,6 +377,7 @@ export function InvestmentViewDrawer({
   open,
   onClose,
   investment,
+  accounts = [],
   taxonomyNodes = [],
   onEdit,
   onRecordActivity,
@@ -618,6 +623,22 @@ export function InvestmentViewDrawer({
     taxonomyNodes,
   );
   const institutionLabel = investment?.institution || investment?.institutionName || "—";
+  const sourceAccount = React.useMemo(
+    () => accounts.find((account) => String(account?.id) === String(investment?.accountId)),
+    [accounts, investment?.accountId],
+  );
+  const sourceAccountLabel = sourceAccount
+    ? sourceAccount.displayName || sourceAccount.name
+    : investment?.accountId
+      ? `Account #${investment.accountId}`
+      : "Not configured";
+  const sourceAccountDetail = sourceAccount
+    ? [sourceAccount.institutionName, sourceAccount.accountNumberMasked]
+        .filter(Boolean)
+        .join(" · ")
+    : investment?.accountId
+      ? "Linked account details unavailable"
+      : "Choose an account for contribution tracking";
   const holdingMode = investment?.contributionMode ? formatCodeLabel(investment.contributionMode) : "—";
   const accountingTreatment = investment?.accountingTreatment || "INVESTMENT";
   const isInsuranceSavings = accountingTreatment === "INSURANCE_SAVINGS";
@@ -1077,6 +1098,53 @@ export function InvestmentViewDrawer({
                 </Stack>
               </Box>
             ))}
+          </Box>
+        </SectionCard>
+
+        <SectionCard
+          title={
+            <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.8 }}>
+              <Icon path={mdiBank} size={0.8} color="#0f766e" />
+              <Typography component="span" variant="subtitle1" sx={{ fontWeight: 700 }}>
+                Money flow
+              </Typography>
+            </Box>
+          }
+          helperText="Keep the accounts involved in this investment visible at a glance."
+        >
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", sm: "minmax(0, 1fr) auto minmax(0, 1fr)" },
+              alignItems: "center",
+              gap: { xs: 1.25, sm: 1.5 },
+            }}
+          >
+            <Box sx={{ minWidth: 0, p: 1.5, border: "1px solid", borderColor: "divider", borderRadius: 1, bgcolor: "action.hover" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                Contributions from
+              </Typography>
+              <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 800, overflowWrap: "anywhere" }}>
+                {sourceAccountLabel}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, overflowWrap: "anywhere" }}>
+                {sourceAccountDetail}
+              </Typography>
+            </Box>
+
+            <Icon path={mdiArrowRight} size={0.9} color="#64748b" />
+
+            <Box sx={{ minWidth: 0, p: 1.5, border: "1px dashed", borderColor: "warning.main", borderRadius: 1, bgcolor: "rgba(245, 158, 11, 0.06)" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                Benefits to
+              </Typography>
+              <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 800, color: "warning.dark" }}>
+                Not configured
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                Add a destination account when benefit payouts are supported.
+              </Typography>
+            </Box>
           </Box>
         </SectionCard>
 

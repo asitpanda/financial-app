@@ -4,7 +4,7 @@ import AppButton from "../../../components/common/AppButton";
 import Icon from "@mdi/react";
 import { mdiChevronLeft, mdiChevronRight } from "@mdi/js";
 import type { InvestmentAllocationSegment } from "../investments.selectors";
-import { getStableSeriesColorMap } from "../../../colors";
+import { CHART_TOOLTIP_COLORS, getStableSeriesColorMap } from "../../../colors";
 
 type AllocationMode = "contribution" | "currentValue";
 
@@ -243,7 +243,7 @@ export default function AllocationDonutChart({
               x={cx}
               y={cy - 8}
               textAnchor="middle"
-              style={{ fontSize: 11, fill: "#9ca3af", fontWeight: 600 }}
+              style={{ fontSize: 11, fill: CHART_TOOLTIP_COLORS.mutedHex, fontWeight: 700 }}
             >
               {active
                 ? active.label.slice(0, 12)
@@ -255,7 +255,7 @@ export default function AllocationDonutChart({
               x={cx}
               y={cy + 10}
               textAnchor="middle"
-              style={{ fontSize: 12, fill: "#111827", fontWeight: 700 }}
+              style={{ fontSize: 13, fill: CHART_TOOLTIP_COLORS.titleHex, fontWeight: 800 }}
             >
               {active ? `${(active.fraction * 100).toFixed(1)}%` : "100%"}
             </text>
@@ -265,7 +265,7 @@ export default function AllocationDonutChart({
               textAnchor="middle"
               style={{
                 fontSize: 10,
-                fill: "#6b7280",
+                fill: CHART_TOOLTIP_COLORS.labelHex,
                 fontWeight: 600,
               }}
             >

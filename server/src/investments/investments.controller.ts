@@ -2,7 +2,6 @@ import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post } from 
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { InvestmentsService } from './investments.service';
 import { CreateInvestmentDto } from './dto/create-investment.dto';
-import { InvestmentDashboardAnalyticsResponseDto } from './dto/dashboard-analytics-response.dto';
 import { InvestmentDetailResponseDto } from './dto/investment-detail-response.dto';
 import { InvestmentMetadataResponseDto } from './dto/investment-metadata-response.dto';
 import { InvestmentPerformanceResponseDto } from './dto/investment-performance-response.dto';
@@ -28,8 +27,7 @@ export class InvestmentsController {
   }
 
   @Get('dashboard')
-  @ApiOperation({ summary: 'Get grouped dashboard analytics for investments' })
-  @ApiOkResponse({ type: InvestmentDashboardAnalyticsResponseDto })
+  @ApiOperation({ summary: 'Get widget-level dashboard analytics for investments' })
   getDashboardAnalytics(@CurrentUserId() userId: number) {
     return this.investmentsService.getDashboardAnalytics(userId);
   }

@@ -1,8 +1,7 @@
 // @ts-nocheck
 import React, { useMemo, useState } from "react";
-import { Box, Paper, Typography } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import dayjs from "dayjs";
-import { INVESTMENT_EVENT_TYPES, OPENING_INVESTMENT_EVENT_TYPES } from "../../types/investmentEventTypes";
 import InvestmentAssetTaxonomyFormDrawer from "./components/InvestmentAssetTaxonomyFormDrawer";
 import InvestmentFormDrawer from "./components/InvestmentFormDrawer";
 import RecurringOccurrencesReviewDialog from "./components/RecurringOccurrencesReviewDialog";
@@ -10,7 +9,6 @@ import AppButton from "../../components/common/AppButton";
 import { EmptyState } from "../../components/common";
 import ConfirmDialog from "../../components/dialogs/ConfirmDialog";
 import { InvestmentViewDrawer } from "./components/InvestmentViewDrawer";
-import InvestmentsCalendarView from "./components/InvestmentsCalendarView";
 import InvestmentsDashboardView from "./components/InvestmentsDashboardView";
 import RecordInvestmentActivityModal from "./components/RecordInvestmentActivityModal";
 import { getInvestmentsTableColumns } from "./components/investmentsTableColumns";
@@ -19,8 +17,6 @@ import { useNotificationStore } from "../../store/notificationStore";
 import {
   buildInvestmentFromForm,
   formatInvestmentCurrency,
-  getInvestmentCategoryLabel,
-  getInvestmentTypeLabel,
   normalizeInvestmentForUi,
 } from "../../utils/investmentHelpers";
 import { getRuntimeErrorMessage } from "../../utils/errorMessage";
@@ -28,7 +24,6 @@ import { frequencyToCadence } from "../../utils/investmentHelpers";
 import {
   useInvestmentDashboardAnalytics,
   useInvestment,
-  useInvestmentEventsData,
   useInvestmentEventsByInvestment,
   useInvestmentPerformance,
   useInvestmentReferenceData,
@@ -42,24 +37,11 @@ import {
   useSaveInvestmentAssetTaxonomy,
 } from "./hooks/useInvestmentAssetTaxonomy";
 import {
-  getInvestmentCalendarGroups,
-  getInvestmentCategoryLabelMap,
-  getInvestmentDashboardKpis,
-  getInvestmentHoldingPerformanceRows,
-  getInvestmentPortfolioGrowthData,
   getInvestmentSelectedById,
-  getInvestmentTimeSeriesData,
-  getInvestmentValueSourceSummary,
   getNormalizedInvestments,
-  getRecentInvestments,
-  getTopInvestmentCurrentValueItems,
   getInvestmentContributionViewItems,
-  getInvestmentContributionAllocation,
-  getInvestmentContributionSubAllocation,
-  getInvestmentContributionHoldingAllocation,
-  getInvestmentCurrentValueAllocation,
-  getInvestmentCurrentValueSubAllocation,
-  getInvestmentCurrentValueHoldingAllocation,
+  getInvestmentHoldingPerformanceRows,
+  getInvestmentTimeSeriesData,
 } from "./investments.selectors";
 import type { InvestmentDrawerData } from "./types/investment.types";
 import {
@@ -67,11 +49,6 @@ import {
   useUpdateInvestmentContributionPlan,
 } from "./hooks/useContributionPlans";
 import { useInvestmentBenefits } from "./hooks/useInvestmentBenefits";
-
-const VIEW_OPTIONS = [
-  { value: "dashboard", label: "Dashboard" },
-  { value: "calendar", label: "Investment Activity" },
-];
 
 export const mapFrequencyToCadence = frequencyToCadence;
 
@@ -107,213 +84,82 @@ export const buildRecurringPayloadFromFormValues = (baseValues) => {
 };
 
 export const buildRecurringPlanUpdatePayloadFromFormValues = (
-  baseValues,
+  formValues,
   existingPlan,
 ) => {
-  const recurringPayload = buildRecurringPayloadFromFormValues(baseValues);
-
+  const recurringPayload = buildRecurringPayloadFromFormValues(formValues);
   return {
     amount: recurringPayload.amount,
     cadenceUnit: recurringPayload.cadenceUnit,
     cadenceInterval: recurringPayload.cadenceInterval,
     anchorDate: recurringPayload.anchorDate,
-    nextDueDate: toDateOnly(baseValues?.recurringPlan?.nextContributionDate) || null,
-    endDate: recurringPayload.endDate || null,
+    endDate: recurringPayload.endDate,
     historicalImportMode: recurringPayload.historicalImportMode,
-    status: existingPlan?.status || "active",
+    status: existingPlan?.status || undefined,
   };
 };
 
-export const buildReviewedHistoricalItemsFromFormValues = (baseValues) => {
-  const recurringPayload = buildRecurringPayloadFromFormValues(baseValues);
-  const today = dayjs().format("YYYY-MM-DD");
-  const reviewedHistoricalItems = [];
-
-  if (recurringPayload.historicalImportMode !== "OPENING_BALANCE") {
-    return reviewedHistoricalItems;
-  }
-
-  if (Number(recurringPayload.openingPrincipalAmount || 0) > 0) {
-    reviewedHistoricalItems.push({
-      dueDate: today,
-      amount: Number(recurringPayload.openingPrincipalAmount || 0),
-      selected: true,
-      status: "CONFIRMED",
-      eventDate: today,
-      eventType: INVESTMENT_EVENT_TYPES.OPENING_BALANCE,
-      sequenceNumber: 1,
-      notes: "Generated via OPENING_BALANCE",
-    });
-  }
-
-  if (Number(recurringPayload.openingIncomeAmount || 0) > 0) {
-    reviewedHistoricalItems.push({
-      dueDate: today,
-      amount: Number(recurringPayload.openingIncomeAmount || 0),
-      selected: true,
-      status: "CONFIRMED",
-      eventDate: today,
-      eventType: INVESTMENT_EVENT_TYPES.OPENING_INCOME_CREDIT,
-      sequenceNumber: reviewedHistoricalItems.length + 1,
-      notes: "Generated via OPENING_BALANCE",
-    });
-  }
-
-  return reviewedHistoricalItems;
-};
-
-export const buildReviewedHistoricalItemsFromInvestment = (investment) => {
-  const activePlanId = investment?.activeContributionPlan?.id;
-
-  return (Array.isArray(investment?.investmentEvents)
-    ? investment.investmentEvents
-    : []
-  )
-    .filter((item) => {
-      const status = String(item?.status || '').toUpperCase();
-      const eventType = item?.eventType;
-
-      if (status !== 'CONFIRMED') return false;
-      if (activePlanId != null && String(item?.recurringPlanId ?? '') !== String(activePlanId)) {
-        return false;
-      }
-
-      return OPENING_INVESTMENT_EVENT_TYPES.includes(eventType);
-    })
-    .map((item, index) => ({
-      dueDate: item.dueDate || item.eventDate,
-      amount: Number(item.amount || 0),
-      selected: true,
-      status: item.status || 'CONFIRMED',
-      eventDate: item.eventDate || item.dueDate,
-      eventType: item.eventType || INVESTMENT_EVENT_TYPES.CONTRIBUTION,
-      sequenceNumber: item.sequenceNumber || index + 1,
-      notes: item.notes || '',
-    }));
-};
-
-const buildRecurringReviewState = ({
+export const buildRecurringReviewState = ({
   formValues,
   nextInvestment,
   drawerMode,
   selectedInvestmentId,
   selectedInvestment,
-  accounts,
 }) => {
   const recurringPayload = buildRecurringPayloadFromFormValues(formValues);
-  const alreadyHasActivePlan =
-    drawerMode === 'edit' && Boolean(selectedInvestment?.activeContributionPlan);
+  const existingPlan = selectedInvestment?.activeContributionPlan;
+  const alreadyHasActivePlan = drawerMode === "edit" && Boolean(existingPlan);
+  const reviewedHistoricalItems = [];
+
+  if (
+    recurringPayload.historicalImportMode === "OPENING_BALANCE" &&
+    !alreadyHasActivePlan
+  ) {
+    const openingDate = toDateOnly(formValues?.startDate) || toDateOnly(dayjs());
+    const openingItems = [
+      ["openingPrincipalAmount", "OPENING_BALANCE", "Opening principal import"],
+      ["openingIncomeAmount", "OPENING_INCOME_CREDIT", "Opening historical income import"],
+    ];
+
+    openingItems.forEach(([amountKey, eventType, notes]) => {
+      const amount = Number(formValues?.recurringPlan?.[amountKey] || 0);
+      if (amount > 0) {
+        reviewedHistoricalItems.push({
+          dueDate: openingDate,
+          eventDate: openingDate,
+          amount,
+          selected: true,
+          status: "CONFIRMED",
+          eventType,
+          notes,
+        });
+      }
+    });
+  }
 
   return {
-    investmentPayload: nextInvestment,
     formValues,
-    selectedInvestmentId:
-      drawerMode === 'edit' ? selectedInvestmentId : null,
-    drawerMode,
+    investmentPayload: nextInvestment,
     recurringPayload,
-    alreadyHasActivePlan,
-    activePlanId: selectedInvestment?.activeContributionPlan?.id ?? null,
-    reviewedHistoricalItems: alreadyHasActivePlan
-      ? buildReviewedHistoricalItemsFromInvestment(selectedInvestment)
-      : buildReviewedHistoricalItemsFromFormValues(formValues),
+    reviewedHistoricalItems,
     historicalImportMode: recurringPayload.historicalImportMode,
-    investmentName: nextInvestment.name,
+    drawerMode,
+    selectedInvestmentId,
+    alreadyHasActivePlan,
+    activePlanId: existingPlan?.id || null,
+    investmentName: nextInvestment?.name || selectedInvestment?.name || "",
     reviewSummary: {
       investment: [
-        {
-          label: 'Investment Name',
-          value: formatReviewValue(nextInvestment.name),
-        },
-        {
-          label: 'Investment Type',
-          value: formatReviewValue(
-            getInvestmentCategoryLabel(nextInvestment.assetCategory),
-          ),
-        },
-        {
-          label: 'Asset Class',
-          value: formatReviewValue(getInvestmentTypeLabel(formValues.type)),
-        },
-        {
-          label: 'Funding Account',
-          value: formatReviewValue(
-            accounts.find(
-              (account) => String(account.id) === String(nextInvestment.accountId),
-            )?.displayName ||
-              accounts.find(
-                (account) => String(account.id) === String(nextInvestment.accountId),
-              )?.name ||
-              accounts.find(
-                (account) => String(account.id) === String(nextInvestment.accountId),
-              )?.institutionName,
-          ),
-        },
-        {
-          label: 'Institution',
-          value: formatReviewValue(nextInvestment.institutionName),
-        },
-        {
-          label: 'Start Date',
-          value: formatReviewValue(nextInvestment.startDate),
-        },
-        {
-          label: 'Status',
-          value: formatReviewValue(nextInvestment.status),
-        },
-        {
-          label: 'Reference',
-          value: formatReviewValue(nextInvestment.referenceNumber),
-        },
+        { label: "Name", value: nextInvestment?.name || "-" },
+        { label: "Status", value: nextInvestment?.status || "-" },
       ],
       valuation: [
-        {
-          label: 'Total Invested',
-          value: 'System calculated',
-        },
-        {
-          label: 'Current Value',
-          value: 'System calculated',
-        },
-        {
-          label: 'Maturity Date',
-          value: formatReviewValue(nextInvestment.maturityDate),
-        },
+        { label: "Current value", value: formatInvestmentCurrency(nextInvestment?.currentValue) },
       ],
       recurring: [
-        {
-          label: 'Recurring Amount',
-          value: formatReviewValue(recurringPayload.amount),
-        },
-        {
-          label: 'Frequency',
-          value: formatReviewValue(formValues?.recurringPlan?.frequency),
-        },
-        {
-          label: 'Anchor Date',
-          value: formatReviewValue(recurringPayload.anchorDate),
-        },
-        {
-          label: 'Plan End Date',
-          value: formatReviewValue(recurringPayload.endDate),
-        },
-        {
-          label: 'Historical Import',
-          value: formatReviewValue(recurringPayload.historicalImportMode),
-        },
-        {
-          label: 'Opening Principal',
-          value:
-            recurringPayload.historicalImportMode === 'OPENING_BALANCE'
-              ? formatReviewValue(recurringPayload.openingPrincipalAmount)
-              : 'Not applicable',
-        },
-        {
-          label: 'Opening Income',
-          value:
-            recurringPayload.historicalImportMode === 'OPENING_BALANCE'
-              ? formatReviewValue(recurringPayload.openingIncomeAmount)
-              : 'Not applicable',
-        },
+        { label: "Contribution", value: formatInvestmentCurrency(recurringPayload.amount) },
+        { label: "Anchor date", value: recurringPayload.anchorDate || "-" },
+        { label: "Import mode", value: recurringPayload.historicalImportMode },
       ],
     },
   };
@@ -329,13 +175,7 @@ export const buildRecurringConfirmPayload = (
     : [],
 });
 
-const formatReviewValue = (value, fallback = "-") => {
-  if (value === null || value === undefined || value === "") return fallback;
-  return String(value);
-};
-
 export default function Investments() {
-  const [activeView, setActiveView] = useState("dashboard");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -377,12 +217,10 @@ export default function Investments() {
     error: referenceDataError,
     reload: reloadReferenceData,
   } = useInvestmentReferenceData();
-  const dashboardEnabled = activeView === "dashboard";
-  const investmentEventsQuery = useInvestmentEventsData(activeView === "calendar");
+  const dashboardEnabled = true;
   const dashboardAnalyticsQuery = useInvestmentDashboardAnalytics(dashboardEnabled);
   const investmentBenefitsQuery = useInvestmentBenefits();
   const investmentBenefitsData = investmentBenefitsQuery.data;
-  const investmentEvents = investmentEventsQuery.data || [];
   const loading =
     investmentsLoading ||
     referenceDataLoading ||
@@ -503,10 +341,7 @@ export default function Investments() {
   const isFirstInvestmentSetup =
     summaryInvestments.length === 0 && !hasInvestmentFilters;
 
-  const localDashboardKpis = getInvestmentDashboardKpis(summaryInvestments);
-  const localValueSourceSummary = getInvestmentValueSourceSummary(summaryInvestments);
 
-  const categoryLabelMap = getInvestmentCategoryLabelMap(taxonomyNodes);
   const assetTypeLabelMap = useMemo(() => {
     const map = {};
     (Array.isArray(assetTypeConfigs) ? assetTypeConfigs : []).forEach((config) => {
@@ -533,156 +368,105 @@ export default function Investments() {
     ],
     [assetTypeConfigs],
   );
-  const investmentsByAssetType = useMemo(
-    () =>
-      summaryInvestments.map((investment) => ({
-        ...investment,
-        category: String(investment.assetType || investment.type || investment.category || "OTHER"),
-      })),
-    [summaryInvestments],
+  const dashboardWidgets = dashboardAnalyticsQuery.data?.widgets;
+  const portfolioPoints = (dashboardWidgets?.portfolioGrowth.order ?? []).map(
+    (key) => dashboardWidgets?.portfolioGrowth.byKey[key],
+  ).filter(Boolean);
+  const deploymentPoints = (dashboardWidgets?.capitalDeployment.order ?? []).map(
+    (key) => dashboardWidgets?.capitalDeployment.byKey[key],
+  ).filter(Boolean);
+  const categoryPerformanceRows = (dashboardWidgets?.assetTypePerformance.rows ?? []).map((row) => ({
+    ...row,
+    label: assetTypeLabelMap[row.key] || row.label || row.key,
+  }));
+  const categoryPerformanceSubRows = (dashboardWidgets?.allocationMix.rows ?? []).map((row) => ({
+    ...row,
+    label: assetCategoryLabelMap[row.key] || row.label || row.key,
+  }));
+  const holdingRows = getInvestmentHoldingPerformanceRows(summaryInvestments, 12);
+  const categoryBreakdown = categoryPerformanceRows.map((row) => ({ key: row.key, label: row.label, value: row.invested, investmentIds: row.investmentIds, assetType: row.assetType }));
+  const categorySubBreakdown = categoryPerformanceSubRows.map((row) => ({ key: row.key, label: row.label, value: row.invested, investmentIds: row.investmentIds, assetCategory: row.key }));
+  const holdingContributionRows = categoryPerformanceRows.map((row) => ({ key: row.key, label: row.label, value: row.invested, investmentIds: row.investmentIds }));
+  const currentValueBreakdown = categoryPerformanceRows.map((row) => ({ key: row.key, label: row.label, value: row.currentValue, investmentIds: row.investmentIds, assetType: row.assetType }));
+  const currentValueSubBreakdown = categoryPerformanceSubRows.map((row) => ({ key: row.key, label: row.label, value: row.currentValue, investmentIds: row.investmentIds, assetCategory: row.key }));
+  const holdingCurrentValueRows = categoryPerformanceRows.map((row) => ({ key: row.key, label: row.label, value: row.currentValue, investmentIds: row.investmentIds }));
+  const breakdownPoints = getInvestmentTimeSeriesData(
+    summaryInvestments,
+    selectedYearForDrill,
   );
-  const dashboardAnalytics = dashboardAnalyticsQuery.data?.analytics;
-  const categoryPerformanceRows = useMemo(
-    () =>
-      (dashboardAnalytics?.categoryPerformance ?? []).map((row) => ({
-        ...row,
-        label: assetTypeLabelMap[row.key] || row.label || row.key,
-      })),
-    [assetTypeLabelMap, dashboardAnalytics],
+  const breakdownByLabel = Object.fromEntries(
+    breakdownPoints.map((point) => [point.label, point]),
   );
-  const categoryPerformanceSubRows = useMemo(
-    () =>
-      (dashboardAnalytics?.categorySubPerformance ?? []).map((row) => ({
-        ...row,
-        label: assetCategoryLabelMap[row.key] || row.label || row.key,
-      })),
-    [assetCategoryLabelMap, dashboardAnalytics],
+  const fallbackInvestedBreakdown = Object.fromEntries(
+    categoryPerformanceRows.map((row) => [row.key, row.invested]),
   );
-  const holdingRows = useMemo(
-    () => getInvestmentHoldingPerformanceRows(summaryInvestments, 12),
-    [summaryInvestments],
+  const fallbackReturnBreakdown = Object.fromEntries(
+    categoryPerformanceRows.map((row) => [row.key, row.returnAmount]),
+  );
+  const timeSeriesData = selectedYearForDrill
+    ? breakdownPoints
+    : deploymentPoints.map((point) => ({
+        label: point.period.label,
+        invested: point.state.cumulativeInvested,
+        return: point.state.returnAmount ?? 0,
+        investedBreakdown: breakdownByLabel[point.period.label]?.investedBreakdown ?? fallbackInvestedBreakdown,
+        returnBreakdown: breakdownByLabel[point.period.label]?.returnBreakdown ?? fallbackReturnBreakdown,
+      }));
+  const portfolioGrowthData = portfolioPoints.map((point) => ({
+    label: point.period.label,
+    investedToDate: point.state.cumulativeInvested,
+    currentValueToDate: point.state.portfolioValue,
+    returnToDate: point.state.returnAmount ?? 0,
+    snapshotBackedValue: point.state.portfolioValue ?? 0,
+    estimatedValue: 0,
+    investedOnlyValue: 0,
+  }));
+  const dashboardKpiWidgets = dashboardWidgets?.kpis;
+  const dashboardKpis = {
+    totalInvestments: summaryInvestments.length,
+    totalContributions: Number(dashboardKpiWidgets?.totalContributions.value ?? 0),
+    totalInvested: Number(dashboardKpiWidgets?.totalContributions.investments ?? 0),
+    totalCurrentValue: Number(dashboardKpiWidgets?.currentPortfolioValue.investments ?? 0),
+    totalCurrentValueFromInsuranceSavings: Number(dashboardKpiWidgets?.currentPortfolioValue.insuranceSavings ?? 0),
+    totalReturn: Number(dashboardKpiWidgets?.currentPortfolioValue.returnAmount ?? 0),
+    returnPercentage: Number(dashboardKpiWidgets?.currentPortfolioValue.returnPercentage ?? 0),
+    upcomingMaturity: Number(dashboardKpiWidgets?.upcomingMaturity.investments ?? 0),
+    upcomingMaturityFromInsuranceSavings: Number(dashboardKpiWidgets?.upcomingMaturity.insuranceSavings ?? 0),
+    insuranceCover: Number(dashboardKpiWidgets?.insuranceCover.value ?? 0),
+    insuranceCoverProtection: Number(dashboardKpiWidgets?.insuranceCover.protection ?? 0),
+    insuranceCoverSavings: Number(dashboardKpiWidgets?.insuranceCover.savingsLinked ?? 0),
+    insuranceSavingsContribution: Number(dashboardKpiWidgets?.totalContributions.insuranceSavings ?? 0),
+    protectionExpenseTotal: Number(dashboardKpiWidgets?.insurancePremiumsPaid.protection ?? 0),
+  };
+
+  const valueSourceSummary = dashboardWidgets?.sourceOfValue ?? {
+    snapshotBackedValue: 0,
+    estimatedValue: 0,
+    investedOnlyValue: 0,
+    snapshotBackedCount: 0,
+    estimatedCount: 0,
+    investedOnlyCount: 0,
+    staleValuationCount: 0,
+    staleValuationValue: 0,
+    snapshotBackedIds: [],
+    estimatedIds: [],
+    investedOnlyIds: [],
+    staleValuationIds: [],
+  };
+
+  const topCurrentValueItems = (dashboardWidgets?.topHoldings ?? []).map((item) =>
+    normalizeInvestmentForUi(item, taxonomyNodes),
   );
 
-  const categoryBreakdown = useMemo(
-    () => getInvestmentContributionAllocation(summaryInvestments, taxonomyNodes),
-    [summaryInvestments, taxonomyNodes],
-  );
-  const categorySubBreakdown = useMemo(
-    () => getInvestmentContributionSubAllocation(summaryInvestments, taxonomyNodes),
-    [summaryInvestments, taxonomyNodes],
-  );
-  const holdingContributionRows = useMemo(
-    () => getInvestmentContributionHoldingAllocation(summaryInvestments),
-    [summaryInvestments],
+  const recentInvestments = (dashboardWidgets?.recentlyAdded ?? []).map((item) =>
+    normalizeInvestmentForUi(item, taxonomyNodes),
   );
 
-  const currentValueBreakdown = useMemo(
-    () => getInvestmentCurrentValueAllocation(summaryInvestments, taxonomyNodes),
-    [summaryInvestments, taxonomyNodes],
+  const upcomingContributions = getInvestmentContributionViewItems(
+    (dashboardWidgets?.upcomingContributions ?? []).map((item) =>
+      normalizeInvestmentForUi(item, taxonomyNodes),
+    ),
   );
-  const currentValueSubBreakdown = useMemo(
-    () => getInvestmentCurrentValueSubAllocation(summaryInvestments, taxonomyNodes),
-    [summaryInvestments, taxonomyNodes],
-  );
-  const holdingCurrentValueRows = useMemo(
-    () => getInvestmentCurrentValueHoldingAllocation(summaryInvestments),
-    [summaryInvestments],
-  );
-
-  const timeSeriesData = useMemo(() => {
-    if (selectedYearForDrill) {
-      return (
-        getInvestmentTimeSeriesData(investmentsByAssetType, selectedYearForDrill)
-      );
-    }
-
-    return getInvestmentTimeSeriesData(investmentsByAssetType, null);
-  }, [investmentsByAssetType, selectedYearForDrill]);
-
-  const portfolioGrowthData = useMemo(
-    () =>
-      dashboardAnalytics?.portfolioGrowthData ||
-      getInvestmentPortfolioGrowthData(summaryInvestments),
-    [dashboardAnalytics, summaryInvestments],
-  );
-
-  const dashboardKpis = dashboardAnalyticsQuery.data?.summary
-    ? {
-        totalInvestments: Number(
-          dashboardAnalyticsQuery.data.summary.totalInvestments ?? localDashboardKpis.totalInvestments,
-        ),
-        totalContributions: Number(
-          dashboardAnalyticsQuery.data.summary.totalContributions ?? localDashboardKpis.totalContributions,
-        ),
-        totalInvested: Number(
-          dashboardAnalyticsQuery.data.summary.totalInvested ?? localDashboardKpis.totalInvested,
-        ),
-        totalCurrentValue: Number(
-          dashboardAnalyticsQuery.data.summary.totalCurrentValue ?? localDashboardKpis.totalCurrentValue,
-        ),
-        totalCurrentValueFromInsuranceSavings: Number(
-          dashboardAnalyticsQuery.data.summary.totalCurrentValueFromInsuranceSavings ??
-            localDashboardKpis.totalCurrentValueFromInsuranceSavings,
-        ),
-        totalReturn: Number(
-          dashboardAnalyticsQuery.data.summary.totalReturn ?? localDashboardKpis.totalReturn,
-        ),
-        returnPercentage: Number(
-          dashboardAnalyticsQuery.data.summary.returnPercentage ?? localDashboardKpis.returnPercentage,
-        ),
-        upcomingMaturity: Number(
-          dashboardAnalyticsQuery.data.summary.upcomingMaturity ?? localDashboardKpis.upcomingMaturity,
-        ),
-        upcomingMaturityFromInsuranceSavings: Number(
-          dashboardAnalyticsQuery.data.summary.upcomingMaturityFromInsuranceSavings ??
-            localDashboardKpis.upcomingMaturityFromInsuranceSavings,
-        ),
-        insuranceCover: Number(
-          dashboardAnalyticsQuery.data.summary.insuranceCover ?? localDashboardKpis.insuranceCover,
-        ),
-        insuranceCoverProtection: Number(
-          dashboardAnalyticsQuery.data.summary.insuranceCoverProtection ??
-            localDashboardKpis.insuranceCoverProtection,
-        ),
-        insuranceCoverSavings: Number(
-          dashboardAnalyticsQuery.data.summary.insuranceCoverSavings ??
-            localDashboardKpis.insuranceCoverSavings,
-        ),
-        insuranceSavingsContribution: Number(
-          dashboardAnalyticsQuery.data.summary.insuranceSavingsContribution ??
-            localDashboardKpis.insuranceSavingsContribution,
-        ),
-        protectionExpenseTotal: Number(
-          dashboardAnalyticsQuery.data.summary.protectionExpenseTotal ??
-            localDashboardKpis.protectionExpenseTotal,
-        ),
-      }
-    : localDashboardKpis;
-
-  const valueSourceSummary =
-    dashboardAnalyticsQuery.data?.summary?.valueSourceSummary || localValueSourceSummary;
-
-  const topCurrentValueItems = dashboardAnalyticsQuery.data?.upcoming?.topCurrentValueItems
-    ? dashboardAnalyticsQuery.data.upcoming.topCurrentValueItems.map((item) =>
-        normalizeInvestmentForUi(item, taxonomyNodes),
-      )
-    : getTopInvestmentCurrentValueItems(summaryInvestments);
-
-  const recentInvestments = dashboardAnalyticsQuery.data?.upcoming?.recentInvestments
-    ? dashboardAnalyticsQuery.data.upcoming.recentInvestments.map((item) =>
-        normalizeInvestmentForUi(item, taxonomyNodes),
-      )
-    : getRecentInvestments(summaryInvestments);
-
-  const upcomingContributions = dashboardAnalyticsQuery.data?.upcoming?.upcomingContributions
-    ? getInvestmentContributionViewItems(
-        dashboardAnalyticsQuery.data.upcoming.upcomingContributions.map((item) =>
-          normalizeInvestmentForUi(item, taxonomyNodes),
-        ),
-      )
-    : getInvestmentContributionViewItems(summaryInvestments);
-
-  const calendarGroups = getInvestmentCalendarGroups(summaryInvestments);
 
   const openEditDrawer = (investment) => {
     setDrawerMode("edit");
@@ -1029,15 +813,6 @@ export default function Investments() {
     />
   );
 
-  const renderCalendarView = () => (
-    <InvestmentsCalendarView
-      calendarGroups={calendarGroups}
-      investmentEvents={investmentEvents}
-      investments={summaryInvestments}
-      categoryLabelMap={categoryLabelMap}
-    />
-  );
-
   return (
     <Box sx={{ pb: 3 }}>
       <Box
@@ -1077,30 +852,6 @@ export default function Investments() {
             <AppButton variant="outlined" onClick={openAssetTaxonomyDrawer}>
               Manage Taxonomy
             </AppButton>
-            <Paper
-              variant="outlined"
-              sx={{
-                p: 0.5,
-                display: "inline-flex",
-                gap: 0.5,
-                borderRadius: 1,
-                flexWrap: "wrap",
-              }}
-            >
-              {VIEW_OPTIONS.map((option) => {
-                const selected = activeView === option.value;
-                return (
-                  <AppButton
-                    key={option.value}
-                    variant={selected ? "contained" : "text"}
-                    onClick={() => setActiveView(option.value)}
-                    sx={{ minWidth: 110 }}
-                  >
-                    {option.label}
-                  </AppButton>
-                );
-              })}
-            </Paper>
           </Box>
         ) : null}
       </Box>
@@ -1114,7 +865,7 @@ export default function Investments() {
       {loading ? (
         <Typography color="text.secondary">Loading investments...</Typography>
       ) : null}
-      {!loading && isFirstInvestmentSetup && activeView === "dashboard" ? (
+      {!loading && isFirstInvestmentSetup ? (
         <Box
           sx={{
             minHeight: {
@@ -1140,10 +891,7 @@ export default function Investments() {
           />
         </Box>
       ) : null}
-      {!loading && !isFirstInvestmentSetup && activeView === "dashboard"
-        ? renderDashboardView()
-        : null}
-      {!loading && activeView === "calendar" ? renderCalendarView() : null}
+      {!loading && !isFirstInvestmentSetup ? renderDashboardView() : null}
 
       <InvestmentFormDrawer
         open={
@@ -1169,6 +917,7 @@ export default function Investments() {
         }
         onClose={closeInvestmentDrawer}
         investment={selectedInvestment}
+        accounts={accounts}
         taxonomyNodes={taxonomyNodes}
         onEdit={openEditDrawer}
         onRecordActivity={openRecordInvestmentActivity}

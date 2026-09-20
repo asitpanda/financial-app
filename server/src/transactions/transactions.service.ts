@@ -79,6 +79,9 @@ export class TransactionsService {
 
     const sourceAccountId = Number(investment.accountId);
     const contributionPlanId = await this.resolveContributionPlanId(recordContributionDto, userId);
+    const contributionPlan = contributionPlanId == null
+      ? null
+      : await this.contributionPlansService.findOne(String(contributionPlanId), userId);
 
     // 1. Create Transaction
     const transactionDto: CreateTransactionDto = {
@@ -101,6 +104,10 @@ export class TransactionsService {
     const investmentEventDto = {
       investmentId: String(recordContributionDto.investmentId),
       linkedTransactionId: String(transaction.id),
+      recurringPlanId: contributionPlanId == null ? undefined : String(contributionPlanId),
+      dueDate: contributionPlan?.nextDueDate
+        ? new Date(contributionPlan.nextDueDate).toISOString().slice(0, 10)
+        : undefined,
       eventType: InvestmentEventType.CONTRIBUTION,
       status: InvestmentEventStatus.CONFIRMED,
       eventSource: InvestmentEventSource.MANUAL,

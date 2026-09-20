@@ -5,7 +5,6 @@ import { InvestmentEventsService } from '../investment-events/investment-events.
 import { ValuationSnapshotsService } from '../valuation-snapshots/valuation-snapshots.service';
 import { CreateInvestmentDto } from './dto/create-investment.dto';
 import {
-  InvestmentDashboardAnalyticsResponseDto,
   InvestmentDashboardCategoryPerformanceRowDto,
   InvestmentDashboardSummaryDto,
   InvestmentValueSourceSummaryDto,
@@ -31,6 +30,7 @@ import { UpdateInvestmentDto } from './dto/update-investment.dto';
 import { InvestmentRepository } from './repositories/investment.repository';
 import { AssetTaxonomyRepository } from '../investment-asset-taxonomy/repositories/asset-taxonomy.repository';
 import { PrismaService } from '../database/prisma.service';
+import { AnalyticsEngineService } from './analytics/analytics-engine.service';
 
 @Injectable()
 export class InvestmentsService {
@@ -41,6 +41,7 @@ export class InvestmentsService {
     private readonly investmentEventsService: InvestmentEventsService,
     private readonly valuationSnapshotsService: ValuationSnapshotsService,
     private readonly prisma: PrismaService,
+    private readonly analyticsEngine: AnalyticsEngineService,
   ) {}
 
   private get appMetaConfigRefDelegate() {
@@ -462,6 +463,7 @@ export class InvestmentsService {
     investment: SummaryInvestment,
     snapshots: SnapshotLike[] = [],
     pointDate: Date,
+    events: EventLike[] = [],
   ) {
     const investedValue = Number(investment?.totalInvested || 0);
 
@@ -480,6 +482,17 @@ export class InvestmentsService {
       return {
         value: Number(latestSnapshot.marketValue || investedValue),
         source: 'snapshot',
+      };
+    }
+
+    const derivedValuation = this.buildDerivedEventValuation(
+      events,
+      investment?.accountingTreatment,
+    );
+    if (derivedValuation) {
+      return {
+        value: derivedValuation.currentValue,
+        source: derivedValuation.currentValueSource ?? 'estimated',
       };
     }
 
@@ -506,11 +519,13 @@ export class InvestmentsService {
   private buildResolvedAnalyticsRecord(
     investment: SummaryInvestment,
     snapshots: SnapshotLike[] = [],
+    events: EventLike[] = [],
   ): ResolvedAnalyticsRecord {
-    const resolvedCurrentValue = this.resolveInvestmentValueAtDate(
+    const resolvedCurrentValue = this.analyticsEngine.resolveInvestmentValueAtDate(
       investment,
       snapshots,
       new Date(),
+      events,
     );
     const investedAmount = Number(investment?.totalInvested || 0);
 
@@ -556,7 +571,7 @@ export class InvestmentsService {
             return acc;
           }
 
-          const resolvedValue = this.resolveInvestmentValueAtDate(
+          const resolvedValue = this.analyticsEngine.resolveInvestmentValueAtDate(
             entry.investment,
             entry.snapshots,
             pointDate,
@@ -715,7 +730,7 @@ export class InvestmentsService {
               (sum, item) =>
                 item.timelineStartDate.getTime() > pointDate.getTime()
                   ? sum
-                  : sum + this.resolveInvestmentValueAtDate(
+                  : sum + this.analyticsEngine.resolveInvestmentValueAtDate(
                       item.investment,
                       item.snapshots,
                       pointDate,
@@ -838,6 +853,26 @@ export class InvestmentsService {
     };
   }
 
+  private normalizeDashboardInvestment(investment: SummaryInvestment): SummaryInvestment {
+    return {
+      ...investment,
+      totalInvested: this.toFiniteNumber(investment.totalInvested),
+      currentValue: this.toFiniteNumber(investment.currentValue),
+      insuranceCover: this.toFiniteNumber(investment.insuranceCover),
+      activeContributionPlan: investment.activeContributionPlan
+        ? {
+            ...investment.activeContributionPlan,
+            amount: this.toFiniteNumber(investment.activeContributionPlan.amount),
+          }
+        : null,
+    };
+  }
+
+  private toFiniteNumber(value: unknown): number {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : 0;
+  }
+
   private async getSummaryInvestments(userId: number): Promise<SummaryInvestment[]> {
     const investments = await this.findAll(userId);
     return investments.map((investment) => this.mapInvestmentSummaryItem(investment));
@@ -898,12 +933,27 @@ export class InvestmentsService {
   private buildPerformanceHistoryFromSnapshots(
     investment: InvestmentLike,
     snapshots: SnapshotLike[] = [],
+    events: EventLike[] = [],
   ) {
     if (!Array.isArray(snapshots) || snapshots.length === 0) {
       return [];
     }
 
-    const investedValue = Number(investment?.totalInvested ?? 0);
+    const confirmedEvents = events
+      .filter(
+        (event) =>
+          this.normalizeEventStatus(event?.status) === 'CONFIRMED' &&
+          (event?.eventDate || event?.dueDate),
+      )
+      .sort(
+        (left, right) =>
+          new Date(left.eventDate || left.dueDate || 0).getTime() -
+          new Date(right.eventDate || right.dueDate || 0).getTime(),
+      );
+    let eventIndex = 0;
+    let investedValue = confirmedEvents.length === 0
+      ? Number(investment?.totalInvested ?? 0)
+      : 0;
 
     return [...snapshots]
       .filter((snapshot) => snapshot?.snapshotDate)
@@ -916,6 +966,26 @@ export class InvestmentsService {
         const date = this.toOptionalDateString(snapshot.snapshotDate);
         if (!date) {
           return history;
+        }
+
+        const snapshotTime = new Date(date).getTime();
+        while (eventIndex < confirmedEvents.length) {
+          const event = confirmedEvents[eventIndex];
+          const eventTime = new Date(event.eventDate || event.dueDate || 0).getTime();
+          if (!Number.isFinite(eventTime) || eventTime > snapshotTime) {
+            break;
+          }
+
+          const amount = Number(event.amount || 0);
+          if (
+            event.eventType === InvestmentEventType.CONTRIBUTION ||
+            event.eventType === InvestmentEventType.OPENING_BALANCE
+          ) {
+            investedValue += amount;
+          } else if (event.eventType === InvestmentEventType.WITHDRAWAL_PRINCIPAL) {
+            investedValue -= amount;
+          }
+          eventIndex += 1;
         }
 
         const currentValue = Number(snapshot.marketValue ?? 0);
@@ -1054,12 +1124,12 @@ export class InvestmentsService {
 
     if (accountingTreatment === 'INSURANCE_SAVINGS') {
       // Premium-paid history is permanent: a money-back/payout (WITHDRAWAL_PRINCIPAL) must not retroactively reduce it.
-      // currentValue is intentionally not derived here - only an explicit ValuationSnapshot should set it for these products.
+      // Until an explicit valuation/benefit value exists, insurance savings are valued at premiums paid.
       return {
         totalInvested: principalIn,
-        currentValue: 0,
+        currentValue: principalIn,
         lastValuationAt: latestConfirmedEvent?.eventDate ?? null,
-        currentValueSource: null,
+        currentValueSource: 'manual',
       };
     }
 
@@ -1078,7 +1148,7 @@ export class InvestmentsService {
     events: EventLike[] = [],
   ): T {
     const storedCurrentValue = Number(investment?.currentValue ?? Number.NaN);
-    const derivedValuation = this.buildDerivedEventValuation(events, investment?.accountingTreatment);
+    const derivedValuation = this.analyticsEngine.deriveEventValuation(events, investment?.accountingTreatment);
     const hasStoredCurrentValue = Number.isFinite(storedCurrentValue);
     const shouldKeepStoredValue =
       hasStoredCurrentValue &&
@@ -1208,7 +1278,7 @@ export class InvestmentsService {
               (sum, item) =>
                 item.timelineStartDate.getTime() > pointDate.getTime()
                   ? sum
-                  : sum + this.resolveInvestmentValueAtDate(item.investment, item.snapshots, pointDate).value,
+                  : sum + this.analyticsEngine.resolveInvestmentValueAtDate(item.investment, item.snapshots, pointDate).value,
               0,
             ),
           ),
@@ -1365,6 +1435,7 @@ export class InvestmentsService {
         performanceHistory: this.buildPerformanceHistoryFromSnapshots(
           investment,
           valuationSnapshots,
+          investmentEvents,
         ),
       };
     }
@@ -1475,24 +1546,49 @@ export class InvestmentsService {
       .slice(0, 5);
 
     return {
-      upcomingContributions,
-      recentInvestments,
-      topCurrentValueItems,
-      upcomingMaturities,
+      upcomingContributions: upcomingContributions.map((investment) => this.normalizeDashboardInvestment(investment)),
+      recentInvestments: recentInvestments.map((investment) => this.normalizeDashboardInvestment(investment)),
+      topCurrentValueItems: topCurrentValueItems.map((investment) => this.normalizeDashboardInvestment(investment)),
+      upcomingMaturities: upcomingMaturities.map((investment) => this.normalizeDashboardInvestment(investment)),
     };
   }
 
-  async getDashboardAnalytics(userId: number): Promise<InvestmentDashboardAnalyticsResponseDto> {
-    const [investments, snapshots, upcoming] = await Promise.all([
+  async getDashboardAnalytics(userId: number): Promise<unknown> {
+    const [investments, upcoming] = await Promise.all([
       this.getSummaryInvestments(userId),
-      this.valuationSnapshotsService.findAll(userId),
       this.buildDashboardUpcoming(userId),
     ]);
+    const facts = await this.analyticsEngine.loadFacts(userId, investments);
+    const query = {
+      range: 'ALL' as const,
+      granularity: 'YEAR' as const,
+      calendar: 'FISCAL' as const,
+      fiscalYearStartMonth: 3,
+    };
+    const points = await this.analyticsEngine.calculate(query, facts);
+    const snapshots = facts.snapshots;
+    const treatmentByInvestmentId = new Map(
+      investments.map((investment) => [String(investment.id), investment.accountingTreatment ?? 'INVESTMENT']),
+    );
+    const confirmedEvents = facts.events.filter((event) => this.normalizeEventStatus(event.status) === 'CONFIRMED');
+    const eventAmount = (event: EventLike) => Number(event.amount ?? 0);
+    const eventTotal = (predicate: (event: EventLike) => boolean, treatment?: AccountingTreatment) =>
+      confirmedEvents
+        .filter((event) => predicate(event) && (!treatment || treatmentByInvestmentId.get(String(event.investmentId)) === treatment))
+        .reduce((sum, event) => sum + eventAmount(event), 0);
+    const investmentContributions = eventTotal(
+      (event) => event.eventType === InvestmentEventType.CONTRIBUTION || event.eventType === InvestmentEventType.OPENING_BALANCE,
+      'INVESTMENT',
+    );
+    const insuranceSavingsPremiums = eventTotal((event) => event.eventType === InvestmentEventType.PREMIUM, 'INSURANCE_SAVINGS');
+    const protectionPremiums = eventTotal((event) => event.eventType === InvestmentEventType.PREMIUM, 'PROTECTION_EXPENSE');
+    const eventBasedContributions = investmentContributions + insuranceSavingsPremiums;
     const snapshotsByInvestment = this.buildSnapshotsByInvestment(snapshots);
     const records = investments.map((investment) =>
       this.buildResolvedAnalyticsRecord(
         investment,
         snapshotsByInvestment.get(String(investment.id)) ?? [],
+        confirmedEvents.filter((event) => String(event.investmentId) === String(investment.id)),
       ),
     );
     // Growth/allocation/timeline analytics include INVESTMENT + INSURANCE_SAVINGS (valued), exclude PROTECTION_EXPENSE.
@@ -1504,22 +1600,74 @@ export class InvestmentsService {
     const investmentOnlyInvestments = investments.filter(
       (investment) => (investment.accountingTreatment ?? 'INVESTMENT') === 'INVESTMENT',
     );
-    const yearly = this.buildYearlyTimeSeriesData(valuedRecords);
+    const summary = this.buildDashboardSummary(investments, records);
+    const categoryPerformance = this.buildCategoryPerformanceRows(investmentOnlyRecords, 12);
+    const categorySubPerformance = this.buildCategorySubPerformanceRows(investmentOnlyInvestments, snapshotsByInvestment, 12);
+    const byKey = points.reduce<Record<string, typeof points[number]>>((result, point) => {
+      result[point.period.key] = point;
+      return result;
+    }, {});
 
     return {
-      summary: this.buildDashboardSummary(investments, records),
-      upcoming,
-      analytics: {
-        portfolioGrowthData: this.buildPortfolioGrowthData(valuedRecords),
-        timeSeries: {
-          yearly,
-          monthlyByYear: yearly.reduce<Record<string, TimeSeriesPoint[]>>((acc, point) => {
-            acc[point.label] = this.buildMonthlyTimeSeriesData(valuedRecords, point.label);
-            return acc;
-          }, {}),
+      responseContext: {
+        generatedAt: new Date().toISOString(),
+        calculationVersion: '1',
+        currency: investments[0]?.currency ?? 'INR',
+        timezone: 'Asia/Kolkata',
+        calendar: 'fiscal',
+        fiscalYearStartMonth: 4,
+        availableFrom: points[0]?.period.startDate.toISOString().slice(0, 10) ?? null,
+        availableTo: new Date().toISOString().slice(0, 10),
+      },
+      widgets: {
+        kpis: {
+          totalContributions: {
+            value: eventBasedContributions,
+            investments: investmentContributions,
+            insuranceSavings: insuranceSavingsPremiums,
+          },
+          currentPortfolioValue: {
+            value: summary.totalCurrentValue + summary.totalCurrentValueFromInsuranceSavings,
+            investments: summary.totalCurrentValue,
+            insuranceSavings: summary.totalCurrentValueFromInsuranceSavings,
+            returnAmount: summary.totalReturn,
+            returnPercentage: summary.returnPercentage,
+          },
+          upcomingMaturity: {
+            value: summary.upcomingMaturity + summary.upcomingMaturityFromInsuranceSavings,
+            investments: summary.upcomingMaturity,
+            insuranceSavings: summary.upcomingMaturityFromInsuranceSavings,
+          },
+          insuranceCover: {
+            value: summary.insuranceCover,
+            protection: summary.insuranceCoverProtection,
+            savingsLinked: summary.insuranceCoverSavings,
+          },
+          insurancePremiumsPaid: {
+            value: insuranceSavingsPremiums + protectionPremiums,
+            savingsLinked: insuranceSavingsPremiums,
+            protection: protectionPremiums,
+          },
         },
-        categoryPerformance: this.buildCategoryPerformanceRows(investmentOnlyRecords, 12),
-        categorySubPerformance: this.buildCategorySubPerformanceRows(investmentOnlyInvestments, snapshotsByInvestment, 12),
+        portfolioGrowth: {
+          order: points.map((point) => point.period.key),
+          byKey,
+        },
+        capitalDeployment: {
+          order: points.map((point) => point.period.key),
+          byKey,
+        },
+        sourceOfValue: summary.valueSourceSummary,
+        assetTypePerformance: { rows: categoryPerformance },
+        insurancePosition: {
+          cover: summary.insuranceCover,
+          premiumsPaid: insuranceSavingsPremiums + protectionPremiums,
+        },
+        upcomingMaturities: upcoming.upcomingMaturities,
+        allocationMix: { rows: categorySubPerformance },
+        upcomingContributions: upcoming.upcomingContributions,
+        topHoldings: upcoming.topCurrentValueItems,
+        recentlyAdded: upcoming.recentInvestments,
       },
     };
   }

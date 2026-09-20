@@ -16,6 +16,13 @@ import type { Investment, InvestmentAssetTypeConfig } from "../types/investment.
 import { getProfitLossMuiColor } from "../../../colors";
 
 const getInvestmentReturnMetrics = (investment: Investment) => {
+  if (
+    investment.accountingTreatment === "PROTECTION_EXPENSE" ||
+    investment.accountingTreatment === "INSURANCE_SAVINGS"
+  ) {
+    return null;
+  }
+
   const investedValue = Number(investment?.totalInvested || 0);
   const currentValue = Number(investment?.currentValue || 0);
 
@@ -95,10 +102,10 @@ export const getInvestmentsTableColumns = ({
         </Typography>
         <Typography variant="caption" color="text.secondary">
           {row.activeContributionPlan
-            ? getCadenceLabel(
+            ? `${getCadenceLabel(
                 row.activeContributionPlan.cadenceUnit,
                 row.activeContributionPlan.cadenceInterval,
-              )
+              )} • ${formatInvestmentCurrency(row.activeContributionPlan.amount)}`
             : "No active schedule"}
         </Typography>
       </Box>
@@ -188,10 +195,18 @@ export const getInvestmentsTableColumns = ({
           }}
         >
           <Typography variant="body2" sx={{ fontWeight: 700, color: returnTone }}>
-            {metrics ? formatInvestmentCurrency(metrics.returnAmount) : "Not available"}
+            {row.accountingTreatment === "INSURANCE_SAVINGS"
+              ? "See benefits"
+              : metrics
+              ? formatInvestmentCurrency(metrics.returnAmount)
+              : "Not available"}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {metrics
+            {row.accountingTreatment === "INSURANCE_SAVINGS"
+              ? "Benefits tracked separately"
+              : row.accountingTreatment === "PROTECTION_EXPENSE"
+              ? "Not applicable for protection"
+              : metrics
               ? `${metrics.returnPercentage >= 0 ? "+" : ""}${metrics.returnPercentage.toFixed(1)}% vs invested`
               : "Waiting for cost and value"}
           </Typography>

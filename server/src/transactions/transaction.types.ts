@@ -15,6 +15,12 @@ export type TransactionRecord = {
   goalId: number | null;
   createdAt: Date;
   updatedAt: Date;
+  investment?: {
+    id: number;
+    name: string;
+    institutionName: string | null;
+  } | null;
+  investmentEventType?: string | null;
 };
 
 export type TransactionGoalDeltaSource = {

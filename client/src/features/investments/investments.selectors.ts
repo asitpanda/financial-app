@@ -112,15 +112,6 @@ export interface InvestmentMaturityBucket {
   investmentIds: InvestmentId[];
 }
 
-export interface InvestmentCalendarItem {
-  id: string;
-  title: string;
-  type: string;
-  date: string;
-  amount: number;
-  subtitle: string;
-}
-
 export interface InvestmentContributionViewItem extends Investment {
   dueDaysUntil: number;
   dueLabel: string;
@@ -215,8 +206,6 @@ interface ResolvedInvestmentRecord {
   currentValueSource: 'snapshot' | 'estimated' | 'invested';
   isStaleValuation: boolean;
 }
-
-export type InvestmentCalendarGroups = Record<string, InvestmentCalendarItem[]>;
 
 const FISCAL_YEAR_START_MONTH = 3;
 const MONTH_NAMES = [
@@ -1659,47 +1648,3 @@ export const getInsurancePositionData = (
   };
 };
 
-export const getInvestmentCalendarGroups = (
-  investments: Investment[],
-): InvestmentCalendarGroups => {
-  const calendarItems = investments
-    .flatMap((investment) => {
-      const items: InvestmentCalendarItem[] = [];
-
-      if (investment.maturityDate) {
-        items.push({
-          id: `${investment.id}-maturity`,
-          title: investment.name,
-          type: 'Maturity',
-          date: investment.maturityDate,
-          amount: investment.currentValue || investment.totalInvested,
-          subtitle: `${investment.institution} • ${investment.type}`,
-        });
-      }
-
-      if (
-        investment.activeContributionPlan?.nextDueDate &&
-        String(investment.activeContributionPlan?.status || '').toLowerCase() === 'active'
-      ) {
-        items.push({
-          id: `${investment.id}-contribution`,
-          title: investment.name,
-          type: 'Contribution Due',
-          date: investment.activeContributionPlan.nextDueDate,
-          amount: investment.activeContributionPlan.amount,
-          subtitle: `${investment.institution} • ${investment.activeContributionPlan.cadenceInterval > 1 ? `every ${investment.activeContributionPlan.cadenceInterval} ` : ''}${investment.activeContributionPlan.cadenceUnit}`,
-        });
-      }
-
-      return items;
-    })
-    .filter((item) => dayjs(item.date).isAfter(dayjs().subtract(1, 'day')))
-    .sort((left, right) => dayjs(left.date).valueOf() - dayjs(right.date).valueOf());
-
-  return calendarItems.reduce<InvestmentCalendarGroups>((acc, item) => {
-    const key = dayjs(item.date).format('MMMM YYYY');
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(item);
-    return acc;
-  }, {});
-};

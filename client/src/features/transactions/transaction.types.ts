@@ -14,6 +14,12 @@ export interface Transaction {
   userId: string;
   createdAt: string;
   updatedAt: string;
+  investment?: {
+    id: number;
+    name: string;
+    institutionName?: string | null;
+  } | null;
+  investmentEventType?: string | null;
 }
 
 export interface CreateTransactionDto {

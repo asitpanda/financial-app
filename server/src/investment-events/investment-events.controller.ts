@@ -11,11 +11,6 @@ import { CurrentUserId } from '../auth/current-user-id.decorator';
 export class InvestmentEventsController {
   constructor(private readonly service: InvestmentEventsService) {}
 
-  @Get('investment-events')
-  async findAll(@CurrentUserId() userId: number) {
-    return this.service.findAll(userId);
-  }
-
   @Get('investments/:investmentId/events')
   async findAllByInvestment(
     @Param('investmentId', ParseIntPipe) investmentId: number,

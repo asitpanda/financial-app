@@ -1,227 +1,243 @@
-# Investment ER Diagram
+# Database ER Diagram
 
-This document is synced to the canonical SQL schema in server/prisma/sql/core_schema.sql.
+This document is generated from the canonical PostgreSQL schema in [server/prisma/sql/dump-my_react_app-202609201913.sql](../../server/prisma/sql/dump-my_react_app-202609201913.sql). The Prisma models in [server/prisma/schema.prisma](../../server/prisma/schema.prisma) provide application-side naming context.
 
-## Core ERD
+## Complete ERD
 
 ```mermaid
 erDiagram
-    USER ||--o{ CATEGORY : owns
-    USER ||--o{ FINANCIAL_ACCOUNT : owns
-    USER ||--o{ TRANSACTION : owns
-    USER ||--o{ GOAL : owns
-    USER ||--o{ INVESTMENT : owns
-    USER ||--o{ INVESTMENT_ASSET_TAXONOMY : owns
-    USER ||--o{ VALUATION_SNAPSHOT : owns
+    USERS ||--o{ CATEGORIES : owns
+    USERS ||--o{ FINANCIAL_ACCOUNTS : owns
+    USERS ||--o{ TRANSACTIONS : owns
+    USERS ||--o{ GOALS : owns
+    USERS ||--o{ INVESTMENTS : owns
+    USERS ||--o{ INVESTMENT_ASSET_TAXONOMY : owns
+    USERS ||--o{ VALUATION_SNAPSHOTS : owns
 
-    CATEGORY ||--o{ TRANSACTION : classifies
-    CATEGORY ||--o{ GOAL : classifies
+    CATEGORIES ||--o{ TRANSACTIONS : classifies
+    CATEGORIES ||--o{ GOALS : classifies
+    GOALS o|--o{ TRANSACTIONS : links
 
-    GOAL o|--o{ TRANSACTION : linked_to
+    FINANCIAL_ACCOUNTS o|--o{ TRANSACTIONS : source_account
+    FINANCIAL_ACCOUNTS o|--o{ TRANSACTIONS : destination_account
+    FINANCIAL_ACCOUNTS o|--o{ INVESTMENTS : primary_account
 
-    FINANCIAL_ACCOUNT ||--o{ TRANSACTION : source_account
-    FINANCIAL_ACCOUNT ||--o{ TRANSACTION : destination_account
-    FINANCIAL_ACCOUNT o|--o{ INVESTMENT : primary_account
-
-    APP_META_CONFIG_REF ||--o{ APP_META_CONFIG_REF : parent_child
-    APP_META_CONFIG_REF ||--o{ INVESTMENT : asset_type
-    APP_META_CONFIG_REF ||--o{ INVESTMENT : asset_category
+    APP_META_CONFIG_REF o|--o{ APP_META_CONFIG_REF : parent_child
+    APP_META_CONFIG_REF o|--o{ INVESTMENTS : asset_type
+    APP_META_CONFIG_REF o|--o{ INVESTMENTS : asset_category
     APP_META_CONFIG_REF o|--o{ INVESTMENT_ASSET_TAXONOMY : default_asset_type
     APP_META_CONFIG_REF o|--o{ INVESTMENT_ASSET_TAXONOMY : default_asset_category
 
-    INVESTMENT_ASSET_TAXONOMY ||--o{ INVESTMENT_ASSET_TAXONOMY : parent_child
-    INVESTMENT_ASSET_TAXONOMY o|--o{ INVESTMENT : categorizes
+    INVESTMENT_ASSET_TAXONOMY o|--o{ INVESTMENT_ASSET_TAXONOMY : parent_child
+    INVESTMENT_ASSET_TAXONOMY o|--o{ INVESTMENTS : categorizes
 
-    INVESTMENT ||--o{ INVESTMENT_EVENT : has
-    INVESTMENT ||--o{ INVESTMENT_CONTRIBUTION_PLAN : scheduled_by
-    INVESTMENT ||--o{ VALUATION_SNAPSHOT : has
-    INVESTMENT_CONTRIBUTION_PLAN o|--o{ INVESTMENT_EVENT : schedules
+    INVESTMENTS ||--o{ INVESTMENT_CONTRIBUTION_PLANS : schedules
+    INVESTMENTS ||--o{ INVESTMENT_EVENTS : records
+    INVESTMENTS ||--o{ INVESTMENT_BENEFITS : provides
+    INVESTMENTS ||--o{ VALUATION_SNAPSHOTS : valued_by
+    INVESTMENT_CONTRIBUTION_PLANS o|--o{ INVESTMENT_EVENTS : generates
+    TRANSACTIONS o|--o| INVESTMENT_EVENTS : linked_transaction
+    INVESTMENT_BENEFITS o|--o{ INVESTMENT_EVENTS : linked_benefit
 
-    TRANSACTION o|--o{ INVESTMENT_EVENT : linkedTransactionId
-
-    USER {
+    USERS {
         int id PK
-        string userId
-        string email
-        string mobile
-        string password
-        string name
-        datetime createdAt
-        datetime updatedAt
+        varchar userId UK
+        text email UK
+        varchar mobile UK
+        text password
+        text name
+        timestamptz createdAt
+        timestamptz updatedAt
     }
 
-    CATEGORY {
+    CATEGORIES {
         int id PK
         int userId FK
-        string name
-        string type
-        string icon
-        string color
+        text name
+        text type
+        text icon
+        text color
         boolean isSystem
-        datetime createdAt
-        datetime updatedAt
+        timestamptz createdAt
+        timestamptz updatedAt
     }
 
-    FINANCIAL_ACCOUNT {
+    FINANCIAL_ACCOUNTS {
         int id PK
         int userId FK
-        string name
-        string displayName
-        string accountType
-        string institutionName
-        string accountNumberMasked
-        string currency
+        text name
+        text displayName
+        text accountType
+        text institutionName
+        text accountNumberMasked
+        text currency
         boolean isActive
-        decimal openingBalance
-        datetime createdAt
-        datetime updatedAt
+        timestamptz createdAt
+        timestamptz updatedAt
+        numeric openingBalance
     }
 
-    GOAL {
+    GOALS {
         int id PK
         int userId FK
-        string name
         int categoryId FK
-        string categoryLabelSnapshot
-        string description
-        string icon
+        text name
+        text description
+        text icon
         float targetAmount
         float currentAmount
-        datetime startDate
-        datetime deadline
-        datetime createdAt
-        datetime updatedAt
+        timestamptz startDate
+        timestamptz deadline
+        text categoryLabelSnapshot
+        timestamptz createdAt
+        timestamptz updatedAt
     }
 
-    TRANSACTION {
+    TRANSACTIONS {
         int id PK
         int userId FK
-        string type
         int categoryId FK
         int goalId FK
         int sourceAccountId FK
         int destinationAccountId FK
+        TransactionType type
         float amount
-        string categoryLabelSnapshot
-        datetime date
-        string notes
-        datetime createdAt
-        datetime updatedAt
+        text categoryLabelSnapshot
+        timestamptz date
+        text notes
+        timestamptz createdAt
+        timestamptz updatedAt
     }
 
     APP_META_CONFIG_REF {
         int id PK
-        string module
-        string configType
+        text module
+        text configType
         int parentId FK
-        string code
-        string label
+        text code UK
+        text label
         boolean isActive
         int sortOrder
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    INVESTMENT {
-        int id PK
-        int userId FK
-        int accountId FK
-        int assetTaxonomyId FK
-        int assetTypeMetaId FK
-        int assetCategoryMetaId FK
-        string name
-        string institutionName
-        string referenceNumber
-        string status
-        datetime startDate
-        datetime maturityDate
-        string currency
-        float totalInvested
-        float currentValue
-        string currentValueSource
-        datetime lastValuationAt
-        float insuranceCover
-        string contributionMode
-        string notes
-        datetime createdAt
-        datetime updatedAt
+        timestamptz createdAt
+        timestamptz updatedAt
+        AccountingTreatment accountingTreatment
     }
 
     INVESTMENT_ASSET_TAXONOMY {
         int id PK
-        int userId FK
-        string label
-        string nodeType
+        text label
+        text nodeType
         int level
         int parentId FK
-        int defaultAssetTypeMetaId FK
-        int defaultAssetCategoryMetaId FK
         int sortOrder
         boolean isActive
-        datetime createdAt
-        datetime updatedAt
+        timestamptz createdAt
+        timestamptz updatedAt
+        int userId FK
+        int defaultAssetTypeMetaId FK
+        int defaultAssetCategoryMetaId FK
     }
 
-    INVESTMENT_EVENT {
+    INVESTMENTS {
         int id PK
-        int investmentId FK
-        int recurringPlanId FK
-        int linkedTransactionId FK
-        string eventType
-        datetime dueDate
-        string status
-        string eventSource
-        int sequenceNumber
-        datetime eventDate
-        decimal amount
-        float units
-        decimal pricePerUnit
-        decimal netAmount
-        string notes
-        json meta
-        datetime createdAt
-        datetime updatedAt
+        int userId FK
+        int accountId FK
+        int assetTaxonomyId FK
+        text name
+        text institutionName
+        text referenceNumber
+        text status
+        timestamptz startDate
+        timestamptz maturityDate
+        text currency
+        float totalInvested
+        float currentValue
+        text currentValueSource
+        timestamptz lastValuationAt
+        float insuranceCover
+        InvestmentContributionMode contributionMode
+        text notes
+        timestamptz createdAt
+        timestamptz updatedAt
+        int assetTypeMetaId FK
+        int assetCategoryMetaId FK
+        AccountingTreatment accountingTreatmentOverride
     }
 
-    INVESTMENT_CONTRIBUTION_PLAN {
+    INVESTMENT_CONTRIBUTION_PLANS {
         int id PK
         int investmentId FK
-        string status
-        decimal amount
-        string cadenceUnit
+        text status
+        numeric amount
+        text cadenceUnit
         int cadenceInterval
-        string historicalImportMode
-        datetime anchorDate
-        datetime lastGeneratedDueDate
-        datetime nextDueDate
-        datetime endDate
+        timestamptz anchorDate
+        timestamptz nextDueDate
+        timestamptz endDate
         int reminderDaysBefore
         boolean autoCreateEvent
-        string notes
-        datetime createdAt
-        datetime updatedAt
+        text notes
+        timestamptz createdAt
+        timestamptz updatedAt
+        HistoricalImportMode historicalImportMode
+        timestamptz lastGeneratedDueDate
     }
 
-    VALUATION_SNAPSHOT {
+    INVESTMENT_EVENTS {
+        int id PK
+        int investmentId FK
+        int linkedTransactionId FK
+        InvestmentEventType eventType
+        timestamptz eventDate
+        numeric amount
+        float units
+        numeric pricePerUnit
+        numeric netAmount
+        text notes
+        jsonb meta
+        timestamptz createdAt
+        timestamptz updatedAt
+        int recurringPlanId FK
+        timestamptz dueDate
+        InvestmentEventStatus status
+        InvestmentEventSource eventSource
+        int sequenceNumber
+        int linkedBenefitId FK
+    }
+
+    INVESTMENT_BENEFITS {
+        int id PK
+        int investmentId FK
+        InvestmentBenefitType benefitType
+        numeric amount
+        timestamptz benefitDate
+        InvestmentBenefitStatus status
+        text notes
+        timestamptz createdAt
+        timestamptz updatedAt
+    }
+
+    VALUATION_SNAPSHOTS {
         int id PK
         int userId FK
         int investmentId FK
-        datetime snapshotDate
+        timestamptz snapshotDate
         float marketValue
         float units
         float price
-        string source
-        datetime createdAt
+        text source
+        timestamptz createdAt
     }
 ```
 
-## Sync Notes
+## Schema Notes
 
-- This ERD reflects the current table and foreign-key structure in [server/prisma/sql/core_schema.sql](/Users/asitpanda/asitprojects/mine/my-financial/server/prisma/sql/core_schema.sql) and [server/prisma/schema.prisma](/Users/asitpanda/asitprojects/mine/my-financial/server/prisma/schema.prisma).
-- Child-side optionality in the relationships above follows nullable foreign keys in the SQL schema.
-- `investment.assetType`/`assetCategory` free-text fields have been replaced by `assetTypeMetaId`/`assetCategoryMetaId`, both required FKs into the shared `app_meta_config_ref` table (self-referencing tree of `ASSET_TYPE`/`ASSET_CATEGORY` rows scoped by `module`/`configType`).
-- `investment_asset_taxonomy` nodes can optionally carry `defaultAssetTypeMetaId`/`defaultAssetCategoryMetaId` hints into `app_meta_config_ref`; taxonomy remains an organizational bucket, not the source of truth for asset classification.
-- `linkedTransactionId` on `investment_event` is a single, unique, nullable FK back to `transaction`; there is no reverse FK on the transaction side.
-- `financial_accounts` do not directly fund `investment_event`/`investment_contribution_plan` rows; account linkage for investments is only via `investment.accountId` (primary account).
-- `investments.status` also carries a DB-level `CHECK` constraint restricting values to `active`, `matured`, `closed` (not expressed by Prisma's type system).
-- Recurring scheduler uniqueness is enforced at DB level on `(recurringPlanId, dueDate, eventType)`.
+- `o|` marks an optional child-side foreign key. Nullable foreign keys are `SET NULL` on deletion unless noted otherwise.
+- User-owned records are deleted with their user through `ON DELETE CASCADE`.
+- Category references on `transactions` and `goals`, and asset metadata references on `investments`, use `ON DELETE RESTRICT`.
+- `investment_events.linkedTransactionId` is nullable and unique, so a transaction can link to at most one investment event. The foreign key uses `ON DELETE SET NULL`.
+- `investment_events` can optionally link to a contribution plan and benefit. The recurring-event unique index prevents duplicate `(recurringPlanId, dueDate, eventType)` combinations.
+- `app_meta_config_ref` and `investment_asset_taxonomy` are self-referencing trees. Their nullable parent references use `ON DELETE SET NULL`.
+- The `investments` trigger `validate_investment_meta_config_pair` requires active investment asset-type and asset-category config rows whose parent relationship matches.
+- The `investment_asset_taxonomy` trigger `validate_investment_taxonomy_defaults_meta` validates optional default metadata and requires a type when a category default is set.
+- PostgreSQL enum values are defined in the SQL dump for `AccountingTreatment`, `HistoricalImportMode`, `InvestmentBenefitStatus`, `InvestmentBenefitType`, `InvestmentContributionMode`, `InvestmentEventSource`, `InvestmentEventStatus`, `InvestmentEventType`, and `TransactionType`.

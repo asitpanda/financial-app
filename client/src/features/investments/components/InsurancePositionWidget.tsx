@@ -25,6 +25,7 @@ import {
 import AppButton from "../../../components/common/AppButton";
 import { SectionCard } from "../../../components/common";
 import { formatInvestmentDate } from "../../../utils/investmentHelpers";
+import { CHART_TOOLTIP_COLORS } from "../../../colors";
 import {
   getInsurancePositionData,
   type InsurancePositionRow,
@@ -347,6 +348,22 @@ export default function InsurancePositionWidget({
                   key={seg.key}
                   title={`${seg.label}: ${formatCurrency(seg.coverAmount)} (${seg.percentage.toFixed(1)}%)`}
                   arrow
+                  slotProps={{
+                    tooltip: {
+                      sx: {
+                        bgcolor: CHART_TOOLTIP_COLORS.backgroundHex,
+                        color: CHART_TOOLTIP_COLORS.titleHex,
+                        border: `1px solid ${CHART_TOOLTIP_COLORS.borderHex}`,
+                        fontSize: 12,
+                        fontWeight: 600,
+                      },
+                    },
+                    arrow: {
+                      sx: {
+                        color: CHART_TOOLTIP_COLORS.backgroundHex,
+                      },
+                    },
+                  }}
                 >
                   <Box
                     sx={{

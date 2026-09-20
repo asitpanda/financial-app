@@ -258,6 +258,66 @@ export interface InvestmentDashboardAnalyticsResponse {
 	analytics: InvestmentDashboardAnalyticsPayload;
 }
 
+export interface InvestmentDashboardPeriod {
+	key: string;
+	label: string;
+	startDate: string;
+	endDate: string;
+}
+
+export interface InvestmentDashboardPoint {
+	period: InvestmentDashboardPeriod;
+	activity: {
+		newContribution: number;
+		newWithdrawal: number;
+		newPremium: number;
+		newIncomeCredit: number;
+		netCashFlow: number;
+	};
+	state: {
+		cumulativeInvested: number;
+		cumulativeWithdrawn: number;
+		portfolioValue: number;
+		returnAmount: number;
+	};
+	dataQuality: {
+		cashFlow: string;
+		portfolioValue: string;
+	};
+}
+
+export interface InvestmentDashboardWidgetResponse {
+	responseContext: {
+		generatedAt: string;
+		calculationVersion: string;
+		currency: string;
+		timezone: string;
+		calendar: string;
+		fiscalYearStartMonth: number;
+		availableFrom: string | null;
+		availableTo: string;
+	};
+	widgets: {
+		kpis: {
+			totalContributions: { value: number; investments: number; insuranceSavings: number };
+			currentPortfolioValue: { value: number; investments: number; insuranceSavings: number; returnAmount: number; returnPercentage: number };
+			upcomingMaturity: { value: number; investments: number; insuranceSavings: number };
+			insuranceCover: { value: number; protection: number; savingsLinked: number };
+			insurancePremiumsPaid: { value: number; savingsLinked: number; protection: number };
+		};
+		portfolioGrowth: { order: string[]; byKey: Record<string, InvestmentDashboardPoint> };
+		capitalDeployment: { order: string[]; byKey: Record<string, InvestmentDashboardPoint> };
+		sourceOfValue: InvestmentDashboardSummaryPayload['valueSourceSummary'];
+		assetTypePerformance: { rows: InvestmentDashboardCategoryPerformanceRow[] };
+		insurancePosition: { cover: number; premiumsPaid: number };
+		allocationMix: { rows: InvestmentDashboardCategoryPerformanceRow[] };
+		upcomingMaturities: InvestmentSummary[];
+		upcomingContributions: InvestmentSummary[];
+		topHoldings: InvestmentSummary[];
+		recentlyAdded: InvestmentSummary[];
+	};
+}
+
 export interface InvestmentDrawerData extends InvestmentDetailShell {
 	investmentEvents: InvestmentEvent[];
 	performanceHistory: InvestmentPerformanceHistoryPoint[];

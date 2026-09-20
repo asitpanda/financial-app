@@ -11,6 +11,7 @@ import { InvestmentMockRepository } from './repositories/investment.mock.reposit
 import { InvestmentPrismaRepository } from './repositories/investment.prisma.repository';
 import { InvestmentRepository } from './repositories/investment.repository';
 import { createProviderBackedBinding } from '../database/db-provider';
+import { AnalyticsEngineService } from './analytics/analytics-engine.service';
 
 @Module({
   imports: [ConfigModule, DatabaseModule, InvestmentAssetTaxonomyModule, InvestmentContributionPlansModule, InvestmentEventsModule, ValuationSnapshotsModule],
@@ -25,6 +26,7 @@ import { createProviderBackedBinding } from '../database/db-provider';
       logLabel: '📈 Investments',
     }),
     InvestmentRepository,
+    AnalyticsEngineService,
     InvestmentsService,
   ],
   exports: [InvestmentRepository],

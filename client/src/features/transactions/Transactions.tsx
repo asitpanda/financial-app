@@ -87,6 +87,7 @@ type PrefillFilter = {
 
 interface TransactionTableRow {
   id: string;
+  transactionId: string;
   tx: TransactionRecord;
   date: Date;
   dateLabel: string;
@@ -95,6 +96,8 @@ interface TransactionTableRow {
   type: string;
   amount: number;
   notes: string;
+  investment: string;
+  investmentEventType: string;
 }
 
 const resolveFiscalMonthYear = (fiscalYearStart: number, monthIndex: number) => {
@@ -521,6 +524,12 @@ export default function Transactions({
   const columns: GridColDef[] = useMemo(
     () => [
       {
+        field: "transactionId",
+        headerName: "TRX#",
+        flex: 0.75,
+        minWidth: 100,
+      },
+      {
         field: "date",
         headerName: "Date",
         flex: 0.9,
@@ -553,6 +562,19 @@ export default function Transactions({
               tone={params.value === "EXPENSE" ? "error" : "success"}
               hexColor={params.value === "TRANSFER" || params.value === "INVESTMENT" ? getTransactionMovementHexColor(params.value as "TRANSFER" | "INVESTMENT") : undefined}
             />
+          </Box>
+        ),
+      },
+      {
+        field: "investment",
+        headerName: "Investment",
+        flex: 1.25,
+        minWidth: 170,
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+            <Typography variant="body2">
+              {String(params.value)}
+            </Typography>
           </Box>
         ),
       },
@@ -601,7 +623,6 @@ export default function Transactions({
           );
         },
       },
-      { field: "notes", headerName: "Notes", flex: 1.6, minWidth: 200 },
       {
         field: "actions",
         headerName: "Actions",

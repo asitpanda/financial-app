@@ -1,7 +1,7 @@
 import apiClient from '../../../api/client';
 import type {
   CreateInvestmentDto,
-  InvestmentDashboardAnalyticsResponse,
+  InvestmentDashboardWidgetResponse,
   Investment,
   InvestmentDetailShell,
   InvestmentMetadataResponse,
@@ -28,7 +28,7 @@ export const getInvestmentPerformanceById = async (
   return response.data;
 };
 
-export const getInvestmentDashboardAnalytics = async (): Promise<InvestmentDashboardAnalyticsResponse> => {
+export const getInvestmentDashboardAnalytics = async (): Promise<InvestmentDashboardWidgetResponse> => {
   const response = await apiClient.get('/investments/dashboard');
   return response.data;
 };

@@ -3,8 +3,10 @@ import { Box, Stack, Typography } from "@mui/material";
 import AppButton from "../../../components/common/AppButton";
 import type { InvestmentPortfolioGrowthPoint } from "../investments.selectors";
 import {
+  CHART_TOOLTIP_COLORS,
   INVESTMENT_CHART_SERIES_COLORS,
-  PROFIT_LOSS_COLORS,
+  getProfitLossTooltipHexColor,
+  PROFIT_LOSS_COLORS
 } from "../../../colors";
 
 interface PortfolioGrowthChartProps {
@@ -18,7 +20,7 @@ const TIMEFRAME_OPTIONS = [
   { value: "all", label: "All", months: null },
 ] as const;
 
-const createStepLinePath = (points: Array<{ x: number; y: number }>) => {
+const createLinePath = (points: Array<{ x: number; y: number }>) => {
   if (points.length === 0) return "";
 
   return points.reduce((path, point, index) => {
@@ -26,7 +28,7 @@ const createStepLinePath = (points: Array<{ x: number; y: number }>) => {
       return `M ${point.x} ${point.y}`;
     }
 
-    return `${path} H ${point.x} V ${point.y}`;
+    return `${path} L ${point.x} ${point.y}`;
   }, "");
 };
 
@@ -92,10 +94,10 @@ export default function PortfolioGrowthChart({
   const activePoint =
     hoveredIndex === null ? null : points[Math.min(hoveredIndex, points.length - 1)];
 
-  const currentPath = createStepLinePath(
+  const currentPath = createLinePath(
     points.map((point) => ({ x: point.x, y: point.yCurrent })),
   );
-  const investedPathStepped = createStepLinePath(
+  const investedPath = createLinePath(
     points.map((point) => ({ x: point.x, y: point.yInvested })),
   );
 
@@ -239,44 +241,14 @@ export default function PortfolioGrowthChart({
 
           {points.slice(0, -1).map((point, index) => {
             const nextPoint = points[index + 1];
-            const bandTop = Math.min(point.yCurrent, point.yInvested);
-            const bandHeight = Math.abs(point.yCurrent - point.yInvested);
-
             return (
-              <rect
+              <polygon
                 key={`band-${point.label}`}
-                x={point.x}
-                y={bandTop}
-                width={Math.max(nextPoint.x - point.x, 0)}
-                height={bandHeight}
+                points={`${point.x},${point.yCurrent} ${nextPoint.x},${nextPoint.yCurrent} ${nextPoint.x},${nextPoint.yInvested} ${point.x},${point.yInvested}`}
                 fill={
                   point.returnToDate >= 0
                     ? PROFIT_LOSS_COLORS.gainFillSoft
                     : PROFIT_LOSS_COLORS.lossFillSoft
-                }
-              />
-            );
-          })}
-          {points.map((point) => {
-            const connectorTop = Math.min(point.yCurrent, point.yInvested);
-            const connectorHeight = Math.abs(point.yCurrent - point.yInvested);
-
-            if (connectorHeight < 2) {
-              return null;
-            }
-
-            return (
-              <rect
-                key={`connector-${point.label}`}
-                x={point.x - 3}
-                y={connectorTop}
-                width={6}
-                height={connectorHeight}
-                rx={3}
-                fill={
-                  point.returnToDate >= 0
-                    ? PROFIT_LOSS_COLORS.gainFillStrong
-                    : PROFIT_LOSS_COLORS.lossFillStrong
                 }
               />
             );
@@ -289,12 +261,11 @@ export default function PortfolioGrowthChart({
             strokeLinejoin="round"
           />
           <path
-            d={investedPathStepped}
+            d={investedPath}
             fill="none"
             stroke={INVESTMENT_CHART_SERIES_COLORS.investedHex}
             strokeWidth="2.5"
             strokeLinejoin="round"
-            strokeDasharray="8,5"
           />
 
           {points.map((point) => (
@@ -352,27 +323,28 @@ export default function PortfolioGrowthChart({
                 width={tooltipWidth}
                 height={tooltipHeight}
                 rx="8"
-                fill="#0f172a"
-                opacity="0.96"
+                fill={CHART_TOOLTIP_COLORS.backgroundHex}
+                stroke={CHART_TOOLTIP_COLORS.borderHex}
+                opacity="0.98"
               />
               <text
                 x={tooltipX + 12}
                 y={tooltipY + 18}
-                style={{ fontSize: 12, fill: "#f8fafc", fontWeight: 700 }}
+                style={{ fontSize: 14, fill: CHART_TOOLTIP_COLORS.titleHex, fontWeight: 700 }}
               >
                 {activePoint.label}
               </text>
               <text
                 x={tooltipX + 12}
                 y={tooltipY + 38}
-                style={{ fontSize: 11, fill: INVESTMENT_CHART_SERIES_COLORS.investedHex }}
+                style={{ fontSize: 12, fill: CHART_TOOLTIP_COLORS.investedHex, fontWeight: 600 }}
               >
                 Invested: {formatValue(activePoint.investedToDate)}
               </text>
               <text
                 x={tooltipX + 12}
                 y={tooltipY + 54}
-                style={{ fontSize: 11, fill: "#99f6e4" }}
+                style={{ fontSize: 12, fill: CHART_TOOLTIP_COLORS.currentValueHex, fontWeight: 600 }}
               >
                 Current: {formatValue(activePoint.currentValueToDate)}
               </text>
@@ -380,11 +352,9 @@ export default function PortfolioGrowthChart({
                 x={tooltipX + 12}
                 y={tooltipY + 70}
                 style={{
-                  fontSize: 11,
-                  fill:
-                    activePoint.returnToDate >= 0
-                      ? PROFIT_LOSS_COLORS.gainSoftHex
-                      : PROFIT_LOSS_COLORS.lossSoftHex,
+                  fontSize: 12,
+                  fontWeight: 600,
+                    fill: getProfitLossTooltipHexColor(activePoint.returnToDate, "gain"),
                 }}
               >
                 Return: {activePoint.returnToDate >= 0 ? "+" : ""}
@@ -396,14 +366,14 @@ export default function PortfolioGrowthChart({
               <text
                 x={tooltipX + 12}
                 y={tooltipY + 86}
-                style={{ fontSize: 10, fill: "#cbd5e1" }}
+                style={{ fontSize: 12, fill: CHART_TOOLTIP_COLORS.mutedHex }}
               >
                 Snapshot-backed: {formatValue(activePoint.snapshotBackedValue)}
               </text>
             </g>
           ) : null}
 
-          <text
+          {!activePoint && <text
             x={points[points.length - 1].x - 12}
             y={points[points.length - 1].yCurrent - 8}
             textAnchor="end"
@@ -414,8 +384,8 @@ export default function PortfolioGrowthChart({
             }}
           >
             Current
-          </text>
-          <text
+          </text>}
+          {!activePoint && <text
             x={points[points.length - 1].x - 12}
             y={points[points.length - 1].yInvested - 8}
             textAnchor="end"
@@ -426,7 +396,7 @@ export default function PortfolioGrowthChart({
             }}
           >
             Invested
-          </text>
+          </text>}
         </svg>
       </Box>
 

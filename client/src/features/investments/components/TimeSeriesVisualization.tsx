@@ -3,10 +3,12 @@ import { Box, Stack, Typography } from "@mui/material";
 import AppButton from "../../../components/common/AppButton";
 import type { InvestmentSeriesPoint } from "../investments.selectors";
 import {
+  CHART_TOOLTIP_COLORS,
   INVESTMENT_CHART_SERIES_COLORS,
   PROFIT_LOSS_COLORS,
   getStableSeriesColorMap,
-  getProfitLossHexColor,
+  getProfitLossTooltipHexColor,
+  getProfitLossHexColor
 } from "../../../colors";
 
 interface TimeSeriesVisualizationProps {
@@ -193,8 +195,8 @@ export default function TimeSeriesVisualization({
               strokeDasharray="4,4"
             />
             {points.map((point) => {
-              const tooltipWidth = 160;
-              const tooltipHeight = 65;
+              const tooltipWidth = 190;
+              const tooltipHeight = 78;
               const tooltipGap = 8;
               const spaceAbove = point.yInvested - padding.top;
               const positionBelow = spaceAbove < tooltipHeight + tooltipGap + 5;
@@ -270,21 +272,22 @@ export default function TimeSeriesVisualization({
                         width={tooltipWidth}
                         height={tooltipHeight}
                         rx="4"
-                        fill="#1f2937"
-                        opacity="0.95"
+                        fill={CHART_TOOLTIP_COLORS.backgroundHex}
+                        stroke={CHART_TOOLTIP_COLORS.borderHex}
+                        opacity="0.98"
                       />
                       <text
                         x={tooltipX + tooltipWidth / 2}
                         y={textBaseY}
                         textAnchor="middle"
-                        style={{ fontSize: 12, fontWeight: 700, fill: "#fff" }}
+                        style={{ fontSize: 14, fontWeight: 700, fill: CHART_TOOLTIP_COLORS.titleHex }}
                       >
                         {point.label}
                       </text>
                       <text
                         x={tooltipX + 12}
                         y={textBaseY + 16}
-                        style={{ fontSize: 10, fill: "#e5e7eb" }}
+                        style={{ fontSize: 12, fill: CHART_TOOLTIP_COLORS.labelHex }}
                       >
                         <tspan fontWeight="600">Invested:</tspan>
                       </text>
@@ -293,8 +296,8 @@ export default function TimeSeriesVisualization({
                         y={textBaseY + 16}
                         textAnchor="end"
                         style={{
-                          fontSize: 10,
-                          fill: INVESTMENT_CHART_SERIES_COLORS.investedAltHex,
+                          fontSize: 12,
+                          fill: CHART_TOOLTIP_COLORS.investedHex,
                           fontWeight: 700,
                         }}
                       >
@@ -303,7 +306,7 @@ export default function TimeSeriesVisualization({
                       <text
                         x={tooltipX + 12}
                         y={textBaseY + 32}
-                        style={{ fontSize: 10, fill: "#e5e7eb" }}
+                        style={{ fontSize: 12, fill: CHART_TOOLTIP_COLORS.labelHex }}
                       >
                         <tspan fontWeight="600">Return:</tspan>
                       </text>
@@ -312,8 +315,8 @@ export default function TimeSeriesVisualization({
                         y={textBaseY + 32}
                         textAnchor="end"
                         style={{
-                          fontSize: 10,
-                          fill: getProfitLossHexColor(point.return, "gain"),
+                          fontSize: 12,
+                          fill: getProfitLossTooltipHexColor(point.return, "gain"),
                           fontWeight: 700,
                         }}
                       >

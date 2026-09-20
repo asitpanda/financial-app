@@ -10,7 +10,7 @@ import { useNotificationStore } from '../../../store/notificationStore';
 import { removeInvestment, saveInvestment } from '../service/investments.service';
 import type {
   CreateInvestmentDto,
-  InvestmentDashboardAnalyticsResponse,
+  InvestmentDashboardWidgetResponse,
   InvestmentAssetTypeConfig,
   InvestmentMetadataResponse,
   UpdateInvestmentDto,
@@ -75,14 +75,6 @@ export const useInvestmentPerformance = (id: string | number, enabled = true) =>
   });
 };
 
-export const useInvestmentEventsData = (enabled = true) => {
-  return useQuery({
-    queryKey: ['investment-events'],
-    queryFn: () => investmentEventsApi.getAll(),
-    enabled,
-  });
-};
-
 export const useInvestmentEventsByInvestment = (
   investmentId: string | number,
   enabled = true,
@@ -106,7 +98,7 @@ export const useInvestmentSnapshotsByInvestment = (
 };
 
 export const useInvestmentDashboardAnalytics = (enabled = true) => {
-  return useQuery<InvestmentDashboardAnalyticsResponse>({
+  return useQuery<InvestmentDashboardWidgetResponse>({
     queryKey: ['investments', 'dashboard'],
     queryFn: () => investmentApi.getDashboardAnalytics(),
     enabled,

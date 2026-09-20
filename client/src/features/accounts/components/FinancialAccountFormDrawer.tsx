@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React, { useEffect } from 'react';
 import { Alert, Box, Stack, Typography } from '@mui/material';
+import { useQueryClient } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import AppDrawer from '../../../components/drawers/AppDrawer';
@@ -73,6 +74,7 @@ export default function FinancialAccountFormDrawer({
 }) {
   const [saving, setSaving] = React.useState(false);
   const [submitError, setSubmitError] = React.useState('');
+  const queryClient = useQueryClient();
 
   const {
     register,
@@ -114,6 +116,9 @@ export default function FinancialAccountFormDrawer({
         await createFinancialAccount(payload);
       }
 
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions', 'page-data'] });
+      queryClient.invalidateQueries({ queryKey: ['investments', 'reference-data'] });
       reset(defaultValues);
       onUpdated?.();
       onClose?.();

@@ -22,6 +22,7 @@ interface TransactionInsights {
 
 interface TransactionTableRow {
   id: string;
+  transactionId: string;
   tx: TransactionRecord;
   date: Date;
   dateLabel: string;
@@ -31,6 +32,8 @@ interface TransactionTableRow {
   type: string;
   amount: number;
   notes: string;
+  investment: string;
+  investmentEventType: string;
 }
 
 export const getSortedTransactions = (transactions: TransactionRecord[]) => {
@@ -133,24 +136,24 @@ export const getTransactionRows = (
 
     return {
       id: txId,
+      transactionId: txId,
       tx,
       date: txDate,
       dateLabel: txDate.toLocaleDateString(),
       category: tx.category || tx.categoryLabelSnapshot || "Uncategorized",
       source:
         accountNameById[Number(tx.sourceAccountId)] ||
-        tx.source ||
-        (tx.sourceAccountId != null
-          ? String(tx.sourceAccountId)
+        (tx.source && tx.source !== String(tx.sourceAccountId)
+          ? tx.source
           : "Unknown source"),
       destination:
         accountNameById[Number(tx.destinationAccountId)] ||
-        (tx.destinationAccountId != null
-          ? String(tx.destinationAccountId)
-          : "No destination"),
+        (tx.destinationAccountId != null ? "Unknown destination" : "No destination"),
       type: tx.type || "unknown",
       amount: Number(tx.amount || 0),
       notes: tx.notes || "",
+      investment: tx.investment?.name || "—",
+      investmentEventType: tx.investmentEventType || "—",
     };
   });
 };

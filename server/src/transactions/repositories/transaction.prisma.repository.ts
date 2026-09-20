@@ -19,6 +19,38 @@ import type {
 export class TransactionPrismaRepository implements ITransactionDataSourcePort {
   constructor(private prisma: PrismaService) {}
 
+  private async findTransactionsWithInvestmentContext(
+    userId: number,
+    where: Prisma.TransactionWhereInput,
+  ): Promise<TransactionRecord[]> {
+    const transactions = await this.prisma.transaction.findMany({
+      where: { ...where, userId },
+      orderBy: { date: 'desc' },
+      include: {
+        linkedInvestmentEvents: {
+          take: 1,
+          where: { investment: { userId } },
+          select: {
+            eventType: true,
+            investment: {
+              select: {
+                id: true,
+                name: true,
+                institutionName: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return transactions.map(({ linkedInvestmentEvents, ...transaction }) => ({
+      ...transaction,
+      investment: linkedInvestmentEvents[0]?.investment ?? null,
+      investmentEventType: linkedInvestmentEvents[0]?.eventType ?? null,
+    }));
+  }
+
   private normalizeOptionalInt(value: unknown, fieldName: string): number | null {
     if (value === undefined || value === null || value === '') return null;
     const parsed = Number(value);
@@ -109,16 +141,33 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
   }
 
   async findAll(userId: number): Promise<TransactionRecord[]> {
-    return this.prisma.transaction.findMany({
-      where: { userId },
-      orderBy: { date: 'desc' },
-    });
+    return this.findTransactionsWithInvestmentContext(userId, {});
   }
 
   async findOne(id: number, userId: number): Promise<TransactionRecord | null> {
-    return this.prisma.transaction.findFirst({
+    const transaction = await this.prisma.transaction.findFirst({
       where: { id, userId },
+      include: {
+        linkedInvestmentEvents: {
+          take: 1,
+          where: { investment: { userId } },
+          select: {
+            eventType: true,
+            investment: {
+              select: { id: true, name: true, institutionName: true },
+            },
+          },
+        },
+      },
     });
+
+    if (!transaction) return null;
+    const { linkedInvestmentEvents, ...transactionData } = transaction;
+    return {
+      ...transactionData,
+      investment: linkedInvestmentEvents[0]?.investment ?? null,
+      investmentEventType: linkedInvestmentEvents[0]?.eventType ?? null,
+    };
   }
 
   async create(data: CreateTransactionDto, userId: number): Promise<TransactionRecord> {
@@ -255,22 +304,12 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
   }
 
   async findByDateRange(userId: number, startDate: Date, endDate: Date): Promise<TransactionRecord[]> {
-    return this.prisma.transaction.findMany({
-      where: {
-        userId,
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-      orderBy: { date: 'desc' },
+    return this.findTransactionsWithInvestmentContext(userId, {
+      date: { gte: startDate, lte: endDate },
     });
   }
 
   async findByType(userId: number, type: TransactionType): Promise<TransactionRecord[]> {
-    return this.prisma.transaction.findMany({
-      where: { userId, type },
-      orderBy: { date: 'desc' },
-    });
+    return this.findTransactionsWithInvestmentContext(userId, { type });
   }
 }

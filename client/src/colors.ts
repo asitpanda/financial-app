@@ -48,6 +48,19 @@ export const INVESTMENT_CHART_SERIES_COLORS = {
   investedAltHex: "#3b82f6",
 } as const;
 
+export const CHART_TOOLTIP_COLORS = {
+  backgroundHex: "#0b1220",
+  borderHex: "#64748b",
+  titleHex: "#f8fafc",
+  labelHex: "#f1f5f9",
+  mutedHex: "#cbd5e1",
+  investedHex: "#bfdbfe",
+  currentValueHex: "#5eead4",
+  positiveHex: "#86efac",
+  negativeHex: "#fda4af",
+  neutralHex: "#e2e8f0",
+} as const;
+
 export const PROFIT_RETURN_PALETTE = [
   "#0f766e",
   PROFIT_LOSS_COLORS.gainHex,
@@ -131,6 +144,19 @@ export const getProfitLossReadableHexColor = (
   if (resolvedZero === "gain") return PROFIT_LOSS_COLORS.gainDeepHex;
   if (resolvedZero === "loss") return PROFIT_LOSS_COLORS.lossDeepHex;
   return "#0f172a";
+};
+
+export const getProfitLossTooltipHexColor = (
+  value: number,
+  zeroMode: ZeroColorMode = "neutral",
+) => {
+  if (value > 0) return CHART_TOOLTIP_COLORS.positiveHex;
+  if (value < 0) return CHART_TOOLTIP_COLORS.negativeHex;
+
+  const resolvedZero = resolveZeroMode(zeroMode);
+  if (resolvedZero === "gain") return CHART_TOOLTIP_COLORS.positiveHex;
+  if (resolvedZero === "loss") return CHART_TOOLTIP_COLORS.negativeHex;
+  return CHART_TOOLTIP_COLORS.neutralHex;
 };
 
 export const getSignedValuePrefix = (value: number, includeZero = false) => {

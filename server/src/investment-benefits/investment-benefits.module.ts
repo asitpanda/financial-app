@@ -10,9 +10,10 @@ import { BenefitPrismaRepository } from './repositories/benefit.prisma.repositor
 import { BenefitRepository } from './repositories/benefit.repository';
 import { InvestmentBenefitsController } from './investment-benefits.controller';
 import { InvestmentBenefitsService } from './investment-benefits.service';
+import { FinancialAccountsModule } from '../financial-accounts/financial-accounts.module';
 
 @Module({
-  imports: [ConfigModule, DatabaseModule],
+  imports: [ConfigModule, DatabaseModule, FinancialAccountsModule],
   providers: [
     InvestmentPrismaRepository,
     InvestmentMockRepository,

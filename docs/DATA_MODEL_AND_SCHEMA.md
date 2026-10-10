@@ -103,9 +103,9 @@ When changing schema:
 
 ## ER Diagram
 
-Canonical ER diagram lives in:
+The canonical ER diagram lives in:
 
-- docs/data-model/INVESTMENT_ER_DIAGRAM.md
+- [docs/reference/er-diagrams/INVESTMENT_ER_DIAGRAM.md](./reference/er-diagrams/INVESTMENT_ER_DIAGRAM.md)
 
 Use that file for relationship visualization and high-level entity inventory.
 

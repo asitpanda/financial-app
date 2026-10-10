@@ -1,4 +1,5 @@
 import { useAppStore, type Screen } from '../store/appStore';
+import { getScreenConfig } from '../routing/screenRegistry';
 import {
   useDrawerStore,
   type DrawerMode,
@@ -9,6 +10,14 @@ import { useDialogStore, type DialogType } from '../store/dialogStore';
 
 export const navigateTo = (screen: Screen) => {
   useAppStore.getState().navigateTo(screen);
+
+  if (typeof window !== "undefined") {
+    const path = getScreenConfig(screen).path;
+    if (window.location.pathname !== path) {
+      window.history.pushState({}, "", path);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }
+  }
 };
 
 export const openDrawer = (payload: {

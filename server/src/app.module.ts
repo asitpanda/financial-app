@@ -13,6 +13,7 @@ import { InvestmentEventsModule } from './investment-events/investment-events.mo
 import { InvestmentBenefitsModule } from './investment-benefits/investment-benefits.module';
 import { ValuationSnapshotsModule } from './valuation-snapshots/valuation-snapshots.module';
 import { FinancialAccountsModule } from './financial-accounts/financial-accounts.module';
+import { LockerModule } from './locker/locker.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 
 @Module({
@@ -33,6 +34,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     InvestmentBenefitsModule,
     ValuationSnapshotsModule,
     FinancialAccountsModule,
+    LockerModule,
   ],
   providers: [
     {

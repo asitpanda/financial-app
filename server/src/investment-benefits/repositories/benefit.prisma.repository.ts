@@ -16,6 +16,7 @@ type PrismaBenefitRow = {
   amount: Prisma.Decimal;
   benefitDate: Date;
   status: InvestmentBenefitStatus;
+  destinationAccountId: number | null;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -46,6 +47,7 @@ export class BenefitPrismaRepository implements IBenefitDataSourcePort {
         benefitType: data.benefitType,
         amount: new Prisma.Decimal(data.amount),
         benefitDate: parseRequiredDateInput(data.benefitDate, 'benefitDate'),
+        destinationAccountId: data.destinationAccountId ?? null,
         notes: data.notes,
       },
     });
@@ -123,6 +125,7 @@ export class BenefitPrismaRepository implements IBenefitDataSourcePort {
           benefitType: data.benefitType,
           amount: data.amount === undefined ? undefined : new Prisma.Decimal(data.amount),
           benefitDate: data.benefitDate === undefined ? undefined : parseRequiredDateInput(data.benefitDate, 'benefitDate'),
+          destinationAccountId: data.destinationAccountId === undefined ? undefined : data.destinationAccountId,
           status: data.status,
           notes: data.notes,
         },
@@ -142,11 +145,13 @@ export class BenefitPrismaRepository implements IBenefitDataSourcePort {
     return this.prisma.$transaction(async (tx) => {
       const benefit = await tx.investmentBenefit.findFirst({
         where: { id: Number(id), investmentId: Number(investmentId), investment: { userId } },
+        include: { investment: { select: { accountId: true } } },
       });
       if (!benefit) throw new Error('Investment benefit not found');
       if (benefit.status !== InvestmentBenefitStatus.EXPECTED) throw new Error('Investment benefit was already realized');
 
       const events = [] as InvestmentEventRecord[];
+      const investmentAccountId = benefit.investment.accountId;
       for (const component of data.components) {
         let linkedTransactionId: number | null = null;
         if (component.transaction) {
@@ -157,7 +162,7 @@ export class BenefitPrismaRepository implements IBenefitDataSourcePort {
               type: transaction.type ?? TransactionType.INVESTMENT,
               amount: component.amount,
               sourceAccountId: transaction.sourceAccountId ?? null,
-              destinationAccountId: transaction.destinationAccountId ?? null,
+              destinationAccountId: transaction.destinationAccountId ?? benefit.destinationAccountId ?? investmentAccountId ?? null,
               categoryId: transaction.categoryId ?? null,
               goalId: transaction.goalId ?? null,
               notes: transaction.notes ?? component.notes ?? null,
@@ -218,12 +223,18 @@ export class BenefitPrismaRepository implements IBenefitDataSourcePort {
           status: InvestmentBenefitStatus.EXPECTED,
         },
       });
-      const result = await this.realizeInTransaction(tx, benefit, userId, data);
+      const result = await this.realizeInTransaction(tx, benefit, userId, data, investment.accountId);
       return result;
     });
   }
 
-  private async realizeInTransaction(tx: Prisma.TransactionClient, benefit: any, userId: number, data: QuickRealizeInvestmentBenefitDto) {
+  private async realizeInTransaction(
+    tx: Prisma.TransactionClient,
+    benefit: any,
+    userId: number,
+    data: QuickRealizeInvestmentBenefitDto,
+    investmentAccountId: number | null,
+  ) {
     const transaction = data.transaction
       ? await tx.transaction.create({
           data: {
@@ -231,7 +242,7 @@ export class BenefitPrismaRepository implements IBenefitDataSourcePort {
             type: data.transaction.type ?? TransactionType.INVESTMENT,
             amount: data.amount,
             sourceAccountId: data.transaction.sourceAccountId ?? null,
-            destinationAccountId: data.transaction.destinationAccountId ?? null,
+            destinationAccountId: data.transaction.destinationAccountId ?? benefit.destinationAccountId ?? investmentAccountId ?? null,
             categoryId: data.transaction.categoryId ?? null,
             goalId: data.transaction.goalId ?? null,
             notes: data.transaction.notes ?? data.notes ?? null,

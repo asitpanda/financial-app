@@ -12,29 +12,19 @@ import {
   Divider,
 } from "@mui/material";
 import Icon from "@mdi/react";
-import {
-  mdiViewDashboard,
-  mdiFileDocument,
-  mdiFlag,
-  mdiShape,
-  mdiChartBar,
-  mdiCog,
-  mdiMenu,
-  mdiLogout,
-} from "@mdi/js";
-import { colors } from "../../../colors";
-import { useAuth } from "../../auth/useAuth";
+import { mdiMenu, mdiLogout } from "@mdi/js";
+import { colors } from "../colors";
+import { useAuth } from "../features/auth/useAuth";
+import { SIDEBAR_SCREEN_CONFIGS } from "../routing/screenRegistry";
+import type { Screen } from "../store/appStore";
 
-const links = [
-  { name: "Dashboard", icon: mdiViewDashboard },
-  { name: "Transactions", icon: mdiFileDocument },
-  { name: "Goals", icon: mdiFlag },
-  { name: "Categories", icon: mdiShape },
-  { name: "Investments", icon: mdiChartBar },
-  { name: "Settings", icon: mdiCog },
-];
+interface SidebarProps {
+  onNavigate?: (screen: Screen) => void;
+  children: React.ReactNode;
+  activeRoute: Screen;
+}
 
-export default function Sidebar({ onNavigate, children, activeRoute }) {
+export default function Sidebar({ onNavigate, children, activeRoute }: SidebarProps) {
   const { logout } = useAuth();
   const [mini, setMini] = useState(false);
   const drawerWidth = mini ? 60 : 240;
@@ -97,18 +87,17 @@ export default function Sidebar({ onNavigate, children, activeRoute }) {
           )}
         </Box>
         <List>
-          {links.map(({ name, icon }) => {
-            const route = name.toLowerCase();
-            const selected = activeRoute === route;
+          {SIDEBAR_SCREEN_CONFIGS.map(({ key, label, icon }) => {
+            const selected = activeRoute === key;
             return (
               <ListItem
-                key={name}
+                key={key}
                 disablePadding
                 sx={{ justifyContent: mini ? "center" : "flex-start" }}
               >
                 <ListItemButton
                   selected={selected}
-                  onClick={() => onNavigate?.(route)}
+                  onClick={() => onNavigate?.(key)}
                   sx={{
                     ...(selected
                       ? {
@@ -146,7 +135,7 @@ export default function Sidebar({ onNavigate, children, activeRoute }) {
                   >
                     <Icon path={icon} size={1.3} />
                   </ListItemIcon>
-                  {!mini && <ListItemText primary={name} />}
+                  {!mini && <ListItemText primary={label} />}
                 </ListItemButton>
               </ListItem>
             );

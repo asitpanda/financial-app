@@ -10,6 +10,7 @@ import reportWebVitals from "./reportWebVitals";
 import { queryClient } from "./api/queryClient";
 import { useThemeStore } from "./store/themeStore";
 import { createAppTheme } from "./theme/createAppTheme";
+import { BrowserRouter } from "react-router-dom";
 
 function RootProviders() {
   const mode = useThemeStore((state) => state.mode);
@@ -19,7 +20,9 @@ function RootProviders() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <App />
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
       </ThemeProvider>
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>

@@ -1,13 +1,20 @@
 # My Financial
 
-Full-stack personal finance platform with a frozen architecture for client and server.
+My Financial is a full-stack personal finance application for bringing everyday money management and long-term financial products into one place.
 
-## Current Architecture Status
+It helps a user:
 
-- Client architecture: frozen
-- Server architecture: frozen
-- Provider strategy: frozen (`mock | postgres | supabase`)
-- Repository naming and layering: frozen
+- track income, expenses, transfers, and financial accounts;
+- organize financial goals and spending categories;
+- track investments, policies, contributions, premiums, valuations, and future benefits;
+- distinguish cash movement from investment activity and observed valuation;
+- view portfolio, expense, cashflow, and net-worth data from a consistent financial model.
+
+The repository contains the React client, NestJS server, Prisma/PostgreSQL persistence layer, mock provider, and technical documentation for the system.
+
+## Project Status
+
+The current repository is an active engineering codebase with a defined client/server architecture. The technical documentation describes the implementation that exists today and the conventions new code should follow.
 
 ## Tech Stack
 
@@ -52,12 +59,11 @@ Provider selection happens at module DI binding time, not inside services.
 
 ## Documentation Map
 
-- Handoff bundle by audience: docs/HANDOFF_BUNDLE.md
-- Frozen architecture: docs/ARCHITECTURE.md
-- Data model and schema guide: docs/DATA_MODEL_AND_SCHEMA.md
-- Backend folder structure: docs/BACKEND_FOLDER_STRUCTURE.md
-- ER diagram: docs/data-model/INVESTMENT_ER_DIAGRAM.md
-- Frontend architecture guidelines: ARCHITECTURE.md
+- [Technical documentation index](docs/INDEX.md)
+- [Technical architecture](docs/ARCHITECTURE.md)
+- [Data model and schema guide](docs/DATA_MODEL_AND_SCHEMA.md)
+- [Technical diagrams](docs/reference/diagrams/)
+- [ER diagram](docs/reference/er-diagrams/INVESTMENT_ER_DIAGRAM.md)
 
 ### Recent Schema/Behavior Updates
 
@@ -94,11 +100,12 @@ my-financial/
     prisma/
       schema.prisma
   docs/
+    INDEX.md
     ARCHITECTURE.md
     DATA_MODEL_AND_SCHEMA.md
-    BACKEND_FOLDER_STRUCTURE.md
-    data-model/
-      INVESTMENT_ER_DIAGRAM.md
+    reference/
+      diagrams/
+      er-diagrams/
 ```
 
 ## Quick Start

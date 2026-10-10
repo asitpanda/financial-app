@@ -1,16 +1,7 @@
 import { create } from 'zustand';
+import type { Screen } from '../routing/screenRegistry';
 
-export type Screen =
-  | 'dashboard'
-  | 'transactions'
-  | 'accounts'
-  | 'budgets'
-  | 'goals'
-  | 'categories'
-  | 'investments'
-  | 'cards'
-  | 'reminders'
-  | 'settings';
+export type { Screen } from '../routing/screenRegistry';
 
 interface AppState {
   activeScreen: Screen;

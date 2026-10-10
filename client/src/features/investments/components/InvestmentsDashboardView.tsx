@@ -546,7 +546,7 @@ export default function InvestmentsDashboardView({
 
         <SectionCard
           title="Capital Deployment Timeline"
-          subtitle="Distribution of capital added toward long-term assets by fiscal period. Click year to see monthly breakdown."
+          subtitle="Distribution of capital added toward long-term assets by fiscal period. Select a year for its breakdown, then open monthly detail when needed."
           sx={widgetCardSx}
           contentSx={widgetContentSx}
           empty={timeSeriesData.length === 0}

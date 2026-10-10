@@ -6,6 +6,7 @@ export type InvestmentBenefitPayload = {
   amount: number;
   benefitDate: string;
   notes?: string;
+  destinationAccountId?: number | null;
   status?: InvestmentBenefit['status'];
 };
 

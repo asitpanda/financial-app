@@ -29,6 +29,7 @@ export class BenefitMockRepository implements IBenefitDataSourcePort {
       amount: data.amount,
       benefitDate: new Date(data.benefitDate),
       status: InvestmentBenefitStatus.EXPECTED,
+      destinationAccountId: data.destinationAccountId ?? null,
       notes: data.notes ?? null,
       createdAt: now,
       updatedAt: now,
@@ -78,6 +79,7 @@ export class BenefitMockRepository implements IBenefitDataSourcePort {
       amount: data.amount ?? mockBenefits[index].amount,
       benefitDate: data.benefitDate ? new Date(data.benefitDate) : mockBenefits[index].benefitDate,
       status: data.status ?? mockBenefits[index].status,
+      destinationAccountId: data.destinationAccountId !== undefined ? data.destinationAccountId ?? null : mockBenefits[index].destinationAccountId,
       notes: data.notes !== undefined ? data.notes : mockBenefits[index].notes,
       updatedAt: new Date(),
     };

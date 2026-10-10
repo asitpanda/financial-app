@@ -8,6 +8,7 @@ export type InvestmentBenefitRecord = {
   amount: number;
   benefitDate: Date;
   status: InvestmentBenefitStatus;
+  destinationAccountId: number | null;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;

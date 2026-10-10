@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { InvestmentBenefitType } from '@prisma/client';
-import { IsDateString, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsDateString, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateInvestmentBenefitDto {
   @ApiProperty({ enum: InvestmentBenefitType })
@@ -18,6 +18,12 @@ export class CreateInvestmentBenefitDto {
   @IsNotEmpty()
   @IsDateString()
   benefitDate: string;
+
+  @ApiProperty({ required: false, description: 'Optional payout account override. Defaults to the investment account.' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  destinationAccountId?: number | null;
 
   @ApiProperty({ required: false })
   @IsOptional()

@@ -116,6 +116,7 @@ export interface InvestmentBenefit {
   amount: number;
   benefitDate: string;
   status: InvestmentBenefitStatus;
+	destinationAccountId?: number | null;
   notes?: string | null;
   realizedEvents?: InvestmentEvent[];
 }

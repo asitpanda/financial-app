@@ -34,15 +34,23 @@ import dayjs from "dayjs";
 import AppDrawer from "../../../components/drawers/AppDrawer";
 import AppButton from "../../../components/common/AppButton";
 import ConfirmDialog from "../../../components/dialogs/ConfirmDialog";
-import { EmptyState, SectionCard, StatusChip } from "../../../components/common";
+import {
+  EmptyState,
+  SectionCard,
+  StatusChip,
+} from "../../../components/common";
 import DataTable from "../../../components/common/DataTable";
 import RecordValuationModal from "./RecordValuationModal";
 import { useUpdateInvestment } from "../hooks/useInvestments";
-import { useUpdateInvestmentContributionPlan, useDeleteInvestmentEvent } from "../hooks/useContributionPlans";
+import {
+  useUpdateInvestmentContributionPlan,
+  useDeleteInvestmentEvent,
+} from "../hooks/useContributionPlans";
 import { useDeleteInvestmentSnapshot } from "../hooks/useInvestmentSnapshots";
 import {
   useInvestmentBenefitsByInvestment,
   useDeleteInvestmentBenefit,
+  useRealizeInvestmentBenefit,
 } from "../hooks/useInvestmentBenefits";
 import { INVESTMENT_EVENT_TYPES } from "../../../types/investmentEventTypes";
 import { useNotificationStore } from "../../../store/notificationStore";
@@ -61,9 +69,20 @@ import {
 } from "../../../colors";
 import { getCadenceLabel } from "../../../utils/investmentHelpers";
 
-const DRAWER_TABS = ["overview", "contribution", "valuation", "benefits", "details"];
+const DRAWER_TABS = [
+  "overview",
+  "contribution",
+  "valuation",
+  "benefits",
+  "details",
+];
 const PERIOD_OPTIONS = ["3M", "6M", "1Y", "ALL"];
-const CONTRIBUTION_FILTER_OPTIONS = ["all", "contributions", "withdrawals", "other"];
+const CONTRIBUTION_FILTER_OPTIONS = [
+  "all",
+  "contributions",
+  "withdrawals",
+  "other",
+];
 
 function formatCodeLabel(value) {
   return String(value || "")
@@ -188,11 +207,18 @@ function SectionBlock({ title, helperText, action, children, grow = false }) {
         }}
       >
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, letterSpacing: 0.1 }}>
+          <Typography
+            variant="subtitle2"
+            sx={{ fontWeight: 700, letterSpacing: 0.1 }}
+          >
             {title}
           </Typography>
           {helperText ? (
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mt: 0.25 }}
+            >
               {helperText}
             </Typography>
           ) : null}
@@ -248,7 +274,8 @@ function InvestmentPerformanceChart({ points, formatValue }) {
   const plotHeight = chartHeight - padding.top - padding.bottom;
 
   const plottedPoints = chartData.map((item, idx) => {
-    const x = padding.left + (idx / Math.max(chartData.length - 1, 1)) * plotWidth;
+    const x =
+      padding.left + (idx / Math.max(chartData.length - 1, 1)) * plotWidth;
     const yInvestedValue =
       padding.top +
       plotHeight -
@@ -265,14 +292,29 @@ function InvestmentPerformanceChart({ points, formatValue }) {
     (_, idx) => idx % dotFrequency === 0 || idx === plottedPoints.length - 1,
   );
   const currentLine = plottedPoints
-    .map((point, idx) => `${idx === 0 ? "M" : "L"} ${point.x} ${point.yCurrentValue}`)
+    .map(
+      (point, idx) =>
+        `${idx === 0 ? "M" : "L"} ${point.x} ${point.yCurrentValue}`,
+    )
     .join(" ");
   const investedLine = plottedPoints
-    .map((point, idx) => `${idx === 0 ? "M" : "L"} ${point.x} ${point.yInvestedValue}`)
+    .map(
+      (point, idx) =>
+        `${idx === 0 ? "M" : "L"} ${point.x} ${point.yInvestedValue}`,
+    )
     .join(" ");
 
   return (
-    <Box sx={{ width: "100%", overflow: "hidden", px: 0, py: 0.5, borderRadius: 2, bgcolor: "rgba(248, 250, 252, 0.72)" }}>
+    <Box
+      sx={{
+        width: "100%",
+        overflow: "hidden",
+        px: 0,
+        py: 0.5,
+        borderRadius: 2,
+        bgcolor: "rgba(248, 250, 252, 0.72)",
+      }}
+    >
       <svg
         width="100%"
         height={chartHeight}
@@ -280,8 +322,22 @@ function InvestmentPerformanceChart({ points, formatValue }) {
         preserveAspectRatio="none"
         style={{ display: "block" }}
       >
-        <line x1={padding.left} y1={padding.top} x2={padding.left} y2={chartHeight - padding.bottom} stroke="#d1d5db" strokeWidth="1" />
-        <line x1={padding.left} y1={chartHeight - padding.bottom} x2={chartWidth - padding.right} y2={chartHeight - padding.bottom} stroke="#d1d5db" strokeWidth="1" />
+        <line
+          x1={padding.left}
+          y1={padding.top}
+          x2={padding.left}
+          y2={chartHeight - padding.bottom}
+          stroke="#d1d5db"
+          strokeWidth="1"
+        />
+        <line
+          x1={padding.left}
+          y1={chartHeight - padding.bottom}
+          x2={chartWidth - padding.right}
+          y2={chartHeight - padding.bottom}
+          stroke="#d1d5db"
+          strokeWidth="1"
+        />
 
         {Array.from({ length: 5 }).map((_, idx) => {
           const ratio = idx / 4;
@@ -289,8 +345,22 @@ function InvestmentPerformanceChart({ points, formatValue }) {
           const value = minValue + ratio * range;
           return (
             <g key={`grid-${idx}`}>
-              <line x1={padding.left} y1={y} x2={chartWidth - padding.right} y2={y} stroke="#e5e7eb" strokeWidth="1" strokeDasharray="2,2" />
-              <text x={padding.left - 8} y={y} textAnchor="end" dominantBaseline="middle" style={{ fontSize: 12, fill: "#6b7280" }}>
+              <line
+                x1={padding.left}
+                y1={y}
+                x2={chartWidth - padding.right}
+                y2={y}
+                stroke="#e5e7eb"
+                strokeWidth="1"
+                strokeDasharray="2,2"
+              />
+              <text
+                x={padding.left - 8}
+                y={y}
+                textAnchor="end"
+                dominantBaseline="middle"
+                style={{ fontSize: 12, fill: "#6b7280" }}
+              >
                 {formatValue(value)}
               </text>
             </g>
@@ -304,14 +374,33 @@ function InvestmentPerformanceChart({ points, formatValue }) {
           }
 
           return (
-            <text key={`label-${idx}`} x={point.x} y={chartHeight - padding.bottom + 15} textAnchor="middle" style={{ fontSize: chartData.length > 100 ? 9 : 10, fill: "#6b7280" }}>
+            <text
+              key={`label-${idx}`}
+              x={point.x}
+              y={chartHeight - padding.bottom + 15}
+              textAnchor="middle"
+              style={{
+                fontSize: chartData.length > 100 ? 9 : 10,
+                fill: "#6b7280",
+              }}
+            >
               {point.label}
             </text>
           );
         })}
 
-        <path d={investedLine} fill="none" stroke={INVESTMENT_CHART_SERIES_COLORS.investedHex} strokeWidth="2" />
-        <path d={currentLine} fill="none" stroke={INVESTMENT_CHART_SERIES_COLORS.investedAltHex} strokeWidth="2.5" />
+        <path
+          d={investedLine}
+          fill="none"
+          stroke={INVESTMENT_CHART_SERIES_COLORS.investedHex}
+          strokeWidth="2"
+        />
+        <path
+          d={currentLine}
+          fill="none"
+          stroke={INVESTMENT_CHART_SERIES_COLORS.investedAltHex}
+          strokeWidth="2.5"
+        />
 
         {plottedPoints.map((point, pointIdx) => {
           const tooltipWidth = 200;
@@ -329,25 +418,126 @@ function InvestmentPerformanceChart({ points, formatValue }) {
             <g key={`point-${pointIdx}`}>
               {showDots[pointIdx] ? (
                 <>
-                  <circle cx={point.x} cy={point.yCurrentValue} r={hoveredIndex === pointIdx ? 5 : 3} fill={INVESTMENT_CHART_SERIES_COLORS.investedAltHex} opacity={hoveredIndex === pointIdx ? 1 : 0.7} style={{ cursor: "pointer", transition: "all 0.15s" }} onMouseEnter={() => setHoveredIndex(pointIdx)} onMouseLeave={() => setHoveredIndex(null)} />
-                  <circle cx={point.x} cy={point.yInvestedValue} r={hoveredIndex === pointIdx ? 4.5 : 2.5} fill={INVESTMENT_CHART_SERIES_COLORS.investedHex} opacity={hoveredIndex === pointIdx ? 1 : 0.6} style={{ cursor: "pointer", transition: "all 0.15s" }} onMouseEnter={() => setHoveredIndex(pointIdx)} onMouseLeave={() => setHoveredIndex(null)} />
+                  <circle
+                    cx={point.x}
+                    cy={point.yCurrentValue}
+                    r={hoveredIndex === pointIdx ? 5 : 3}
+                    fill={INVESTMENT_CHART_SERIES_COLORS.investedAltHex}
+                    opacity={hoveredIndex === pointIdx ? 1 : 0.7}
+                    style={{ cursor: "pointer", transition: "all 0.15s" }}
+                    onMouseEnter={() => setHoveredIndex(pointIdx)}
+                    onMouseLeave={() => setHoveredIndex(null)}
+                  />
+                  <circle
+                    cx={point.x}
+                    cy={point.yInvestedValue}
+                    r={hoveredIndex === pointIdx ? 4.5 : 2.5}
+                    fill={INVESTMENT_CHART_SERIES_COLORS.investedHex}
+                    opacity={hoveredIndex === pointIdx ? 1 : 0.6}
+                    style={{ cursor: "pointer", transition: "all 0.15s" }}
+                    onMouseEnter={() => setHoveredIndex(pointIdx)}
+                    onMouseLeave={() => setHoveredIndex(null)}
+                  />
                 </>
               ) : null}
 
               {hoveredIndex === pointIdx ? (
                 <g>
-                  <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} rx="6" fill={CHART_TOOLTIP_COLORS.backgroundHex} stroke={CHART_TOOLTIP_COLORS.borderHex} opacity="0.98" />
-                  <text x={tooltipX + tooltipWidth / 2} y={tooltipY + 15} textAnchor="middle" style={{ fontSize: 14, fontWeight: 700, fill: CHART_TOOLTIP_COLORS.titleHex }}>
+                  <rect
+                    x={tooltipX}
+                    y={tooltipY}
+                    width={tooltipWidth}
+                    height={tooltipHeight}
+                    rx="6"
+                    fill={CHART_TOOLTIP_COLORS.backgroundHex}
+                    stroke={CHART_TOOLTIP_COLORS.borderHex}
+                    opacity="0.98"
+                  />
+                  <text
+                    x={tooltipX + tooltipWidth / 2}
+                    y={tooltipY + 15}
+                    textAnchor="middle"
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      fill: CHART_TOOLTIP_COLORS.titleHex,
+                    }}
+                  >
                     {dayjs(point.date).format("DD MMM YYYY")}
                   </text>
-                  <text x={tooltipX + 10} y={tooltipY + 42} style={{ fontSize: 12, fill: CHART_TOOLTIP_COLORS.labelHex, fontWeight: 600 }}>Current Value</text>
-                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 42} textAnchor="end" style={{ fontSize: 12, fill: CHART_TOOLTIP_COLORS.currentValueHex, fontWeight: 700 }}>{formatValue(point.currentValue)}</text>
-                  <text x={tooltipX + 10} y={tooltipY + 58} style={{ fontSize: 12, fill: CHART_TOOLTIP_COLORS.labelHex, fontWeight: 600 }}>Total Invested</text>
-                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 58} textAnchor="end" style={{ fontSize: 12, fill: CHART_TOOLTIP_COLORS.investedHex, fontWeight: 700 }}>{formatValue(point.investedValue)}</text>
-                  <text x={tooltipX + 10} y={tooltipY + 74} style={{ fontSize: 12, fill: CHART_TOOLTIP_COLORS.labelHex, fontWeight: 600 }}>Return</text>
-                  <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 74} textAnchor="end" style={{ fontSize: 12, fill: getProfitLossTooltipHexColor(point.gainLossValue, "gain"), fontWeight: 700 }}>
+                  <text
+                    x={tooltipX + 10}
+                    y={tooltipY + 42}
+                    style={{
+                      fontSize: 12,
+                      fill: CHART_TOOLTIP_COLORS.labelHex,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Current Value
+                  </text>
+                  <text
+                    x={tooltipX + tooltipWidth - 10}
+                    y={tooltipY + 42}
+                    textAnchor="end"
+                    style={{
+                      fontSize: 12,
+                      fill: CHART_TOOLTIP_COLORS.currentValueHex,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {formatValue(point.currentValue)}
+                  </text>
+                  <text
+                    x={tooltipX + 10}
+                    y={tooltipY + 58}
+                    style={{
+                      fontSize: 12,
+                      fill: CHART_TOOLTIP_COLORS.labelHex,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Total Invested
+                  </text>
+                  <text
+                    x={tooltipX + tooltipWidth - 10}
+                    y={tooltipY + 58}
+                    textAnchor="end"
+                    style={{
+                      fontSize: 12,
+                      fill: CHART_TOOLTIP_COLORS.investedHex,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {formatValue(point.investedValue)}
+                  </text>
+                  <text
+                    x={tooltipX + 10}
+                    y={tooltipY + 74}
+                    style={{
+                      fontSize: 12,
+                      fill: CHART_TOOLTIP_COLORS.labelHex,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Return
+                  </text>
+                  <text
+                    x={tooltipX + tooltipWidth - 10}
+                    y={tooltipY + 74}
+                    textAnchor="end"
+                    style={{
+                      fontSize: 12,
+                      fill: getProfitLossTooltipHexColor(
+                        point.gainLossValue,
+                        "gain",
+                      ),
+                      fontWeight: 700,
+                    }}
+                  >
                     {point.gainLossValue >= 0 ? "+" : ""}
-                    {formatValue(point.gainLossValue)} ({point.gainLossPercentage >= 0 ? "+" : ""}
+                    {formatValue(point.gainLossValue)} (
+                    {point.gainLossPercentage >= 0 ? "+" : ""}
                     {point.gainLossPercentage.toFixed(2)}%)
                   </text>
                 </g>
@@ -356,7 +546,6 @@ function InvestmentPerformanceChart({ points, formatValue }) {
           );
         })}
       </svg>
-
     </Box>
   );
 }
@@ -385,29 +574,41 @@ export function InvestmentViewDrawer({
 }) {
   const [activeTab, setActiveTab] = React.useState("overview");
   const [contributionFilter, setContributionFilter] = React.useState("all");
-  const [contributionStatusFilter, setContributionStatusFilter] = React.useState("all");
-  const [contributionSourceFilter, setContributionSourceFilter] = React.useState("all");
+  const [contributionStatusFilter, setContributionStatusFilter] =
+    React.useState("all");
+  const [contributionSourceFilter, setContributionSourceFilter] =
+    React.useState("all");
   const [valuationPeriod, setValuationPeriod] = React.useState("ALL");
   const [recordValuationOpen, setRecordValuationOpen] = React.useState(false);
   const [selectedSnapshot, setSelectedSnapshot] = React.useState(null);
   const [deleteSnapshotTarget, setDeleteSnapshotTarget] = React.useState(null);
   const [deleteEventTarget, setDeleteEventTarget] = React.useState(null);
-  const [snapshotActionLoading, setSnapshotActionLoading] = React.useState(false);
+  const [snapshotActionLoading, setSnapshotActionLoading] =
+    React.useState(false);
   const [eventActionLoading, setEventActionLoading] = React.useState(false);
   const [planActionLoading, setPlanActionLoading] = React.useState(false);
-  const [investmentStatusLoading, setInvestmentStatusLoading] = React.useState(false);
-  const [pendingInvestmentStatus, setPendingInvestmentStatus] = React.useState(null);
+  const [investmentStatusLoading, setInvestmentStatusLoading] =
+    React.useState(false);
+  const [pendingInvestmentStatus, setPendingInvestmentStatus] =
+    React.useState(null);
   const [pendingPlanStatus, setPendingPlanStatus] = React.useState(null);
   const [planActionError, setPlanActionError] = React.useState("");
   const [deleteBenefitTarget, setDeleteBenefitTarget] = React.useState(null);
+  const [realizeBenefitTarget, setRealizeBenefitTarget] = React.useState(null);
   const [benefitActionLoading, setBenefitActionLoading] = React.useState(false);
-  const pushNotification = useNotificationStore((state) => state.pushNotification);
+  const pushNotification = useNotificationStore(
+    (state) => state.pushNotification,
+  );
   const updateInvestmentMutation = useUpdateInvestment();
   const updateContributionPlanMutation = useUpdateInvestmentContributionPlan();
   const deleteSnapshotMutation = useDeleteInvestmentSnapshot();
   const deleteEventMutation = useDeleteInvestmentEvent();
-  const benefitsQuery = useInvestmentBenefitsByInvestment(investment?.id, Boolean(open && investment?.id));
+  const benefitsQuery = useInvestmentBenefitsByInvestment(
+    investment?.id,
+    Boolean(open && investment?.id),
+  );
   const deleteBenefitMutation = useDeleteInvestmentBenefit();
+  const realizeBenefitMutation = useRealizeInvestmentBenefit();
 
   React.useEffect(() => {
     if (!open) return;
@@ -444,7 +645,11 @@ export function InvestmentViewDrawer({
         Close
       </AppButton>
       {investment ? (
-        <AppButton variant="contained" onClick={() => onEdit?.(investment)} sx={{ minWidth: 160 }}>
+        <AppButton
+          variant="contained"
+          onClick={() => onEdit?.(investment)}
+          sx={{ minWidth: 160 }}
+        >
           Edit Investment
         </AppButton>
       ) : null}
@@ -468,7 +673,10 @@ export function InvestmentViewDrawer({
         message: successMessage,
       });
     } catch (error) {
-      const message = getRuntimeErrorMessage(error, "Failed to update recurring plan");
+      const message = getRuntimeErrorMessage(
+        error,
+        "Failed to update recurring plan",
+      );
       setPlanActionError(message);
       pushNotification({
         type: "error",
@@ -478,7 +686,6 @@ export function InvestmentViewDrawer({
       setPlanActionLoading(false);
     }
   };
-
 
   const handleInvestmentStatusChange = async (newStatus) => {
     if (!investment?.id || newStatus === investment.status) return;
@@ -493,8 +700,8 @@ export function InvestmentViewDrawer({
         newStatus === "matured"
           ? "Investment status updated to Matured. Attached contribution plan paused."
           : newStatus === "closed"
-          ? "Investment status updated to Closed. Attached contribution plan paused."
-          : "Investment status updated to Active.";
+            ? "Investment status updated to Closed. Attached contribution plan paused."
+            : "Investment status updated to Active.";
       pushNotification({
         type: "success",
         message: successMsg,
@@ -502,7 +709,10 @@ export function InvestmentViewDrawer({
     } catch (error) {
       pushNotification({
         type: "error",
-        message: getRuntimeErrorMessage(error, "Failed to update investment status"),
+        message: getRuntimeErrorMessage(
+          error,
+          "Failed to update investment status",
+        ),
       });
     } finally {
       setInvestmentStatusLoading(false);
@@ -580,7 +790,9 @@ export function InvestmentViewDrawer({
     }
 
     return [...investment.valuationSnapshots].sort(
-      (left, right) => new Date(right.snapshotDate).getTime() - new Date(left.snapshotDate).getTime(),
+      (left, right) =>
+        new Date(right.snapshotDate).getTime() -
+        new Date(left.snapshotDate).getTime(),
     );
   }, [investment?.valuationSnapshots]);
 
@@ -591,14 +803,21 @@ export function InvestmentViewDrawer({
 
     return [...investment.investmentEvents].sort((left, right) => {
       const leftDate = new Date(left.eventDate || left.dueDate || 0).getTime();
-      const rightDate = new Date(right.eventDate || right.dueDate || 0).getTime();
+      const rightDate = new Date(
+        right.eventDate || right.dueDate || 0,
+      ).getTime();
       return rightDate - leftDate;
     });
   }, [investment?.investmentEvents]);
 
   const performanceHistoryData = React.useMemo(() => {
-    const base = Array.isArray(investment?.performanceHistory) ? investment.performanceHistory : [];
-    const sorted = [...base].sort((left, right) => new Date(left.date).getTime() - new Date(right.date).getTime());
+    const base = Array.isArray(investment?.performanceHistory)
+      ? investment.performanceHistory
+      : [];
+    const sorted = [...base].sort(
+      (left, right) =>
+        new Date(left.date).getTime() - new Date(right.date).getTime(),
+    );
     const periodStart = getPeriodStartDate(valuationPeriod, sorted);
 
     if (!periodStart) {
@@ -606,25 +825,36 @@ export function InvestmentViewDrawer({
     }
 
     const filtered = sorted.filter(
-      (point) => dayjs(point.date).isAfter(periodStart) || dayjs(point.date).isSame(periodStart, "day"),
+      (point) =>
+        dayjs(point.date).isAfter(periodStart) ||
+        dayjs(point.date).isSame(periodStart, "day"),
     );
     return filtered.length > 1 ? filtered : sorted;
   }, [investment?.performanceHistory, valuationPeriod]);
 
-  const latestSnapshot = valuationSnapshots[0] ?? investment?.latestSnapshot ?? null;
-  const effectiveCurrentValue = Number(investment?.currentValue ?? investment?.totalInvested ?? 0);
+  const latestSnapshot =
+    valuationSnapshots[0] ?? investment?.latestSnapshot ?? null;
+  const effectiveCurrentValue = Number(
+    investment?.currentValue ?? investment?.totalInvested ?? 0,
+  );
   const effectiveTotalInvested = Number(investment?.totalInvested ?? 0);
   const totalReturnValue = effectiveCurrentValue - effectiveTotalInvested;
   const totalReturnPercentage =
-    effectiveTotalInvested > 0 ? (totalReturnValue / effectiveTotalInvested) * 100 : 0;
+    effectiveTotalInvested > 0
+      ? (totalReturnValue / effectiveTotalInvested) * 100
+      : 0;
   const totalReturnColor = getProfitLossMuiColor(totalReturnValue, "gain");
   const categoryLabel = getInvestmentCategoryLabel(
     investment?.category || investment?.assetCategory,
     taxonomyNodes,
   );
-  const institutionLabel = investment?.institution || investment?.institutionName || "—";
+  const institutionLabel =
+    investment?.institution || investment?.institutionName || "—";
   const sourceAccount = React.useMemo(
-    () => accounts.find((account) => String(account?.id) === String(investment?.accountId)),
+    () =>
+      accounts.find(
+        (account) => String(account?.id) === String(investment?.accountId),
+      ),
     [accounts, investment?.accountId],
   );
   const sourceAccountLabel = sourceAccount
@@ -639,10 +869,35 @@ export function InvestmentViewDrawer({
     : investment?.accountId
       ? "Linked account details unavailable"
       : "Choose an account for contribution tracking";
-  const holdingMode = investment?.contributionMode ? formatCodeLabel(investment.contributionMode) : "—";
+  const configuredBenefit = (benefitsQuery.data || []).find(
+    (benefit) => benefit.destinationAccountId != null,
+  );
+  const benefitDestinationAccount = configuredBenefit
+    ? accounts.find(
+        (account) =>
+          String(account?.id) ===
+          String(configuredBenefit.destinationAccountId),
+      )
+    : sourceAccount;
+  const benefitDestinationLabel = benefitDestinationAccount
+    ? benefitDestinationAccount.displayName || benefitDestinationAccount.name
+    : sourceAccountLabel;
+  const benefitDestinationDetail = benefitDestinationAccount
+    ? [
+        benefitDestinationAccount.institutionName,
+        benefitDestinationAccount.accountNumberMasked,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "Defaults to the contribution account";
+  const holdingMode = investment?.contributionMode
+    ? formatCodeLabel(investment.contributionMode)
+    : "—";
   const accountingTreatment = investment?.accountingTreatment || "INVESTMENT";
   const isInsuranceSavings = accountingTreatment === "INSURANCE_SAVINGS";
-  const sourceLabel = investment?.currentValueSource ? formatCodeLabel(investment.currentValueSource) : "—";
+  const sourceLabel = investment?.currentValueSource
+    ? formatCodeLabel(investment.currentValueSource)
+    : "—";
   const statusOptions = React.useMemo(() => {
     const uniqueStatuses = Array.from(
       new Set(
@@ -655,31 +910,68 @@ export function InvestmentViewDrawer({
   }, [activityEvents]);
 
   const sourceOptions = React.useMemo(() => {
-    const sources = Array.from(new Set(activityEvents.map((e) => getContributionSourceLabel(e))));
+    const sources = Array.from(
+      new Set(activityEvents.map((e) => getContributionSourceLabel(e))),
+    );
     return ["all", ...sources];
   }, [activityEvents]);
 
-  const contributionFilterCounts = React.useMemo(() => ({
-    all: activityEvents.length,
-    contributions: activityEvents.filter((e) => isContributionLike(e.eventType)).length,
-    withdrawals: activityEvents.filter((e) => isWithdrawalLike(e.eventType)).length,
-    other: activityEvents.filter((e) => !isContributionLike(e.eventType) && !isWithdrawalLike(e.eventType)).length,
-  }), [activityEvents]);
+  const contributionFilterCounts = React.useMemo(
+    () => ({
+      all: activityEvents.length,
+      contributions: activityEvents.filter((e) =>
+        isContributionLike(e.eventType),
+      ).length,
+      withdrawals: activityEvents.filter((e) => isWithdrawalLike(e.eventType))
+        .length,
+      other: activityEvents.filter(
+        (e) =>
+          !isContributionLike(e.eventType) && !isWithdrawalLike(e.eventType),
+      ).length,
+    }),
+    [activityEvents],
+  );
 
   const filteredContributionEvents = React.useMemo(() => {
     return activityEvents.filter((event) => {
       const eventStatus = String(event.status || "recorded").toLowerCase();
       const eventSource = getContributionSourceLabel(event);
 
-      if (contributionFilter === "contributions" && !isContributionLike(event.eventType)) return false;
-      if (contributionFilter === "withdrawals" && !isWithdrawalLike(event.eventType)) return false;
-      if (contributionFilter === "other" && (isContributionLike(event.eventType) || isWithdrawalLike(event.eventType))) return false;
-      if (contributionStatusFilter !== "all" && eventStatus !== contributionStatusFilter) return false;
-      if (contributionSourceFilter !== "all" && eventSource !== contributionSourceFilter) return false;
+      if (
+        contributionFilter === "contributions" &&
+        !isContributionLike(event.eventType)
+      )
+        return false;
+      if (
+        contributionFilter === "withdrawals" &&
+        !isWithdrawalLike(event.eventType)
+      )
+        return false;
+      if (
+        contributionFilter === "other" &&
+        (isContributionLike(event.eventType) ||
+          isWithdrawalLike(event.eventType))
+      )
+        return false;
+      if (
+        contributionStatusFilter !== "all" &&
+        eventStatus !== contributionStatusFilter
+      )
+        return false;
+      if (
+        contributionSourceFilter !== "all" &&
+        eventSource !== contributionSourceFilter
+      )
+        return false;
 
       return true;
     });
-  }, [activityEvents, contributionFilter, contributionStatusFilter, contributionSourceFilter]);
+  }, [
+    activityEvents,
+    contributionFilter,
+    contributionStatusFilter,
+    contributionSourceFilter,
+  ]);
 
   const contributionRows = filteredContributionEvents.map((event) => {
     const signedAmount = getContributionAmount(event);
@@ -730,7 +1022,13 @@ export function InvestmentViewDrawer({
       minWidth: 130,
       renderCell: ({ value }) => (
         <Box sx={tableCellCenterSx}>
-          <Typography variant="body2" sx={{ fontWeight: 700, color: getProfitLossMuiColor(value, "gain") }}>
+          <Typography
+            variant="body2"
+            sx={{
+              fontWeight: 700,
+              color: getProfitLossMuiColor(value, "gain"),
+            }}
+          >
             {value >= 0 ? "+" : ""}
             {formatInvestmentCurrency(value)}
           </Typography>
@@ -744,7 +1042,12 @@ export function InvestmentViewDrawer({
       minWidth: 120,
       renderCell: ({ value }) => (
         <Box sx={tableCellCenterSx}>
-          <Chip size="small" label={formatCodeLabel(value)} color={getStatusChipColor(value)} sx={{ fontWeight: 600 }} />
+          <Chip
+            size="small"
+            label={formatCodeLabel(value)}
+            color={getStatusChipColor(value)}
+            sx={{ fontWeight: 600 }}
+          />
         </Box>
       ),
     },
@@ -767,13 +1070,18 @@ export function InvestmentViewDrawer({
       renderCell: ({ value }) =>
         value ? (
           <Box sx={tableCellCenterSx}>
-            <Typography variant="body2" sx={{ fontWeight: 600, color: "primary.main" }}>
+            <Typography
+              variant="body2"
+              sx={{ fontWeight: 600, color: "primary.main" }}
+            >
               TXN-{value}
             </Typography>
           </Box>
         ) : (
           <Box sx={tableCellCenterSx}>
-            <Typography variant="body2" color="text.secondary">—</Typography>
+            <Typography variant="body2" color="text.secondary">
+              —
+            </Typography>
           </Box>
         ),
     },
@@ -814,12 +1122,16 @@ export function InvestmentViewDrawer({
           INVESTMENT_EVENT_TYPES.INCOME_CREDIT,
           INVESTMENT_EVENT_TYPES.OPENING_INCOME_CREDIT,
         ];
-        const isEditable = !row.linkedTransactionId && editableEventTypes.includes(row.event?.eventType);
+        const isEditable =
+          !row.linkedTransactionId &&
+          editableEventTypes.includes(row.event?.eventType);
 
         if (!isEditable) {
           return (
             <Box sx={tableCellCenterSx}>
-              <Typography variant="caption" color="text.secondary">—</Typography>
+              <Typography variant="caption" color="text.secondary">
+                —
+              </Typography>
             </Box>
           );
         }
@@ -902,7 +1214,9 @@ export function InvestmentViewDrawer({
       minWidth: 130,
       renderCell: ({ value }) => (
         <Box sx={tableCellCenterSx}>
-          <Typography variant="body2">{value != null ? formatInvestmentCurrency(value) : "—"}</Typography>
+          <Typography variant="body2">
+            {value != null ? formatInvestmentCurrency(value) : "—"}
+          </Typography>
         </Box>
       ),
     },
@@ -913,7 +1227,11 @@ export function InvestmentViewDrawer({
       minWidth: 130,
       renderCell: ({ value }) => (
         <Box sx={tableCellCenterSx}>
-          <Chip size="small" variant="outlined" label={value ? formatCodeLabel(value) : "Manual"} />
+          <Chip
+            size="small"
+            variant="outlined"
+            label={value ? formatCodeLabel(value) : "Manual"}
+          />
         </Box>
       ),
     },
@@ -927,10 +1245,19 @@ export function InvestmentViewDrawer({
       minWidth: 116,
       renderCell: ({ row }) => (
         <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
-          <IconButton size="small" onClick={() => handleOpenEditSnapshot(row.snapshot)} aria-label={`Edit valuation on ${formatInvestmentDate(row.snapshotDate)}`}>
+          <IconButton
+            size="small"
+            onClick={() => handleOpenEditSnapshot(row.snapshot)}
+            aria-label={`Edit valuation on ${formatInvestmentDate(row.snapshotDate)}`}
+          >
             <Icon path={mdiPencilOutline} size={0.8} />
           </IconButton>
-          <IconButton size="small" color="error" onClick={() => setDeleteSnapshotTarget(row.snapshot)} aria-label={`Delete valuation on ${formatInvestmentDate(row.snapshotDate)}`}>
+          <IconButton
+            size="small"
+            color="error"
+            onClick={() => setDeleteSnapshotTarget(row.snapshot)}
+            aria-label={`Delete valuation on ${formatInvestmentDate(row.snapshotDate)}`}
+          >
             <Icon path={mdiDeleteOutline} size={0.8} />
           </IconButton>
         </Box>
@@ -939,18 +1266,28 @@ export function InvestmentViewDrawer({
   ];
 
   const renderOverviewTab = () => {
-    const planStatus = formatCodeLabel(investment?.activeContributionPlan?.status || "active");
-    const planStatusNormalized = String(investment?.activeContributionPlan?.status || "active").toLowerCase();
+    const planStatus = formatCodeLabel(
+      investment?.activeContributionPlan?.status || "active",
+    );
+    const planStatusNormalized = String(
+      investment?.activeContributionPlan?.status || "active",
+    ).toLowerCase();
     const latestValuationAmount = latestSnapshot
-      ? formatInvestmentCurrency(latestSnapshot.marketValue ?? effectiveCurrentValue)
+      ? formatInvestmentCurrency(
+          latestSnapshot.marketValue ?? effectiveCurrentValue,
+        )
       : "—";
     const contributionHeadlineAmount = investment?.activeContributionPlan
       ? formatInvestmentCurrency(investment.activeContributionPlan.amount)
       : "—";
     const contributionHeadlineCadence = investment?.activeContributionPlan
       ? (() => {
-          const interval = Number(investment.activeContributionPlan.cadenceInterval || 1);
-          const unit = String(investment.activeContributionPlan.cadenceUnit || "").toLowerCase();
+          const interval = Number(
+            investment.activeContributionPlan.cadenceInterval || 1,
+          );
+          const unit = String(
+            investment.activeContributionPlan.cadenceUnit || "",
+          ).toLowerCase();
           if (!unit) return "period";
           return interval > 1 ? `${interval} ${unit}` : unit;
         })()
@@ -965,10 +1302,25 @@ export function InvestmentViewDrawer({
         label: isInsuranceSavings ? "Policy Term End Date" : "Maturity Date",
         value: formatDateOrDash(investment?.maturityDate),
       },
-      { label: "Reference Number", value: formatValueOrDash(investment?.referenceNumber) },
-      { label: "Asset Type", value: investment?.type || investment?.assetType || "—" },
-      { label: "Insurance Cover", value: formatValueOrDash(investment?.insuranceCover, formatInvestmentCurrency) },
-      { label: "Accounting Treatment", value: formatCodeLabel(accountingTreatment) },
+      {
+        label: "Reference Number",
+        value: formatValueOrDash(investment?.referenceNumber),
+      },
+      {
+        label: "Asset Type",
+        value: investment?.type || investment?.assetType || "—",
+      },
+      {
+        label: "Insurance Cover",
+        value: formatValueOrDash(
+          investment?.insuranceCover,
+          formatInvestmentCurrency,
+        ),
+      },
+      {
+        label: "Accounting Treatment",
+        value: formatCodeLabel(accountingTreatment),
+      },
     ];
     const atGlanceColumns = [
       [atGlanceItems[0], atGlanceItems[3], atGlanceItems[6]],
@@ -982,12 +1334,18 @@ export function InvestmentViewDrawer({
           title="At a glance"
           action={
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ fontWeight: 600 }}
+              >
                 Status:
               </Typography>
               <Select
                 size="small"
-                value={pendingInvestmentStatus || investment?.status || "active"}
+                value={
+                  pendingInvestmentStatus || investment?.status || "active"
+                }
                 onChange={(e) => setPendingInvestmentStatus(e.target.value)}
                 disabled={investmentStatusLoading}
                 aria-label="Investment Status"
@@ -1000,22 +1358,26 @@ export function InvestmentViewDrawer({
                   bgcolor:
                     (pendingInvestmentStatus || investment?.status) === "active"
                       ? "rgba(46, 125, 50, 0.08)"
-                      : (pendingInvestmentStatus || investment?.status) === "matured"
-                      ? "rgba(237, 108, 2, 0.08)"
-                      : "rgba(0, 0, 0, 0.04)",
+                      : (pendingInvestmentStatus || investment?.status) ===
+                          "matured"
+                        ? "rgba(237, 108, 2, 0.08)"
+                        : "rgba(0, 0, 0, 0.04)",
                   color:
                     (pendingInvestmentStatus || investment?.status) === "active"
                       ? "#2e7d32"
-                      : (pendingInvestmentStatus || investment?.status) === "matured"
-                      ? "#ed6c02"
-                      : "#666666",
+                      : (pendingInvestmentStatus || investment?.status) ===
+                          "matured"
+                        ? "#ed6c02"
+                        : "#666666",
                   "& .MuiOutlinedInput-notchedOutline": {
                     borderColor:
-                      (pendingInvestmentStatus || investment?.status) === "active"
+                      (pendingInvestmentStatus || investment?.status) ===
+                      "active"
                         ? "rgba(46, 125, 50, 0.3)"
-                        : (pendingInvestmentStatus || investment?.status) === "matured"
-                        ? "rgba(237, 108, 2, 0.3)"
-                        : "rgba(0, 0, 0, 0.2)",
+                        : (pendingInvestmentStatus || investment?.status) ===
+                            "matured"
+                          ? "rgba(237, 108, 2, 0.3)"
+                          : "rgba(0, 0, 0, 0.2)",
                   },
                   "& .MuiSelect-select": {
                     py: "4px",
@@ -1050,7 +1412,9 @@ export function InvestmentViewDrawer({
                   minWidth: 0,
                   px: { xs: 0, md: 1.75 },
                   borderLeft:
-                    columnIndex > 0 ? `1px solid ${theme.palette.divider}` : "none",
+                    columnIndex > 0
+                      ? `1px solid ${theme.palette.divider}`
+                      : "none",
                   [theme.breakpoints.down("md")]: {
                     borderLeft: "none",
                   },
@@ -1103,9 +1467,15 @@ export function InvestmentViewDrawer({
 
         <SectionCard
           title={
-            <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.8 }}>
+            <Box
+              sx={{ display: "inline-flex", alignItems: "center", gap: 0.8 }}
+            >
               <Icon path={mdiBank} size={0.8} color="#0f766e" />
-              <Typography component="span" variant="subtitle1" sx={{ fontWeight: 700 }}>
+              <Typography
+                component="span"
+                variant="subtitle1"
+                sx={{ fontWeight: 700 }}
+              >
                 Money flow
               </Typography>
             </Box>
@@ -1115,34 +1485,86 @@ export function InvestmentViewDrawer({
           <Box
             sx={{
               display: "grid",
-              gridTemplateColumns: { xs: "1fr", sm: "minmax(0, 1fr) auto minmax(0, 1fr)" },
+              gridTemplateColumns: {
+                xs: "1fr",
+                sm: "minmax(0, 1fr) auto minmax(0, 1fr)",
+              },
               alignItems: "center",
               gap: { xs: 1.25, sm: 1.5 },
             }}
           >
-            <Box sx={{ minWidth: 0, p: 1.5, border: "1px solid", borderColor: "divider", borderRadius: 1, bgcolor: "action.hover" }}>
-              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+            <Box
+              sx={{
+                minWidth: 0,
+                p: 1.5,
+                border: "1px solid",
+                borderColor: "divider",
+                borderRadius: 1,
+                bgcolor: "action.hover",
+              }}
+            >
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.5,
+                }}
+              >
                 Contributions from
               </Typography>
-              <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 800, overflowWrap: "anywhere" }}>
+              <Typography
+                variant="body1"
+                sx={{ mt: 0.5, fontWeight: 800, overflowWrap: "anywhere" }}
+              >
                 {sourceAccountLabel}
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, overflowWrap: "anywhere" }}>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mt: 0.25, overflowWrap: "anywhere" }}
+              >
                 {sourceAccountDetail}
               </Typography>
             </Box>
 
             <Icon path={mdiArrowRight} size={0.9} color="#64748b" />
 
-            <Box sx={{ minWidth: 0, p: 1.5, border: "1px dashed", borderColor: "warning.main", borderRadius: 1, bgcolor: "rgba(245, 158, 11, 0.06)" }}>
-              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+            <Box
+              sx={{
+                minWidth: 0,
+                p: 1.5,
+                border: "1px dashed",
+                borderColor: "warning.main",
+                borderRadius: 1,
+                bgcolor: "rgba(245, 158, 11, 0.06)",
+              }}
+            >
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.5,
+                }}
+              >
                 Benefits to
               </Typography>
-              <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 800, color: "warning.dark" }}>
-                Not configured
+              <Typography
+                variant="body1"
+                sx={{ mt: 0.5, fontWeight: 800, color: "warning.dark" }}
+              >
+                {benefitDestinationLabel}
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-                Add a destination account when benefit payouts are supported.
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mt: 0.25 }}
+              >
+                {benefitDestinationDetail ||
+                  "Uses the contribution account by default."}
               </Typography>
             </Box>
           </Box>
@@ -1157,9 +1579,19 @@ export function InvestmentViewDrawer({
         >
           <SectionCard
             title={
-              <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.8 }}>
-                <Icon path={mdiCalendarBlankOutline} size={0.8} color="#d97706" />
-                <Typography component="span" variant="subtitle1" sx={{ fontWeight: 700 }}>
+              <Box
+                sx={{ display: "inline-flex", alignItems: "center", gap: 0.8 }}
+              >
+                <Icon
+                  path={mdiCalendarBlankOutline}
+                  size={0.8}
+                  color="#d97706"
+                />
+                <Typography
+                  component="span"
+                  variant="subtitle1"
+                  sx={{ fontWeight: 700 }}
+                >
                   Contribution Plan
                 </Typography>
               </Box>
@@ -1169,7 +1601,13 @@ export function InvestmentViewDrawer({
                 <Chip
                   size="small"
                   label={planStatus}
-                  color={planStatusNormalized === "active" ? "success" : planStatusNormalized === "paused" ? "warning" : "default"}
+                  color={
+                    planStatusNormalized === "active"
+                      ? "success"
+                      : planStatusNormalized === "paused"
+                        ? "warning"
+                        : "default"
+                  }
                   variant="outlined"
                   sx={{ fontWeight: 700, height: 22 }}
                 />
@@ -1178,7 +1616,10 @@ export function InvestmentViewDrawer({
           >
             {investment?.activeContributionPlan ? (
               <Stack spacing={1.2}>
-                <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1.2 }}>
+                <Typography
+                  variant="h5"
+                  sx={{ fontWeight: 800, lineHeight: 1.2 }}
+                >
                   {contributionHeadlineAmount}
                   <Typography
                     component="span"
@@ -1194,42 +1635,108 @@ export function InvestmentViewDrawer({
                 </Typography>
 
                 <Box sx={{ display: "grid", rowGap: 0.8 }}>
-                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.25 }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 1.25,
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ fontWeight: 500, letterSpacing: 0.1 }}
+                    >
                       Next due
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
-                      {formatDateOrDash(investment.activeContributionPlan.nextDueDate)}
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 700, textAlign: "right" }}
+                    >
+                      {formatDateOrDash(
+                        investment.activeContributionPlan.nextDueDate,
+                      )}
                     </Typography>
                   </Box>
-                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.25 }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 1.25,
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ fontWeight: 500, letterSpacing: 0.1 }}
+                    >
                       Start / Anchor date
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
-                      {formatDateOrDash(investment.activeContributionPlan.anchorDate)}
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 700, textAlign: "right" }}
+                    >
+                      {formatDateOrDash(
+                        investment.activeContributionPlan.anchorDate,
+                      )}
                     </Typography>
                   </Box>
-                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.25 }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 1.25,
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ fontWeight: 500, letterSpacing: 0.1 }}
+                    >
                       End date
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
-                      {formatDateOrDash(investment.activeContributionPlan.endDate)}
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 700, textAlign: "right" }}
+                    >
+                      {formatDateOrDash(
+                        investment.activeContributionPlan.endDate,
+                      )}
                     </Typography>
                   </Box>
-                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.25 }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 1.25,
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ fontWeight: 500, letterSpacing: 0.1 }}
+                    >
                       Reminder
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 700, textAlign: "right" }}
+                    >
                       —
                     </Typography>
                   </Box>
                 </Box>
               </Stack>
             ) : (
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 600 }}
+              >
                 Not configured
               </Typography>
             )}
@@ -1237,9 +1744,15 @@ export function InvestmentViewDrawer({
 
           <SectionCard
             title={
-              <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.8 }}>
+              <Box
+                sx={{ display: "inline-flex", alignItems: "center", gap: 0.8 }}
+              >
                 <Icon path={mdiTrendingUp} size={0.8} color="#2563eb" />
-                <Typography component="span" variant="subtitle1" sx={{ fontWeight: 700 }}>
+                <Typography
+                  component="span"
+                  variant="subtitle1"
+                  sx={{ fontWeight: 700 }}
+                >
                   Latest Valuation
                 </Typography>
               </Box>
@@ -1247,47 +1760,117 @@ export function InvestmentViewDrawer({
           >
             {latestSnapshot ? (
               <Stack spacing={1.2}>
-                <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1.2 }}>
+                <Typography
+                  variant="h5"
+                  sx={{ fontWeight: 800, lineHeight: 1.2 }}
+                >
                   {latestValuationAmount}
                 </Typography>
 
                 <Box sx={{ display: "grid", rowGap: 0.8 }}>
-                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.25 }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 1.25,
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ fontWeight: 500, letterSpacing: 0.1 }}
+                    >
                       Valuation Date
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
-                      {formatDateOrDash(latestSnapshot.snapshotDate || investment?.lastValuationAt)}
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 700, textAlign: "right" }}
+                    >
+                      {formatDateOrDash(
+                        latestSnapshot.snapshotDate ||
+                          investment?.lastValuationAt,
+                      )}
                     </Typography>
                   </Box>
-                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.25 }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 1.25,
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ fontWeight: 500, letterSpacing: 0.1 }}
+                    >
                       Source
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
-                      {latestSnapshot.source ? formatCodeLabel(latestSnapshot.source) : sourceLabel}
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 700, textAlign: "right" }}
+                    >
+                      {latestSnapshot.source
+                        ? formatCodeLabel(latestSnapshot.source)
+                        : sourceLabel}
                     </Typography>
                   </Box>
-                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.25 }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 1.25,
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ fontWeight: 500, letterSpacing: 0.1 }}
+                    >
                       Units
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 700, textAlign: "right" }}
+                    >
                       {formatValueOrDash(latestSnapshot.units)}
                     </Typography>
                   </Box>
-                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.25 }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 1.25,
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ fontWeight: 500, letterSpacing: 0.1 }}
+                    >
                       Price
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
-                      {latestSnapshot.price != null ? formatInvestmentCurrency(latestSnapshot.price) : "—"}
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 700, textAlign: "right" }}
+                    >
+                      {latestSnapshot.price != null
+                        ? formatInvestmentCurrency(latestSnapshot.price)
+                        : "—"}
                     </Typography>
                   </Box>
                 </Box>
               </Stack>
             ) : (
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 600 }}
+              >
                 No valuation history
               </Typography>
             )}
@@ -1298,16 +1881,31 @@ export function InvestmentViewDrawer({
   };
 
   const renderContributionTab = () => {
-    const planStatusNormalized = String(investment?.activeContributionPlan?.status || "active").toLowerCase();
-    const planStatusLabel = formatCodeLabel(investment?.activeContributionPlan?.status || "active");
-    const normalizedContributionMode = String(investment?.contributionMode || "").trim().toUpperCase();
+    const planStatusNormalized = String(
+      investment?.activeContributionPlan?.status || "active",
+    ).toLowerCase();
+    const planStatusLabel = formatCodeLabel(
+      investment?.activeContributionPlan?.status || "active",
+    );
+    const normalizedContributionMode = String(
+      investment?.contributionMode || "",
+    )
+      .trim()
+      .toUpperCase();
     const isRecurringContributionType =
-      normalizedContributionMode === "RECURRING" || Boolean(investment?.activeContributionPlan?.id);
+      normalizedContributionMode === "RECURRING" ||
+      Boolean(investment?.activeContributionPlan?.id);
 
     const filterOptions = [
       { key: "all", label: `All (${contributionFilterCounts.all})` },
-      { key: "contributions", label: `Contributions (${contributionFilterCounts.contributions})` },
-      { key: "withdrawals", label: `Withdrawals (${contributionFilterCounts.withdrawals})` },
+      {
+        key: "contributions",
+        label: `Contributions (${contributionFilterCounts.contributions})`,
+      },
+      {
+        key: "withdrawals",
+        label: `Withdrawals (${contributionFilterCounts.withdrawals})`,
+      },
       { key: "other", label: `Other (${contributionFilterCounts.other})` },
     ];
 
@@ -1316,12 +1914,20 @@ export function InvestmentViewDrawer({
         {investment?.activeContributionPlan ? (
           <SectionCard
             title={
-              <Box sx={{ display: "inline-flex", alignItems: "center", gap: 1 }}>
+              <Box
+                sx={{ display: "inline-flex", alignItems: "center", gap: 1 }}
+              >
                 Contribution Plan
                 <Chip
                   size="small"
                   label={planStatusLabel}
-                  color={planStatusNormalized === "active" ? "success" : planStatusNormalized === "paused" ? "warning" : "default"}
+                  color={
+                    planStatusNormalized === "active"
+                      ? "success"
+                      : planStatusNormalized === "paused"
+                        ? "warning"
+                        : "default"
+                  }
                   variant="outlined"
                   sx={{ fontWeight: 700, height: 22 }}
                 />
@@ -1345,22 +1951,26 @@ export function InvestmentViewDrawer({
                       bgcolor:
                         (pendingPlanStatus || planStatusNormalized) === "active"
                           ? "rgba(46, 125, 50, 0.08)"
-                          : (pendingPlanStatus || planStatusNormalized) === "paused"
-                          ? "rgba(237, 108, 2, 0.08)"
-                          : "rgba(0, 0, 0, 0.04)",
+                          : (pendingPlanStatus || planStatusNormalized) ===
+                              "paused"
+                            ? "rgba(237, 108, 2, 0.08)"
+                            : "rgba(0, 0, 0, 0.04)",
                       color:
                         (pendingPlanStatus || planStatusNormalized) === "active"
                           ? "#2e7d32"
-                          : (pendingPlanStatus || planStatusNormalized) === "paused"
-                          ? "#ed6c02"
-                          : "#666666",
+                          : (pendingPlanStatus || planStatusNormalized) ===
+                              "paused"
+                            ? "#ed6c02"
+                            : "#666666",
                       "& .MuiOutlinedInput-notchedOutline": {
                         borderColor:
-                          (pendingPlanStatus || planStatusNormalized) === "active"
+                          (pendingPlanStatus || planStatusNormalized) ===
+                          "active"
                             ? "rgba(46, 125, 50, 0.3)"
-                            : (pendingPlanStatus || planStatusNormalized) === "paused"
-                            ? "rgba(237, 108, 2, 0.3)"
-                            : "rgba(0, 0, 0, 0.2)",
+                            : (pendingPlanStatus || planStatusNormalized) ===
+                                "paused"
+                              ? "rgba(237, 108, 2, 0.3)"
+                              : "rgba(0, 0, 0, 0.2)",
                       },
                       "& .MuiSelect-select": {
                         py: "4px",
@@ -1381,9 +1991,22 @@ export function InvestmentViewDrawer({
                   <AppButton
                     size="small"
                     variant="outlined"
-                    onClick={() => onRecordActivity(investment, investment?.activeContributionPlan ?? null, "contribution")}
+                    onClick={() =>
+                      onRecordActivity(
+                        investment,
+                        investment?.activeContributionPlan ?? null,
+                        "contribution",
+                      )
+                    }
                   >
-                    <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+                    <Box
+                      component="span"
+                      sx={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 0.75,
+                      }}
+                    >
                       <Icon path={mdiPlus} size={0.8} />
                       Record Activity
                     </Box>
@@ -1394,82 +2017,139 @@ export function InvestmentViewDrawer({
           >
             <Stack spacing={1.5}>
               <Box sx={{ display: "flex", overflowX: "auto" }}>
-              {[
-                {
-                  icon: mdiCash,
-                  label: "Contribution Amount",
-                  value: formatInvestmentCurrency(investment.activeContributionPlan.amount),
-                },
-                {
-                  icon: mdiRepeat,
-                  label: "Cadence",
-                  value: getContributionCadenceLabel(investment.activeContributionPlan),
-                },
-                {
-                  icon: mdiCalendarClock,
-                  label: "Next Due Date",
-                  value: formatDateOrDash(investment.activeContributionPlan.nextDueDate),
-                },
-                {
-                  icon: mdiCalendarStart,
-                  label: "Anchor / Start Date",
-                  value: formatDateOrDash(investment.activeContributionPlan.anchorDate),
-                },
-                {
-                  icon: mdiCalendarEnd,
-                  label: "End Date",
-                  value: formatDateOrDash(investment.activeContributionPlan.endDate),
-                },
-              ].map((field, idx) => (
-                <Box
-                  key={field.label}
-                  sx={(theme) => ({
-                    flex: 1,
-                    minWidth: 110,
-                    px: 1.75,
-                    borderLeft: idx > 0 ? `1px solid ${theme.palette.divider}` : "none",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  })}
-                >
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.5 }}>
-                    <Icon path={field.icon} size={0.72} color="#2563eb" />
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ fontWeight: 500, lineHeight: 1.45, letterSpacing: 0.1, whiteSpace: "nowrap" }}
+                {[
+                  {
+                    icon: mdiCash,
+                    label: "Contribution Amount",
+                    value: formatInvestmentCurrency(
+                      investment.activeContributionPlan.amount,
+                    ),
+                  },
+                  {
+                    icon: mdiRepeat,
+                    label: "Cadence",
+                    value: getContributionCadenceLabel(
+                      investment.activeContributionPlan,
+                    ),
+                  },
+                  {
+                    icon: mdiCalendarClock,
+                    label: "Next Due Date",
+                    value: formatDateOrDash(
+                      investment.activeContributionPlan.nextDueDate,
+                    ),
+                  },
+                  {
+                    icon: mdiCalendarStart,
+                    label: "Anchor / Start Date",
+                    value: formatDateOrDash(
+                      investment.activeContributionPlan.anchorDate,
+                    ),
+                  },
+                  {
+                    icon: mdiCalendarEnd,
+                    label: "End Date",
+                    value: formatDateOrDash(
+                      investment.activeContributionPlan.endDate,
+                    ),
+                  },
+                ].map((field, idx) => (
+                  <Box
+                    key={field.label}
+                    sx={(theme) => ({
+                      flex: 1,
+                      minWidth: 110,
+                      px: 1.75,
+                      borderLeft:
+                        idx > 0 ? `1px solid ${theme.palette.divider}` : "none",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    })}
+                  >
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 0.5,
+                        mb: 0.5,
+                      }}
                     >
-                      {field.label}
-                    </Typography>
+                      <Icon path={field.icon} size={0.72} color="#2563eb" />
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{
+                          fontWeight: 500,
+                          lineHeight: 1.45,
+                          letterSpacing: 0.1,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {field.label}
+                      </Typography>
+                    </Box>
+                    {typeof field.value === "string" ? (
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: 700,
+                          color: "text.primary",
+                          lineHeight: 1.45,
+                        }}
+                      >
+                        {field.value}
+                      </Typography>
+                    ) : (
+                      field.value
+                    )}
                   </Box>
-                  {typeof field.value === "string" ? (
-                    <Typography variant="body2" sx={{ fontWeight: 700, color: "text.primary", lineHeight: 1.45 }}>
-                      {field.value}
-                    </Typography>
-                  ) : (
-                    field.value
-                  )}
-                </Box>
-              ))}
+                ))}
               </Box>
 
-              {planActionError ? <Alert severity="error">{planActionError}</Alert> : null}
+              {planActionError ? (
+                <Alert severity="error">{planActionError}</Alert>
+              ) : null}
             </Stack>
           </SectionCard>
         ) : (
-          <Box sx={{ mb: 1.5, p: 1.75, borderRadius: 1.5, bgcolor: "action.hover", border: "1px solid", borderColor: "divider", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
+          <Box
+            sx={{
+              mb: 1.5,
+              p: 1.75,
+              borderRadius: 1.5,
+              bgcolor: "action.hover",
+              border: "1px solid",
+              borderColor: "divider",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 2,
+              flexWrap: "wrap",
+            }}
+          >
             <Typography variant="body2" color="text.secondary">
-              <strong>One-time investment</strong> — no recurring plan. Any manually recorded contributions appear in the activity table below.
+              <strong>One-time investment</strong> — no recurring plan. Any
+              manually recorded contributions appear in the activity table
+              below.
             </Typography>
             {onRecordActivity ? (
               <AppButton
                 size="small"
                 variant="outlined"
-                onClick={() => onRecordActivity(investment, null, "contribution")}
+                onClick={() =>
+                  onRecordActivity(investment, null, "contribution")
+                }
               >
-                <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+                <Box
+                  component="span"
+                  sx={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 0.75,
+                  }}
+                >
                   <Icon path={mdiPlus} size={0.8} />
                   Record Activity
                 </Box>
@@ -1478,16 +2158,31 @@ export function InvestmentViewDrawer({
           </Box>
         )}
 
-        <SectionBlock
-          grow
-        >
+        <SectionBlock grow>
           <Stack spacing={1.5} sx={{ flex: 1, minHeight: 0 }}>
-            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                {(CONTRIBUTION_FILTER_OPTIONS.map((key) => ({
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 2,
+                flexWrap: "wrap",
+              }}
+            >
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                  flexWrap: "wrap",
+                }}
+              >
+                {CONTRIBUTION_FILTER_OPTIONS.map((key) => ({
                   key,
-                  label: filterOptions.find((option) => option.key === key)?.label || key,
-                }))).map(({ key, label }) => (
+                  label:
+                    filterOptions.find((option) => option.key === key)?.label ||
+                    key,
+                })).map(({ key, label }) => (
                   <Chip
                     key={key}
                     label={label}
@@ -1502,11 +2197,15 @@ export function InvestmentViewDrawer({
                   <Select
                     size="small"
                     value={contributionStatusFilter}
-                    onChange={(e) => setContributionStatusFilter(e.target.value)}
+                    onChange={(e) =>
+                      setContributionStatusFilter(e.target.value)
+                    }
                     sx={{ minWidth: 130 }}
                   >
                     {statusOptions.map((s) => (
-                      <MenuItem key={s} value={s}>{s === "all" ? "All Status" : formatCodeLabel(s)}</MenuItem>
+                      <MenuItem key={s} value={s}>
+                        {s === "all" ? "All Status" : formatCodeLabel(s)}
+                      </MenuItem>
                     ))}
                   </Select>
                 ) : null}
@@ -1514,11 +2213,15 @@ export function InvestmentViewDrawer({
                   <Select
                     size="small"
                     value={contributionSourceFilter}
-                    onChange={(e) => setContributionSourceFilter(e.target.value)}
+                    onChange={(e) =>
+                      setContributionSourceFilter(e.target.value)
+                    }
                     sx={{ minWidth: 130 }}
                   >
                     {sourceOptions.map((s) => (
-                      <MenuItem key={s} value={s}>{s === "all" ? "All Source" : s}</MenuItem>
+                      <MenuItem key={s} value={s}>
+                        {s === "all" ? "All Source" : s}
+                      </MenuItem>
                     ))}
                   </Select>
                 ) : null}
@@ -1531,7 +2234,9 @@ export function InvestmentViewDrawer({
                 columns={contributionColumns}
                 disableColumnMenu
                 pageSizeOptions={[10, 25, 50]}
-                initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+                initialState={{
+                  pagination: { paginationModel: { pageSize: 10, page: 0 } },
+                }}
                 containerSx={{ height: "100%", minHeight: 320 }}
                 sx={{
                   "& .MuiDataGrid-row": { minHeight: 58 },
@@ -1539,7 +2244,9 @@ export function InvestmentViewDrawer({
                 }}
               />
             ) : (
-              <Alert severity="info">No contributions match the current filters.</Alert>
+              <Alert severity="info">
+                No contributions match the current filters.
+              </Alert>
             )}
           </Stack>
         </SectionBlock>
@@ -1551,17 +2258,23 @@ export function InvestmentViewDrawer({
     const valuationSummaryCards = [
       {
         label: "Last Valuation Date",
-        value: formatDateOrDash(latestSnapshot?.snapshotDate || investment?.lastValuationAt),
+        value: formatDateOrDash(
+          latestSnapshot?.snapshotDate || investment?.lastValuationAt,
+        ),
         icon: mdiCalendarBlankOutline,
       },
       {
         label: "Market Value",
-        value: formatInvestmentCurrency(latestSnapshot?.marketValue ?? effectiveCurrentValue),
+        value: formatInvestmentCurrency(
+          latestSnapshot?.marketValue ?? effectiveCurrentValue,
+        ),
         icon: mdiTrendingUp,
       },
       {
         label: "Source",
-        value: latestSnapshot?.source ? formatCodeLabel(latestSnapshot.source) : sourceLabel,
+        value: latestSnapshot?.source
+          ? formatCodeLabel(latestSnapshot.source)
+          : sourceLabel,
         icon: mdiPencilOutline,
       },
       {
@@ -1571,7 +2284,10 @@ export function InvestmentViewDrawer({
       },
       {
         label: "Price",
-        value: latestSnapshot?.price != null ? formatInvestmentCurrency(latestSnapshot.price) : "—",
+        value:
+          latestSnapshot?.price != null
+            ? formatInvestmentCurrency(latestSnapshot.price)
+            : "—",
         icon: mdiCash,
       },
     ];
@@ -1580,13 +2296,25 @@ export function InvestmentViewDrawer({
       <Stack spacing={1.5} sx={{ height: "100%", minHeight: 0, pb: 0.5 }}>
         <SectionCard
           title={
-            <Typography component="span" variant="subtitle1" sx={{ fontWeight: 700 }}>
+            <Typography
+              component="span"
+              variant="subtitle1"
+              sx={{ fontWeight: 700 }}
+            >
               Valuation Summary
             </Typography>
           }
           action={
-            <AppButton size="small" variant="outlined" onClick={handleOpenCreateSnapshot} sx={{ minWidth: 138 }}>
-              <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+            <AppButton
+              size="small"
+              variant="outlined"
+              onClick={handleOpenCreateSnapshot}
+              sx={{ minWidth: 138 }}
+            >
+              <Box
+                component="span"
+                sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}
+              >
                 <Icon path={mdiPlus} size={0.85} />
                 Record Valuation
               </Box>
@@ -1610,7 +2338,8 @@ export function InvestmentViewDrawer({
                   flex: 1,
                   minWidth: 110,
                   px: 1.75,
-                  borderLeft: idx > 0 ? `1px solid ${theme.palette.divider}` : "none",
+                  borderLeft:
+                    idx > 0 ? `1px solid ${theme.palette.divider}` : "none",
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
@@ -1620,12 +2349,24 @@ export function InvestmentViewDrawer({
                   },
                 })}
               >
-                <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.55, mb: 0.25 }}>
+                <Box
+                  sx={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 0.55,
+                    mb: 0.25,
+                  }}
+                >
                   <Icon path={item.icon} size={0.68} color="#2563eb" />
                   <Typography
                     variant="caption"
                     color="text.secondary"
-                    sx={{ fontWeight: 500, lineHeight: 1.45, letterSpacing: 0.1, whiteSpace: "nowrap" }}
+                    sx={{
+                      fontWeight: 500,
+                      lineHeight: 1.45,
+                      letterSpacing: 0.1,
+                      whiteSpace: "nowrap",
+                    }}
                   >
                     {item.label}
                   </Typography>
@@ -1648,17 +2389,44 @@ export function InvestmentViewDrawer({
 
         <SectionCard
           title={
-            <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.85, flexWrap: "wrap" }}>
-              <Typography component="span" variant="subtitle1" sx={{ fontWeight: 700 }}>
+            <Box
+              sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 0.85,
+                flexWrap: "wrap",
+              }}
+            >
+              <Typography
+                component="span"
+                variant="subtitle1"
+                sx={{ fontWeight: 700 }}
+              >
                 Performance Chart
               </Typography>
-              <Typography component="span" variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                ({investment?.performanceHistorySource === "investment_event" ? "Investment Events" : "Valuation History"})
+              <Typography
+                component="span"
+                variant="caption"
+                color="text.secondary"
+                sx={{ fontWeight: 600 }}
+              >
+                (
+                {investment?.performanceHistorySource === "investment_event"
+                  ? "Investment Events"
+                  : "Valuation History"}
+                )
               </Typography>
             </Box>
           }
           action={
-            <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <Box
+              sx={{
+                display: "flex",
+                gap: 0.75,
+                flexWrap: "wrap",
+                justifyContent: "flex-end",
+              }}
+            >
               {PERIOD_OPTIONS.map((period) => (
                 <Chip
                   key={period}
@@ -1674,11 +2442,19 @@ export function InvestmentViewDrawer({
           contentSx={{ pt: 0 }}
         >
           {performanceHistoryData.length > 0 ? (
-            <InvestmentPerformanceChart points={performanceHistoryData} formatValue={formatInvestmentCurrency} />
+            <InvestmentPerformanceChart
+              points={performanceHistoryData}
+              formatValue={formatInvestmentCurrency}
+            />
           ) : valuationSnapshots.length > 0 ? (
-            <Alert severity="info">No chartable performance series is available yet for this period.</Alert>
+            <Alert severity="info">
+              No chartable performance series is available yet for this period.
+            </Alert>
           ) : (
-            <EmptyState text="No valuation history yet" subText="Record the first valuation to start tracking value, profit, and growth over time." />
+            <EmptyState
+              text="No valuation history yet"
+              subText="Record the first valuation to start tracking value, profit, and growth over time."
+            />
           )}
         </SectionCard>
 
@@ -1689,7 +2465,9 @@ export function InvestmentViewDrawer({
               columns={valuationColumns}
               disableColumnMenu
               pageSizeOptions={[10, 25, 50]}
-              initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+              initialState={{
+                pagination: { paginationModel: { pageSize: 10, page: 0 } },
+              }}
               containerSx={{ height: "100%", minHeight: 320 }}
               sx={{
                 "& .MuiDataGrid-row": { minHeight: 58 },
@@ -1697,7 +2475,10 @@ export function InvestmentViewDrawer({
               }}
             />
           ) : (
-            <EmptyState text="No valuation history yet" subText="Record the first valuation to track market value over time." />
+            <EmptyState
+              text="No valuation history yet"
+              subText="Record the first valuation to track market value over time."
+            />
           )}
         </SectionBlock>
       </Stack>
@@ -1728,13 +2509,56 @@ export function InvestmentViewDrawer({
     }
   };
 
-  const handleRealizeBenefit = async (benefit) => {
+  const handleRealizeBenefit = (benefit) => {
     if (!benefit || !investment?.id) return;
-    // Full realization flow (component breakdown modal) is deferred to a later phase
-    pushNotification({
-      type: "info",
-      message: "Benefit realization coming in next phase",
-    });
+    setRealizeBenefitTarget(benefit);
+  };
+
+  const handleConfirmBenefitRealization = async () => {
+    if (!realizeBenefitTarget || !investment?.id) return;
+
+    const destinationAccountId =
+      realizeBenefitTarget.destinationAccountId ?? investment.accountId ?? null;
+    setBenefitActionLoading(true);
+    try {
+      await realizeBenefitMutation.mutateAsync({
+        investmentId: investment.id,
+        benefitId: realizeBenefitTarget.id,
+        payload: {
+          components: [
+            {
+              eventType: INVESTMENT_EVENT_TYPES.BENEFIT_RECEIPT,
+              amount: Number(realizeBenefitTarget.amount),
+              eventDate: realizeBenefitTarget.benefitDate,
+              notes: realizeBenefitTarget.notes || undefined,
+              transaction: {
+                type: "INVESTMENT",
+                destinationAccountId:
+                  destinationAccountId == null
+                    ? undefined
+                    : Number(destinationAccountId),
+              },
+            },
+          ],
+          closesInvestment: false,
+        },
+      });
+      pushNotification({
+        type: "success",
+        message: "Investment benefit realized successfully",
+      });
+      setRealizeBenefitTarget(null);
+    } catch (error) {
+      pushNotification({
+        type: "error",
+        message: getRuntimeErrorMessage(
+          error,
+          "Failed to realize investment benefit",
+        ),
+      });
+    } finally {
+      setBenefitActionLoading(false);
+    }
   };
 
   const renderBenefitsTab = () => {
@@ -1748,11 +2572,15 @@ export function InvestmentViewDrawer({
     if (benefits.length === 0) {
       return (
         <Box sx={{ p: 3, textAlign: "center" }}>
-          <EmptyState 
-            text="No benefits recorded" 
+          <EmptyState
+            text="No benefits recorded"
             subText="Expected benefits like maturity, surrender, or death benefits will appear here when added."
             actionLabel={onRecordActivity ? "Add Benefit" : undefined}
-            onAction={onRecordActivity ? () => onRecordActivity(investment, null, "benefit") : undefined}
+            onAction={
+              onRecordActivity
+                ? () => onRecordActivity(investment, null, "benefit")
+                : undefined
+            }
           />
         </Box>
       );
@@ -1769,6 +2597,11 @@ export function InvestmentViewDrawer({
       statusLabel: formatCodeLabel(benefit.status),
       statusColor: getStatusChipColor(benefit.status),
       notes: benefit.notes,
+      destinationAccount: accounts.find(
+        (account) =>
+          String(account?.id) ===
+          String(benefit.destinationAccountId ?? investment?.accountId),
+      ),
       realizedEvents: benefit.realizedEvents || [],
       isExpected: benefit.status === "EXPECTED",
       isReceived: benefit.status === "RECEIVED",
@@ -1782,8 +2615,19 @@ export function InvestmentViewDrawer({
           helperText="Expected contractual payouts, interest, and other benefits"
           action={
             onRecordActivity ? (
-              <AppButton size="small" variant="outlined" onClick={() => onRecordActivity(investment, null, "benefit")}>
-                <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+              <AppButton
+                size="small"
+                variant="outlined"
+                onClick={() => onRecordActivity(investment, null, "benefit")}
+              >
+                <Box
+                  component="span"
+                  sx={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 0.75,
+                  }}
+                >
                   <Icon path={mdiPlus} size={0.8} />
                   Add Benefit
                 </Box>
@@ -1813,8 +2657,18 @@ export function InvestmentViewDrawer({
                     }}
                   >
                     <Box sx={{ flex: 1, minWidth: 200 }}>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1,
+                          mb: 0.5,
+                        }}
+                      >
+                        <Typography
+                          variant="subtitle2"
+                          sx={{ fontWeight: 700 }}
+                        >
                           {benefit.type}
                         </Typography>
                         <Chip
@@ -1824,9 +2678,23 @@ export function InvestmentViewDrawer({
                           variant="outlined"
                         />
                       </Box>
-                      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 1, mt: 1 }}>
+                      <Box
+                        sx={{
+                          display: "grid",
+                          gridTemplateColumns: {
+                            xs: "1fr",
+                            sm: "repeat(3, 1fr)",
+                          },
+                          gap: 1,
+                          mt: 1,
+                        }}
+                      >
                         <Box>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ fontWeight: 600 }}
+                          >
                             Amount
                           </Typography>
                           <Typography variant="body2" sx={{ fontWeight: 700 }}>
@@ -1834,30 +2702,99 @@ export function InvestmentViewDrawer({
                           </Typography>
                         </Box>
                         <Box>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ fontWeight: 600 }}
+                          >
                             Benefit Date
                           </Typography>
                           <Typography variant="body2" sx={{ fontWeight: 700 }}>
                             {benefit.benefitDate}
                           </Typography>
                         </Box>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ fontWeight: 600 }}
+                          >
+                            Destination Account
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: 700, overflowWrap: "anywhere" }}
+                          >
+                            {(() => {
+                              const account = benefit.destinationAccount;
+                              const accountName =
+                                account?.displayName ||
+                                account?.name ||
+                                (benefit.rawBenefit.destinationAccountId ==
+                                  null && investment?.accountId
+                                  ? `Account #${investment.accountId}`
+                                  : "Not configured");
+                              const accountNumber =
+                                account?.accountNumberMasked ||
+                                account?.accountNumber;
+                              const lastFour = accountNumber
+                                ? String(accountNumber)
+                                    .replace(/\D/g, "")
+                                    .slice(-4)
+                                : "";
+                              return lastFour && account
+                                ? `${accountName} · ••••${lastFour}`
+                                : accountName;
+                            })()}
+                          </Typography>
+                        </Box>
                       </Box>
                       {benefit.notes ? (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1, fontStyle: "italic" }}>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: "block", mt: 1, fontStyle: "italic" }}
+                        >
                           {benefit.notes}
                         </Typography>
                       ) : null}
                       {benefit.realizedEvents.length > 0 && (
-                        <Box sx={{ mt: 1.5, pt: 1.5, borderTop: "1px solid", borderColor: "divider" }}>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: "block", mb: 0.75 }}>
+                        <Box
+                          sx={{
+                            mt: 1.5,
+                            pt: 1.5,
+                            borderTop: "1px solid",
+                            borderColor: "divider",
+                          }}
+                        >
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ fontWeight: 600, display: "block", mb: 0.75 }}
+                          >
                             Realized Events:
                           </Typography>
                           <Stack spacing={0.5}>
                             {benefit.realizedEvents.map((event) => (
-                              <Box key={event.id} sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                                <Icon path={mdiCheckCircle} size={0.6} color="#2e7d32" />
+                              <Box
+                                key={event.id}
+                                sx={{
+                                  display: "flex",
+                                  gap: 1,
+                                  alignItems: "center",
+                                }}
+                              >
+                                <Icon
+                                  path={mdiCheckCircle}
+                                  size={0.6}
+                                  color="#2e7d32"
+                                />
                                 <Typography variant="caption" sx={{ flex: 1 }}>
-                                  <strong>{formatCodeLabel(event.eventType)}</strong> {formatInvestmentCurrency(event.amount)} on {formatInvestmentDate(event.eventDate)}
+                                  <strong>
+                                    {formatCodeLabel(event.eventType)}
+                                  </strong>{" "}
+                                  {formatInvestmentCurrency(event.amount)} on{" "}
+                                  {formatInvestmentDate(event.eventDate)}
                                 </Typography>
                               </Box>
                             ))}
@@ -1867,12 +2804,25 @@ export function InvestmentViewDrawer({
                     </Box>
 
                     {benefit.isExpected ? (
-                      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", minWidth: 140 }}>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          gap: 1,
+                          flexWrap: "wrap",
+                          minWidth: 140,
+                        }}
+                      >
                         {onEditActivity ? (
                           <AppButton
                             size="small"
                             variant="outlined"
-                            onClick={() => onEditActivity(investment, benefit.rawBenefit, "benefit")}
+                            onClick={() =>
+                              onEditActivity(
+                                investment,
+                                benefit.rawBenefit,
+                                "benefit",
+                              )
+                            }
                             sx={{ minWidth: 80 }}
                           >
                             <Icon path={mdiPencilOutline} size={0.8} />
@@ -1891,7 +2841,9 @@ export function InvestmentViewDrawer({
                         <AppButton
                           size="small"
                           variant="contained"
-                          onClick={() => handleRealizeBenefit(benefit)}
+                          onClick={() =>
+                            handleRealizeBenefit(benefit.rawBenefit)
+                          }
                           disabled={benefitActionLoading}
                           sx={{ minWidth: 100 }}
                         >
@@ -1899,10 +2851,17 @@ export function InvestmentViewDrawer({
                         </AppButton>
                       </Box>
                     ) : (
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 140 }}>
-                        <Icon 
-                          path={benefit.isCancelled ? mdiAlert : mdiCheckCircle} 
-                          size={0.9} 
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1,
+                          minWidth: 140,
+                        }}
+                      >
+                        <Icon
+                          path={benefit.isCancelled ? mdiAlert : mdiCheckCircle}
+                          size={0.9}
                           color={benefit.isCancelled ? "#ed6c02" : "#2e7d32"}
                         />
                         <Typography variant="caption" sx={{ fontWeight: 600 }}>
@@ -1914,7 +2873,9 @@ export function InvestmentViewDrawer({
                 ))}
               </Box>
             ) : (
-              <Alert severity="info">No benefits recorded for this investment.</Alert>
+              <Alert severity="info">
+                No benefits recorded for this investment.
+              </Alert>
             )}
           </Stack>
         </SectionBlock>
@@ -1926,7 +2887,11 @@ export function InvestmentViewDrawer({
     <Stack spacing={1.5} sx={{ pb: 0.5 }}>
       <SectionCard
         title={
-          <Typography component="span" variant="subtitle1" sx={{ fontWeight: 700 }}>
+          <Typography
+            component="span"
+            variant="subtitle1"
+            sx={{ fontWeight: 700 }}
+          >
             Additional Information
           </Typography>
         }
@@ -1945,14 +2910,36 @@ export function InvestmentViewDrawer({
         >
           {[
             { label: "Holding Mode", value: holdingMode },
-            { label: "Reference Number", value: formatValueOrDash(investment?.referenceNumber) },
-            { label: "Insurance Cover", value: formatValueOrDash(investment?.insuranceCover, formatInvestmentCurrency) },
-            { label: "Currency", value: formatValueOrDash(investment?.currency) },
+            {
+              label: "Reference Number",
+              value: formatValueOrDash(investment?.referenceNumber),
+            },
+            {
+              label: "Insurance Cover",
+              value: formatValueOrDash(
+                investment?.insuranceCover,
+                formatInvestmentCurrency,
+              ),
+            },
+            {
+              label: "Currency",
+              value: formatValueOrDash(investment?.currency),
+            },
             { label: "Contribution Mode", value: holdingMode },
             ...(isInsuranceSavings
-              ? [{ label: "Premium Pay Term End Date", value: formatDateOrDash(investment?.activeContributionPlan?.endDate) }]
+              ? [
+                  {
+                    label: "Premium Pay Term End Date",
+                    value: formatDateOrDash(
+                      investment?.activeContributionPlan?.endDate,
+                    ),
+                  },
+                ]
               : []),
-            { label: "External Reference", value: formatValueOrDash(investment?.externalReference) },
+            {
+              label: "External Reference",
+              value: formatValueOrDash(investment?.externalReference),
+            },
           ].map((item) => (
             <Box
               key={item.label}
@@ -1964,10 +2951,21 @@ export function InvestmentViewDrawer({
                 gap: 1.25,
               }}
             >
-              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, letterSpacing: 0.1 }}>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ fontWeight: 500, letterSpacing: 0.1 }}
+              >
                 {item.label}
               </Typography>
-              <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right", color: "text.primary" }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 700,
+                  textAlign: "right",
+                  color: "text.primary",
+                }}
+              >
                 {item.value}
               </Typography>
             </Box>
@@ -1977,12 +2975,23 @@ export function InvestmentViewDrawer({
 
       <SectionCard
         title={
-          <Typography component="span" variant="subtitle1" sx={{ fontWeight: 700 }}>
+          <Typography
+            component="span"
+            variant="subtitle1"
+            sx={{ fontWeight: 700 }}
+          >
             Notes
           </Typography>
         }
       >
-        <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.6, color: investment?.notes ? "text.primary" : "text.secondary" }}>
+        <Typography
+          variant="body2"
+          sx={{
+            fontWeight: 700,
+            lineHeight: 1.6,
+            color: investment?.notes ? "text.primary" : "text.secondary",
+          }}
+        >
           {investment?.notes || "No notes added."}
         </Typography>
       </SectionCard>
@@ -2002,28 +3011,101 @@ export function InvestmentViewDrawer({
     <AppDrawer
       open={open}
       onClose={onClose}
-      title={investment ? `Investment View — ${investment.name}` : "Investment View"}
-      titleExtra={investment ? <StatusChip label={investment.status} tone={getInvestmentStatusTone(investment.status)} /> : null}
+      title={
+        investment ? `Investment View — ${investment.name}` : "Investment View"
+      }
+      titleExtra={
+        investment ? (
+          <StatusChip
+            label={investment.status}
+            tone={getInvestmentStatusTone(investment.status)}
+          />
+        ) : null
+      }
       width="min(899px, 96vw)"
       footer={footer}
     >
       {!investment ? (
-        <EmptyState text="Investment not found" subText="This investment no longer exists or the list changed." actionLabel="Close" onAction={onClose} />
+        <EmptyState
+          text="Investment not found"
+          subText="This investment no longer exists or the list changed."
+          actionLabel="Close"
+          onAction={onClose}
+        />
       ) : (
-        <Box sx={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column" }}>
-          <Box sx={{ px: { xs: 0, sm: 0.5 }, pb: 1.25, borderBottom: "1px solid", borderColor: "divider" }}>
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1 }}>
+        <Box
+          sx={{
+            height: "100%",
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <Box
+            sx={{
+              px: { xs: 0, sm: 0.5 },
+              pb: 1.25,
+              borderBottom: "1px solid",
+              borderColor: "divider",
+            }}
+          >
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: "repeat(4, 1fr)",
+                gap: 1,
+              }}
+            >
               {[
-                { label: "Current Value", value: formatInvestmentCurrency(effectiveCurrentValue) },
-                { label: "Total Invested", value: formatInvestmentCurrency(effectiveTotalInvested) },
-                { label: "Profit / Loss", value: `${totalReturnValue >= 0 ? "+" : ""}${formatInvestmentCurrency(totalReturnValue)}`, color: totalReturnColor },
-                { label: "Return", value: effectiveTotalInvested > 0 ? `${totalReturnPercentage >= 0 ? "+" : ""}${totalReturnPercentage.toFixed(1)}%` : "—", color: totalReturnColor },
+                {
+                  label: "Current Value",
+                  value: formatInvestmentCurrency(effectiveCurrentValue),
+                },
+                {
+                  label: "Total Invested",
+                  value: formatInvestmentCurrency(effectiveTotalInvested),
+                },
+                {
+                  label: "Profit / Loss",
+                  value: `${totalReturnValue >= 0 ? "+" : ""}${formatInvestmentCurrency(totalReturnValue)}`,
+                  color: totalReturnColor,
+                },
+                {
+                  label: "Return",
+                  value:
+                    effectiveTotalInvested > 0
+                      ? `${totalReturnPercentage >= 0 ? "+" : ""}${totalReturnPercentage.toFixed(1)}%`
+                      : "—",
+                  color: totalReturnColor,
+                },
               ].map((metric) => (
-                <Box key={metric.label} sx={{ minWidth: 0, px: 1.5, py: 1, borderRadius: 0.5, border: "1px solid", borderColor: "divider", bgcolor: "action.hover" }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: "block", mb: 0.2 }}>
+                <Box
+                  key={metric.label}
+                  sx={{
+                    minWidth: 0,
+                    px: 1.5,
+                    py: 1,
+                    borderRadius: 0.5,
+                    border: "1px solid",
+                    borderColor: "divider",
+                    bgcolor: "action.hover",
+                  }}
+                >
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ fontWeight: 600, display: "block", mb: 0.2 }}
+                  >
                     {metric.label}
                   </Typography>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: metric.color || "text.primary", lineHeight: 1.3 }}>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      fontWeight: 700,
+                      color: metric.color || "text.primary",
+                      lineHeight: 1.3,
+                    }}
+                  >
                     {metric.value}
                   </Typography>
                 </Box>
@@ -2031,7 +3113,14 @@ export function InvestmentViewDrawer({
             </Box>
           </Box>
 
-          <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column"}}>
+          <Box
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
             <Tabs
               value={activeTab}
               onChange={(_event, value) => setActiveTab(value)}
@@ -2062,12 +3151,24 @@ export function InvestmentViewDrawer({
           </Box>
         </Box>
       )}
-     <RecordValuationModal open={recordValuationOpen} onClose={handleCloseSnapshotModal} investmentId={investment?.id} investmentName={investment?.name} snapshot={selectedSnapshot} totalInvested={investment?.totalInvested} currentValue={investment?.currentValue} />
+      <RecordValuationModal
+        open={recordValuationOpen}
+        onClose={handleCloseSnapshotModal}
+        investmentId={investment?.id}
+        investmentName={investment?.name}
+        snapshot={selectedSnapshot}
+        totalInvested={investment?.totalInvested}
+        currentValue={investment?.currentValue}
+      />
 
       <ConfirmDialog
         open={Boolean(deleteSnapshotTarget)}
         title="Delete valuation"
-        description={deleteSnapshotTarget ? `Remove the valuation from ${formatInvestmentDate(deleteSnapshotTarget.snapshotDate)}? The investment current value will be recalculated from the latest remaining valuation.` : ""}
+        description={
+          deleteSnapshotTarget
+            ? `Remove the valuation from ${formatInvestmentDate(deleteSnapshotTarget.snapshotDate)}? The investment current value will be recalculated from the latest remaining valuation.`
+            : ""
+        }
         confirmLabel="Delete"
         confirmColor="error"
         loading={snapshotActionLoading}
@@ -2078,7 +3179,11 @@ export function InvestmentViewDrawer({
       <ConfirmDialog
         open={Boolean(deleteEventTarget)}
         title="Delete activity"
-        description={deleteEventTarget ? `Remove the ${getContributionEventLabel(deleteEventTarget.eventType).toLowerCase()} from ${formatInvestmentDate(deleteEventTarget.eventDate)}? Invested principal and current value will be recalculated.` : ""}
+        description={
+          deleteEventTarget
+            ? `Remove the ${getContributionEventLabel(deleteEventTarget.eventType).toLowerCase()} from ${formatInvestmentDate(deleteEventTarget.eventDate)}? Invested principal and current value will be recalculated.`
+            : ""
+        }
         confirmLabel="Delete"
         confirmColor="error"
         loading={eventActionLoading}
@@ -2092,9 +3197,9 @@ export function InvestmentViewDrawer({
         description={
           pendingInvestmentStatus
             ? `Are you sure you want to change the investment status to "${formatCodeLabel(pendingInvestmentStatus)}"?${
-                ['matured', 'closed'].includes(pendingInvestmentStatus)
-                  ? ' Any active recurring contribution plan will be automatically paused.'
-                  : ''
+                ["matured", "closed"].includes(pendingInvestmentStatus)
+                  ? " Any active recurring contribution plan will be automatically paused."
+                  : ""
               }`
             : ""
         }
@@ -2123,12 +3228,30 @@ export function InvestmentViewDrawer({
       <ConfirmDialog
         open={Boolean(deleteBenefitTarget)}
         title="Delete benefit"
-        description={deleteBenefitTarget ? `Remove the ${formatCodeLabel(deleteBenefitTarget.benefitType)} benefit of ${deleteBenefitTarget.amount} expected on ${deleteBenefitTarget.benefitDate}?` : ""}
+        description={
+          deleteBenefitTarget
+            ? `Remove the ${formatCodeLabel(deleteBenefitTarget.benefitType)} benefit of ${deleteBenefitTarget.amount} expected on ${deleteBenefitTarget.benefitDate}?`
+            : ""
+        }
         confirmLabel="Delete"
         confirmColor="error"
         loading={benefitActionLoading}
         onCancel={() => setDeleteBenefitTarget(null)}
         onConfirm={handleDeleteBenefit}
+      />
+      <ConfirmDialog
+        open={Boolean(realizeBenefitTarget)}
+        title="Realize Investment Benefit"
+        description={
+          realizeBenefitTarget
+            ? `Record ${formatInvestmentCurrency(realizeBenefitTarget.amount)} as received into ${benefitDestinationLabel}.`
+            : ""
+        }
+        confirmLabel="Realize Benefit"
+        confirmColor="success"
+        loading={benefitActionLoading}
+        onCancel={() => setRealizeBenefitTarget(null)}
+        onConfirm={handleConfirmBenefitRealization}
       />
     </AppDrawer>
   );

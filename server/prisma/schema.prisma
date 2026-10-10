@@ -40,6 +40,7 @@ enum InvestmentEventType {
   INCOME_CREDIT
   WITHDRAWAL_PRINCIPAL
   PREMIUM
+  BENEFIT_RECEIPT
 }
 
 enum InvestmentContributionMode {
@@ -56,7 +57,6 @@ enum AccountingTreatment {
 
 enum InvestmentBenefitType {
   MATURITY
-  SURRENDER
   COUPON
   INTEREST
   PRINCIPAL_REDEMPTION
@@ -99,6 +99,7 @@ model User {
   investments        Investment[]
   investmentAssetTaxonomy InvestmentAssetTaxonomy[]
   valuationSnapshots ValuationSnapshot[]
+  lockerEntities     LockerEntity[]
 
   @@map("users")
 }
@@ -133,6 +134,35 @@ model Transaction {
   @@index([sourceAccountId])
   @@index([destinationAccountId])
   @@map("transactions")
+}
+
+model LockerEntity {
+  uid       String   @id @db.Uuid
+  userId    Int
+  label     String
+  fields    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  records LockerRecord[]
+
+  @@index([userId])
+  @@map("locker_entities")
+}
+
+model LockerRecord {
+  uid       String   @id @db.Uuid
+  entityUid String   @db.Uuid
+  label     String
+  values    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entity LockerEntity @relation(fields: [entityUid], references: [uid], onDelete: Cascade)
+
+  @@index([entityUid])
+  @@map("locker_records")
 }
 
 model Goal {
@@ -196,6 +226,7 @@ model FinancialAccount {
   sourceTransactions             Transaction[]     @relation("SourceAccountTransactions")
   destinationTransactions        Transaction[]     @relation("DestinationAccountTransactions")
   primaryInvestments             Investment[]      @relation("PrimaryInvestmentAccount")
+  benefitDestinationBenefits     InvestmentBenefit[] @relation("BenefitDestinationAccount")
 
   @@index([userId])
   @@map("financial_accounts")
@@ -231,8 +262,8 @@ model Investment {
   userId              Int
   accountId           Int?
   assetTaxonomyId     Int?
-  assetTypeMetaId     Int
-  assetCategoryMetaId Int
+  assetTypeMetaId     Int?
+  assetCategoryMetaId Int?
   name                String
   institutionName     String?
   referenceNumber     String?
@@ -255,8 +286,8 @@ model Investment {
   user               User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   primaryAccount     FinancialAccount?        @relation("PrimaryInvestmentAccount", fields: [accountId], references: [id], onDelete: SetNull)
   assetTaxonomy      InvestmentAssetTaxonomy? @relation(fields: [assetTaxonomyId], references: [id], onDelete: SetNull)
-  assetTypeRef       AppMetaConfigRef         @relation("InvestmentAssetTypeRef", fields: [assetTypeMetaId], references: [id], onDelete: Restrict)
-  assetCategoryRef   AppMetaConfigRef         @relation("InvestmentAssetCategoryRef", fields: [assetCategoryMetaId], references: [id], onDelete: Restrict)
+  assetTypeRef       AppMetaConfigRef?        @relation("InvestmentAssetTypeRef", fields: [assetTypeMetaId], references: [id], onDelete: Restrict)
+  assetCategoryRef   AppMetaConfigRef?        @relation("InvestmentAssetCategoryRef", fields: [assetCategoryMetaId], references: [id], onDelete: Restrict)
   investmentEvents   InvestmentEvent[]
   contributionPlans  InvestmentContributionPlan[]
   valuationSnapshots ValuationSnapshot[]
@@ -343,14 +374,17 @@ model InvestmentBenefit {
   amount       Decimal  @db.Decimal(18, 2)
   benefitDate  DateTime
   status       InvestmentBenefitStatus @default(EXPECTED)
+  destinationAccountId Int?
   notes        String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   investment   Investment       @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  destinationAccount FinancialAccount? @relation("BenefitDestinationAccount", fields: [destinationAccountId], references: [id], onDelete: SetNull)
   realizedEvents InvestmentEvent[]
 
   @@index([investmentId])
+  @@index([destinationAccountId])
   @@index([status])
   @@index([benefitDate])
   @@map("investment_benefits")

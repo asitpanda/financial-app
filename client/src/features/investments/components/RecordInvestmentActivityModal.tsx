@@ -98,6 +98,7 @@ export default function RecordInvestmentActivityModal({
   const [date, setDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [amount, setAmount] = useState('');
   const [benefitType, setBenefitType] = useState('MATURITY');
+  const [destinationAccountId, setDestinationAccountId] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
   const [action, setAction] = useState(null);
@@ -125,6 +126,14 @@ export default function RecordInvestmentActivityModal({
     (resolvedAccountId ? `Account ${resolvedAccountId}` : 'No linked account');
   const availableBalance = Number(linkedAccount?.currentBalance ?? 0);
   const hasLinkedAccount = Boolean(resolvedAccountId);
+  const destinationAccountOptions = accounts
+    .filter((account) => account?.isActive !== false)
+    .map((account) => ({
+      value: String(account.id),
+      label: [account.displayName || account.name, account.institutionName, account.accountNumberMasked]
+        .filter(Boolean)
+        .join(' · '),
+    }));
   const currentValue = Number(investment?.currentValue ?? investment?.totalInvested ?? 0);
   const totalInvested = Number(investment?.totalInvested ?? 0);
 
@@ -135,6 +144,11 @@ export default function RecordInvestmentActivityModal({
       setDate(editingBenefit?.benefitDate ? dayjs(editingBenefit.benefitDate).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'));
       setAmount(editingBenefit?.amount != null ? String(editingBenefit.amount) : '');
       setBenefitType(editingBenefit?.benefitType || 'MATURITY');
+      setDestinationAccountId(
+        editingBenefit?.destinationAccountId != null
+          ? String(editingBenefit.destinationAccountId)
+          : resolvedAccountId,
+      );
       setNotes(editingBenefit?.notes || '');
       setError('');
       setAction(null);
@@ -153,6 +167,7 @@ export default function RecordInvestmentActivityModal({
     setDate(dayjs().format('YYYY-MM-DD'));
     setAmount(contributionPlan?.amount && initialMode === 'contribution' ? String(contributionPlan.amount) : '');
     setBenefitType('MATURITY');
+    setDestinationAccountId(resolvedAccountId);
     setNotes('');
     setError('');
     setAction(null);
@@ -189,6 +204,9 @@ export default function RecordInvestmentActivityModal({
             amount: numericAmount,
             benefitDate: date,
             notes: notes || undefined,
+            destinationAccountId: destinationAccountId && destinationAccountId !== resolvedAccountId
+              ? Number(destinationAccountId)
+              : null,
           },
         });
       } else if (isEditing) {
@@ -225,6 +243,9 @@ export default function RecordInvestmentActivityModal({
             amount: numericAmount,
             benefitDate: date,
             notes: notes || undefined,
+            destinationAccountId: destinationAccountId && destinationAccountId !== resolvedAccountId
+              ? Number(destinationAccountId)
+              : null,
           },
         });
       } else {
@@ -359,6 +380,17 @@ export default function RecordInvestmentActivityModal({
               value={benefitType}
               onChange={(event) => setBenefitType(event.target.value)}
               options={INVESTMENT_BENEFIT_OPTIONS}
+            />
+          ) : null}
+
+          {mode === 'benefit' ? (
+            <LabeledSelectField
+              labelText="Benefit destination account"
+              value={destinationAccountId}
+              onChange={(event) => setDestinationAccountId(event.target.value)}
+              options={destinationAccountOptions}
+              errorMessage={!destinationAccountId ? 'No destination account available' : ''}
+              helperText={destinationAccountId === resolvedAccountId ? 'Defaults to the investment contribution account.' : 'Used when this benefit is realized.'}
             />
           ) : null}
 

@@ -278,6 +278,7 @@ export class InvestmentsService {
           benefitType: benefit.benefitType,
           amount: benefit.amount,
           benefitDate: new Date(benefit.benefitDate),
+          destinationAccountId: benefit.destinationAccountId ?? null,
           notes: benefit.notes,
         },
       });

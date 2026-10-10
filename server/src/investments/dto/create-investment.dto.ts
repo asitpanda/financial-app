@@ -15,6 +15,12 @@ export class CreateInvestmentExpectedBenefitDto {
   benefitDate: string;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  destinationAccountId?: number | null;
+
+  @IsOptional()
   @IsString()
   notes?: string;
 }

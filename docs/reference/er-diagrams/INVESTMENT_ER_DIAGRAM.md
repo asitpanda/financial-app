@@ -1,6 +1,6 @@
 # Database ER Diagram
 
-This document is generated from the canonical PostgreSQL schema in [server/prisma/sql/dump-my_react_app-202609201913.sql](../../server/prisma/sql/dump-my_react_app-202609201913.sql). The Prisma models in [server/prisma/schema.prisma](../../server/prisma/schema.prisma) provide application-side naming context.
+This document is generated from the canonical PostgreSQL schema in [server/prisma/sql/core_schema.sql](../../../server/prisma/sql/core_schema.sql). The Prisma models in [server/prisma/schema.prisma](../../../server/prisma/schema.prisma) provide application-side naming context.
 
 ## Complete ERD
 
@@ -13,6 +13,7 @@ erDiagram
     USERS ||--o{ INVESTMENTS : owns
     USERS ||--o{ INVESTMENT_ASSET_TAXONOMY : owns
     USERS ||--o{ VALUATION_SNAPSHOTS : owns
+    USERS ||--o{ LOCKER_ENTITIES : owns
 
     CATEGORIES ||--o{ TRANSACTIONS : classifies
     CATEGORIES ||--o{ GOALS : classifies
@@ -21,6 +22,9 @@ erDiagram
     FINANCIAL_ACCOUNTS o|--o{ TRANSACTIONS : source_account
     FINANCIAL_ACCOUNTS o|--o{ TRANSACTIONS : destination_account
     FINANCIAL_ACCOUNTS o|--o{ INVESTMENTS : primary_account
+    FINANCIAL_ACCOUNTS o|--o{ INVESTMENT_BENEFITS : destination_account
+
+    LOCKER_ENTITIES ||--o{ LOCKER_RECORDS : contains
 
     APP_META_CONFIG_REF o|--o{ APP_META_CONFIG_REF : parent_child
     APP_META_CONFIG_REF o|--o{ INVESTMENTS : asset_type
@@ -212,6 +216,7 @@ erDiagram
         numeric amount
         timestamptz benefitDate
         InvestmentBenefitStatus status
+        int destinationAccountId FK
         text notes
         timestamptz createdAt
         timestamptz updatedAt
@@ -228,15 +233,35 @@ erDiagram
         text source
         timestamptz createdAt
     }
+
+    LOCKER_ENTITIES {
+        uuid uid PK
+        int userId FK
+        text label
+        jsonb fields
+        timestamptz createdAt
+        timestamptz updatedAt
+    }
+
+    LOCKER_RECORDS {
+        uuid uid PK
+        uuid entityUid FK
+        text label
+        jsonb values
+        timestamptz createdAt
+        timestamptz updatedAt
+    }
 ```
 
-## Schema Notes
+## Schema notes
 
 - `o|` marks an optional child-side foreign key. Nullable foreign keys are `SET NULL` on deletion unless noted otherwise.
 - User-owned records are deleted with their user through `ON DELETE CASCADE`.
 - Category references on `transactions` and `goals`, and asset metadata references on `investments`, use `ON DELETE RESTRICT`.
 - `investment_events.linkedTransactionId` is nullable and unique, so a transaction can link to at most one investment event. The foreign key uses `ON DELETE SET NULL`.
 - `investment_events` can optionally link to a contribution plan and benefit. The recurring-event unique index prevents duplicate `(recurringPlanId, dueDate, eventType)` combinations.
+- `investment_benefits.destinationAccountId` optionally identifies the financial account receiving a benefit and uses `ON DELETE SET NULL`.
+- `locker_entities` belong to users and contain `locker_records`; deleting either the parent user or entity cascades to dependent records.
 - `app_meta_config_ref` and `investment_asset_taxonomy` are self-referencing trees. Their nullable parent references use `ON DELETE SET NULL`.
 - The `investments` trigger `validate_investment_meta_config_pair` requires active investment asset-type and asset-category config rows whose parent relationship matches.
 - The `investment_asset_taxonomy` trigger `validate_investment_taxonomy_defaults_meta` validates optional default metadata and requires a type when a category default is set.

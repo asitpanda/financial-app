@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InvestmentBenefitStatus } from '@prisma/client';
 import { InvestmentRepository } from '../investments/repositories/investment.repository';
+import { FinancialAccountsService } from '../financial-accounts/financial-accounts.service';
 import { CreateInvestmentBenefitDto } from './dto/create-investment-benefit.dto';
 import { UpdateInvestmentBenefitDto } from './dto/update-investment-benefit.dto';
 import { QuickRealizeInvestmentBenefitDto, RealizeInvestmentBenefitDto } from './dto/realize-investment-benefit.dto';
@@ -11,6 +12,7 @@ export class InvestmentBenefitsService {
   constructor(
     private readonly repository: BenefitRepository,
     private readonly investmentRepository: InvestmentRepository,
+    private readonly financialAccountsService: FinancialAccountsService,
   ) {}
 
   findAll(userId: number) {
@@ -25,6 +27,7 @@ export class InvestmentBenefitsService {
   async create(investmentId: string, data: CreateInvestmentBenefitDto, userId: number) {
     await this.assertOwnedInvestment(investmentId, userId);
     this.assertValidAmount(data.amount);
+    await this.assertDestinationAccount(data.destinationAccountId, userId);
     return this.repository.create(investmentId, data);
   }
 
@@ -50,6 +53,7 @@ export class InvestmentBenefitsService {
     const existing = await this.findOne(id, investmentId, userId);
     if (data.amount !== undefined) this.assertValidAmount(data.amount);
     this.assertStatusTransition(existing.status, data.status);
+    await this.assertDestinationAccount(data.destinationAccountId, userId);
     return this.repository.update(id, data);
   }
 
@@ -61,12 +65,14 @@ export class InvestmentBenefitsService {
   async realize(id: string, investmentId: string, data: RealizeInvestmentBenefitDto, userId: number) {
     const benefit = await this.findOne(id, investmentId, userId);
     this.assertRealizable(benefit.status, data.components, benefit.amount);
+    await this.assertRealizationDestinationAccounts(data, userId);
     return this.repository.realize(id, investmentId, userId, data);
   }
 
   async quickRealize(investmentId: string, data: QuickRealizeInvestmentBenefitDto, userId: number) {
     await this.assertOwnedInvestment(investmentId, userId);
     this.assertValidAmount(data.amount);
+    await this.assertRealizationDestinationAccounts(data, userId);
     return this.repository.quickRealize(investmentId, userId, data);
   }
 
@@ -74,6 +80,25 @@ export class InvestmentBenefitsService {
     const investment = await this.investmentRepository.findOne(Number(investmentId), userId);
     if (!investment) throw new NotFoundException(`Investment ${investmentId} not found`);
     return investment;
+  }
+
+  private async assertDestinationAccount(destinationAccountId: number | null | undefined, userId: number) {
+    if (destinationAccountId == null) return;
+    const account = await this.financialAccountsService.findOne(destinationAccountId, userId);
+    if (!account) throw new BadRequestException('Destination account was not found for the current user.');
+  }
+
+  private async assertRealizationDestinationAccounts(
+    data: RealizeInvestmentBenefitDto | QuickRealizeInvestmentBenefitDto,
+    userId: number,
+  ) {
+    const destinationAccountIds = 'components' in data
+      ? data.components.map((component) => component.transaction?.destinationAccountId)
+      : [data.transaction?.destinationAccountId];
+
+    for (const destinationAccountId of destinationAccountIds) {
+      await this.assertDestinationAccount(destinationAccountId, userId);
+    }
   }
 
   private assertValidAmount(amount: number) {

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import Icon from "@mdi/react";
 import {
   mdiPlus,
@@ -12,6 +11,7 @@ import {
 } from "@mui/material";
 import AppButton from "../components/common/AppButton";
 import type { Screen } from "../store/appStore";
+import { getScreenConfig } from "../routing/screenRegistry";
 import { useAuth } from "../features/auth/useAuth";
 import { useHeaderActionStore } from "../store/headerActionStore";
 import { useThemeStore } from "../store/themeStore";
@@ -20,20 +20,8 @@ interface HeaderProps {
   activeScreen: Screen;
 }
 
-const labelByScreen: Record<Screen, string> = {
-  dashboard: "Dashboard",
-  transactions: "Transactions",
-  accounts: "Accounts",
-  budgets: "Budgets",
-  goals: "Goals",
-  categories: "Categories",
-  investments: "Investments",
-  cards: "Cards",
-  reminders: "Reminders",
-  settings: "Settings",
-};
-
 export default function Header({ activeScreen }: HeaderProps) {
+  const screenConfig = getScreenConfig(activeScreen);
   const headerAction = useHeaderActionStore(
     (state) => state.actions[activeScreen],
   );
@@ -76,7 +64,7 @@ export default function Header({ activeScreen }: HeaderProps) {
             variant="caption"
             sx={{ display: "block", mt: 0.5, lineHeight: 1.2 }}
           >
-            You are on - {labelByScreen[activeScreen]}
+            You are on - {screenConfig.label}
           </Typography>
         </Box>
 

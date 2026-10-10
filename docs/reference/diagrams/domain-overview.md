@@ -36,7 +36,7 @@ InvestmentEvent           = product financial activity
 ContributionPlan          = expected recurring activity
 ValuationSnapshot         = observed value
 InvestmentBenefit         = contractual future entitlement
-Product Taxonomy          = what the product is
-AccountingTreatment       = how the product behaves financially
+Product Taxonomy          = product classification
+AccountingTreatment       = financial behavior policy
 Goal                      = financial objective
 ```

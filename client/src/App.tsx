@@ -1,36 +1,27 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { CircularProgress, Box } from "@mui/material";
-import Dashboard from "./features/dashboard/Dashboard";
-import Transactions from "./features/transactions/Transactions";
-import Goals from "./features/goals/Goals";
-import Categories from "./features/categories/Categories";
-import Investments from "./features/investments/Investments";
 import PrivateRoute from "./features/auth/components/PrivateRoute";
-import AppLayout from "./layout/AppLayout";
+import AppRouter from "./routing/AppRouter";
 import { authApi } from "./features/auth/auth.api";
 import { useAuth } from "./features/auth/useAuth";
-import { useAppStore } from "./store/appStore";
 import { navigateTo } from "./services/navigation";
 import { NotificationCenter } from "./components/common";
 import type { TransactionRecord } from "./features/transactions/transaction.types";
 import "./App.css";
+import type {
+  ScreenRenderContext,
+  TransactionsPrefillFilter,
+} from "./routing/screenRegistry";
 
-type TransactionsPrefillFilter = {
-  mode?: "monthly" | "yearly";
-  fiscalYearStart?: number;
-  month?: number;
-  periodLabel?: string;
-};
-
-type DashboardTransactionNavigationPayload = {
-  prefetchedTransactions: TransactionRecord[];
-  prefillFilter: TransactionsPrefillFilter | null;
-};
+type DashboardTransactionNavigationPayload = ScreenRenderContext["onOpenTransactionsFromDashboard"] extends (
+  payload: infer Payload,
+) => void
+  ? Payload
+  : never;
 
 export default function App() {
   const { token, user, isAuthenticated, loading, setLoading, setUser, logout } =
     useAuth();
-  const activeScreen = useAppStore((state) => state.activeScreen);
   const [transactionsPrefetch, setTransactionsPrefetch] = useState<TransactionRecord[]>([]);
   const [transactionsPrefillFilter, setTransactionsPrefillFilter] = useState<
     TransactionsPrefillFilter | null
@@ -86,30 +77,16 @@ export default function App() {
     navigateTo("transactions");
   };
 
-  let content: React.ReactNode = null;
-  if (activeScreen === "dashboard") {
-    content = (
-      <Dashboard
-        onOpenTransactionsFromDashboard={handleOpenTransactionsFromDashboard}
-      />
-    );
-  } else if (activeScreen === "transactions") {
-    content = (
-      <Transactions
-        prefetchedTransactions={transactionsPrefetch}
-        prefillFilter={transactionsPrefillFilter}
-      />
-    );
-  } else if (activeScreen === "goals") content = <Goals />;
-  else if (activeScreen === "categories") content = <Categories />;
-  else if (activeScreen === "investments") content = <Investments />;
-
   return (
     <PrivateRoute>
       <div id="root">
-        <AppLayout activeScreen={activeScreen} onNavigate={navigateTo}>
-          {content}
-        </AppLayout>
+        <AppRouter
+          context={{
+            transactionsPrefetch,
+            transactionsPrefillFilter,
+            onOpenTransactionsFromDashboard: handleOpenTransactionsFromDashboard,
+          }}
+        />
         <NotificationCenter />
       </div>
     </PrivateRoute>

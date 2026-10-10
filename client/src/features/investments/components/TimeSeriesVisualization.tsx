@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Box, Stack, Typography } from "@mui/material";
 import AppButton from "../../../components/common/AppButton";
 import type { InvestmentSeriesPoint } from "../investments.selectors";
@@ -20,6 +20,13 @@ interface TimeSeriesVisualizationProps {
   categoryLabelMap: Record<string, string>;
 }
 
+const getXAxisStep = (pointCount: number) => {
+  if (pointCount > 36) return 6;
+  if (pointCount > 24) return 4;
+  if (pointCount > 12) return 2;
+  return 1;
+};
+
 export default function TimeSeriesVisualization({
   data,
   onDrill,
@@ -29,6 +36,12 @@ export default function TimeSeriesVisualization({
   categoryLabelMap,
 }: TimeSeriesVisualizationProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    setHoveredIndex(null);
+    setSelectedIndex(data.length > 0 ? data.length - 1 : null);
+  }, [data.length, data[0]?.label, data[data.length - 1]?.label, isDrillMode]);
 
   if (data.length === 0) {
     return (
@@ -57,6 +70,13 @@ export default function TimeSeriesVisualization({
     return { x, yInvested, yReturn, ...item, idx };
   });
   const hoverBandWidth = Math.max(plotWidth / Math.max(data.length, 1), 36);
+  const xAxisStep = getXAxisStep(data.length);
+  const selectedPoint = selectedIndex === null ? null : data[selectedIndex];
+
+  const selectPoint = (index: number) => {
+    setSelectedIndex(index);
+    setHoveredIndex(index);
+  };
 
   const linePathInvested = points
     .map(
@@ -170,17 +190,25 @@ export default function TimeSeriesVisualization({
             />
             {gridLines}
             {yAxisLabels}
-            {points.map((point) => (
-              <text
-                key={`x-label-${point.idx}`}
-                x={point.x}
-                y={chartHeight - padding.bottom + 20}
-                textAnchor="middle"
-                style={{ fontSize: 11, fill: "#6b7280" }}
-              >
-                {point.label}
-              </text>
-            ))}
+            {points.map((point) => {
+              const showLabel =
+                point.idx === 0 ||
+                point.idx === points.length - 1 ||
+                point.idx % xAxisStep === 0 ||
+                point.idx === selectedIndex;
+
+              return showLabel ? (
+                <text
+                  key={`x-label-${point.idx}`}
+                  x={point.x}
+                  y={chartHeight - padding.bottom + 20}
+                  textAnchor="middle"
+                  style={{ fontSize: 11, fill: "#6b7280" }}
+                >
+                  {point.label}
+                </text>
+              ) : null;
+            })}
             <path
               d={linePathInvested}
               fill="none"
@@ -219,6 +247,8 @@ export default function TimeSeriesVisualization({
                   chartWidth - padding.right - hoverBandWidth,
                 ),
               );
+              const pointIsActive =
+                hoveredIndex === point.idx || selectedIndex === point.idx;
 
               return (
                 <g
@@ -236,30 +266,39 @@ export default function TimeSeriesVisualization({
                     width={hoverBandWidth}
                     height={plotHeight}
                     fill="transparent"
-                    onClick={() => !isDrillMode && onDrill(point.label)}
-                    style={{ cursor: !isDrillMode ? "pointer" : "default" }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Select ${point.label}`}
+                    onClick={() => selectPoint(point.idx)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        selectPoint(point.idx);
+                      }
+                    }}
+                    style={{ cursor: "pointer" }}
                   />
                   <circle
                     cx={point.x}
                     cy={point.yInvested}
-                    r={hoveredIndex === point.idx ? 6 : 4}
+                    r={pointIsActive ? 6 : 4}
                     fill={INVESTMENT_CHART_SERIES_COLORS.investedAltHex}
-                    opacity={hoveredIndex === point.idx ? 1 : 0.8}
-                    onClick={() => !isDrillMode && onDrill(point.label)}
+                    opacity={pointIsActive ? 1 : 0.8}
+                    onClick={() => selectPoint(point.idx)}
                     style={{
-                      cursor: !isDrillMode ? "pointer" : "default",
+                      cursor: "pointer",
                       transition: "all 0.15s",
                     }}
                   />
                   <circle
                     cx={point.x}
                     cy={point.yReturn}
-                    r={hoveredIndex === point.idx ? 6 : 4}
+                    r={pointIsActive ? 6 : 4}
                     fill={PROFIT_LOSS_COLORS.gainHex}
-                    opacity={hoveredIndex === point.idx ? 1 : 0.8}
-                    onClick={() => !isDrillMode && onDrill(point.label)}
+                    opacity={pointIsActive ? 1 : 0.8}
+                    onClick={() => selectPoint(point.idx)}
                     style={{
-                      cursor: !isDrillMode ? "pointer" : "default",
+                      cursor: "pointer",
                       transition: "all 0.15s",
                     }}
                   />
@@ -334,7 +373,7 @@ export default function TimeSeriesVisualization({
         </Box>
 
         <Box sx={{ width: "100%", minWidth: 0 }}>
-          {hoveredIndex !== null && data[hoveredIndex] ? (
+          {selectedPoint ? (
             <Box
               sx={{
                 p: 1.5,
@@ -347,8 +386,18 @@ export default function TimeSeriesVisualization({
                 overflowY: "auto",
               }}
             >
+              {!isDrillMode && (
+                <AppButton
+                  size="small"
+                  variant="text"
+                  onClick={() => onDrill(selectedPoint.label)}
+                  sx={{ mb: 1 }}
+                >
+                  View monthly breakdown
+                </AppButton>
+              )}
               <Typography variant="body2" sx={{ fontWeight: 700, mb: 1.5 }}>
-                {data[hoveredIndex].label}
+                {selectedPoint.label}
               </Typography>
 
               <Typography
@@ -371,7 +420,7 @@ export default function TimeSeriesVisualization({
                   borderColor: "divider",
                 }}
               >
-                {Object.entries(data[hoveredIndex].investedBreakdown)
+                {Object.entries(selectedPoint.investedBreakdown)
                   .filter(([, value]) => value > 0)
                   .sort(([, a], [, b]) => b - a)
                   .map(([category, value]) => (
@@ -419,12 +468,12 @@ export default function TimeSeriesVisualization({
                 Return
               </Typography>
               <Stack spacing={0.75}>
-                {Object.entries(data[hoveredIndex].returnBreakdown)
+                {Object.entries(selectedPoint.returnBreakdown)
                   .filter(([, value]) => value !== 0)
                   .sort(([, a], [, b]) => b - a)
                   .map(([category, value]) => {
                     const investedAmount =
-                      data[hoveredIndex].investedBreakdown[category] || 0;
+                      selectedPoint.investedBreakdown[category] || 0;
                     const returnPct =
                       investedAmount > 0
                         ? ((value / investedAmount) * 100).toFixed(1)
@@ -485,7 +534,7 @@ export default function TimeSeriesVisualization({
               }}
             >
               <Typography variant="caption" color="text.secondary">
-                Hover over a data point to see the breakdown
+                Select a data point to see its breakdown
               </Typography>
             </Box>
           )}
@@ -527,7 +576,7 @@ export default function TimeSeriesVisualization({
           color="text.secondary"
           sx={{ textAlign: "center" }}
         >
-          Hover to see category breakdown • Click a point to see monthly detail
+          Select a period to see its category breakdown • Use the monthly breakdown action for detail
         </Typography>
       )}
     </Stack>

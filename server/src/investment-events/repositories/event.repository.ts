@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import type { InvestmentEventRecord } from '../investment-event.types';
 import type { CreateInvestmentEventDto } from '../dto/create-investment-event.dto';
 import type { UpdateInvestmentEventDto } from '../dto/update-investment-event.dto';
@@ -11,8 +12,8 @@ export class EventRepository {
     private readonly dataSource: IEventDataSourcePort,
   ) {}
 
-  async create(data: CreateInvestmentEventDto): Promise<InvestmentEventRecord> {
-    return this.dataSource.create(data);
+  async create(data: CreateInvestmentEventDto, transaction?: Prisma.TransactionClient): Promise<InvestmentEventRecord> {
+    return this.dataSource.create(data, transaction);
   }
 
   async findAll(userId: number): Promise<InvestmentEventRecord[]> {

@@ -27,5 +27,6 @@ yarn-error.log*
 Thumbs.db
 
 # Testing
-coverage
+coverage/
+.vitest/
 .nyc_output

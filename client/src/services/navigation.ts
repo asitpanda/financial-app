@@ -8,12 +8,12 @@ import {
 } from '../store/drawerStore';
 import { useDialogStore, type DialogType } from '../store/dialogStore';
 
-export const navigateTo = (screen: Screen) => {
+export const navigateTo = (screen: Screen, search = '') => {
   useAppStore.getState().navigateTo(screen);
 
   if (typeof window !== "undefined") {
-    const path = getScreenConfig(screen).path;
-    if (window.location.pathname !== path) {
+    const path = `${getScreenConfig(screen).path}${search}`;
+    if (`${window.location.pathname}${window.location.search}` !== path) {
       window.history.pushState({}, "", path);
       window.dispatchEvent(new PopStateEvent("popstate"));
     }

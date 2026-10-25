@@ -1,4 +1,5 @@
 import type { InvestmentContributionPlanRecord } from '../investment-contribution-plan.types';
+import type { Prisma } from '@prisma/client';
 import type {
   ContributionPlanUpdateInput,
   ContributionPlanWriteInput,
@@ -14,12 +15,13 @@ export interface IContributionPlanDataSourcePort {
   findAllByInvestmentIds(investmentIds: number[]): Promise<InvestmentContributionPlanRecord[]>;
   findAllByUser(userId: number): Promise<InvestmentContributionPlanRecord[]>;
   findAllActiveByUser(userId: number): Promise<InvestmentContributionPlanRecord[]>;
-  findOne(id: string): Promise<InvestmentContributionPlanRecord | null>;
-  update(id: string, data: ContributionPlanUpdateInput): Promise<InvestmentContributionPlanRecord | null>;
+  findOne(id: string, transaction?: Prisma.TransactionClient): Promise<InvestmentContributionPlanRecord | null>;
+  update(id: string, data: ContributionPlanUpdateInput, transaction?: Prisma.TransactionClient): Promise<InvestmentContributionPlanRecord | null>;
   delete(id: string): Promise<void>;
   findActiveByInvestment(investmentId: string): Promise<InvestmentContributionPlanRecord | null>;
   createPlanWithHistoricalEvents(
     data: CreatePlanWithHistoricalEventsInput,
+    transaction?: Prisma.TransactionClient,
   ): Promise<CreatePlanWithHistoricalEventsResult>;
   skipCurrentContribution(
     data: SkipCurrentContributionInput,

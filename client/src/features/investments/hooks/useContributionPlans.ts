@@ -20,9 +20,7 @@ const invalidateInvestmentContributionQueries = (
   queryClient.invalidateQueries({ queryKey: ['investments', 'dashboard'] });
   queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   queryClient.invalidateQueries({ queryKey: ['investment-events'] });
-  queryClient.invalidateQueries({ queryKey: ['investment-events', investmentId] });
-  queryClient.invalidateQueries({ queryKey: ['investment', investmentId] });
-  queryClient.invalidateQueries({ queryKey: ['investment', investmentId, 'performance'] });
+  queryClient.invalidateQueries({ queryKey: ['investment', Number(investmentId)] });
 };
 
 export const useUpdateInvestmentContributionPlan = () => {
@@ -42,7 +40,7 @@ export const useUpdateInvestmentContributionPlan = () => {
       queryClient.invalidateQueries({ queryKey: ['investments'] });
       queryClient.invalidateQueries({ queryKey: ['investments', 'dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['investment', variables.investmentId] });
+      queryClient.invalidateQueries({ queryKey: ['investment', Number(variables.investmentId)] });
     },
   });
 };
@@ -55,6 +53,7 @@ export const useRecordInvestmentContribution = () => {
       recordInvestmentContribution(payload),
     onSuccess: (_result, variables) => {
       invalidateInvestmentContributionQueries(queryClient, variables.investmentId);
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
     },
   });
 };
@@ -67,6 +66,7 @@ export const useRecordInvestmentWithdrawal = () => {
       recordInvestmentWithdrawal(payload),
     onSuccess: (_result, variables) => {
       invalidateInvestmentContributionQueries(queryClient, variables.investmentId);
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
     },
   });
 };

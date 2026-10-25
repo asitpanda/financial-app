@@ -7,23 +7,15 @@ import AddTransactionModal from "../transactions/components/TransactionsAddEditD
 import GoalFormDrawer from "../goals/components/GoalFormDrawer";
 import CategoryFormDrawer from "../categories/components/CategoriesFormDrawer";
 import FinancialAccountFormDrawer from "../accounts/components/FinancialAccountFormDrawer";
+import InvestmentSaveDrawer from "../investments/components/InvestmentSaveDrawer";
 import { getFinancialAccounts } from "../accounts/financialAccounts.api";
 
 import { saveTransaction } from "../transactions/transactions.service";
-import { useCreateGoal, useUpdateGoal } from "../goals/useGoals";
+import { useSaveGoal } from "../goals/useGoals";
 import { createCategory } from "../categories/categories.api";
-import {
-  createInvestment,
-  getInvestments,
-} from "../investments/api/investments.api";
-import { useInvestmentMetadata } from "../investments/hooks/useInvestments";
-import {
-  buildInvestmentFromForm,
-  getInvestmentCategoryOptions,
-} from "../../utils/investmentHelpers";
+import { getInvestmentCategoryOptions } from "../../utils/investmentHelpers";
 import { getRuntimeErrorMessage } from "../../utils/errorMessage";
 import { navigateTo } from "../../services/navigation";
-import InvestmentFormDrawer from "../investments/components/InvestmentFormDrawer";
 import {
   DASHBOARD_ALL_TIME_BOUNDS,
   getDashboardAccountOverviewRows,
@@ -45,7 +37,6 @@ import DashboardQuickActionsSection from "./components/DashboardQuickActionsSect
 import DashboardRecentTransactionsSection from "./components/DashboardRecentTransactionsSection";
 import DashboardTopCategoriesSection from "./components/DashboardTopCategoriesSection";
 
-const getGoalId = (goal) => goal?._id || goal?.id;
 const getTransactionType = (item) =>
   String(item?.type || "").toUpperCase();
 const summarizeTransactions = (items) => {
@@ -73,28 +64,18 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
     loading,
     error: dashboardQueryError,
   } = useDashboard();
-  const metadataQuery = useInvestmentMetadata();
   const [error, setError] = useState("");
   const [showAddTx, setShowAddTx] = useState(false);
   const [showGoalDrawer, setShowGoalDrawer] = useState(false);
   const [editGoal, setEditGoal] = useState(null);
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [showAccountDrawer, setShowAccountDrawer] = useState(false);
+  const [showInvestmentDrawer, setShowInvestmentDrawer] = useState(false);
   const [editAccount, setEditAccount] = useState(null);
-  const [showInvestments, setShowInvestments] = useState(false);
   const pushNotification = useNotificationStore(
     (state) => state.pushNotification,
   );
-  const createGoalMutation = useCreateGoal();
-  const updateGoalMutation = useUpdateGoal();
-
-  const assetTypeConfigs = useMemo(
-    () =>
-      Array.isArray(metadataQuery.data?.asset_configs)
-        ? metadataQuery.data.asset_configs
-        : [],
-    [metadataQuery.data],
-  );
+  const saveGoalMutation = useSaveGoal();
 
   useEffect(() => {
     if (!dashboardData) return;
@@ -232,13 +213,13 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
   const handleSubmitGoal = async (payload) => {
     try {
       if (editGoal) {
-        await updateGoalMutation.mutateAsync({ id: getGoalId(editGoal), data: payload });
+        await saveGoalMutation.mutateAsync({ payload, selectedGoal: editGoal });
         pushNotification({
           type: "success",
           message: "Goal updated successfully",
         });
       } else {
-        await createGoalMutation.mutateAsync(payload);
+        await saveGoalMutation.mutateAsync({ payload });
         pushNotification({
           type: "success",
           message: "Goal added successfully",
@@ -277,34 +258,6 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
       return null;
     } catch (error) {
       return getRuntimeErrorMessage(error, "Failed to create category");
-    }
-  };
-
-  const handleInvestmentsUpdated = async () => {
-    const nextInvestments = await getInvestments();
-    setInvestments(Array.isArray(nextInvestments?.data) ? nextInvestments.data : []);
-    // Bypasses the investments mutation hooks, so the Investments screen's cache needs a manual refresh
-    queryClient.invalidateQueries({ queryKey: ["investments"] });
-  };
-
-  const handleSaveInvestment = async (formValues) => {
-    try {
-      const nextInvestment = buildInvestmentFromForm(
-        formValues,
-        null,
-        taxonomyNodes,
-      );
-      await createInvestment(nextInvestment);
-      await handleInvestmentsUpdated();
-      setShowInvestments(false);
-      setError("");
-      pushNotification({
-        type: "success",
-        message: "Investment added successfully",
-      });
-      return null;
-    } catch (error) {
-      return getRuntimeErrorMessage(error, "Failed to add investment");
     }
   };
 
@@ -383,7 +336,7 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
       return;
     }
 
-    setShowInvestments(true);
+    setShowInvestmentDrawer(true);
   };
 
   const hasOverlayOpen =
@@ -391,7 +344,7 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
     showGoalDrawer ||
     showAddCategory ||
     showAccountDrawer ||
-    showInvestments;
+    showInvestmentDrawer;
 
   if (loading) return <div className="p-6">Loading...</div>;
 
@@ -474,6 +427,13 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
         goals={goals}
       />
 
+      {showInvestmentDrawer ? (
+        <InvestmentSaveDrawer
+          onClose={() => setShowInvestmentDrawer(false)}
+          onSaved={() => setError("")}
+        />
+      ) : null}
+
       <GoalFormDrawer
         open={showGoalDrawer}
         onClose={() => {
@@ -491,18 +451,6 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
         onClose={() => setShowAddCategory(false)}
         onSubmit={handleCreateCategory}
         title="Add Category"
-        submitLabel="Add"
-      />
-
-      <InvestmentFormDrawer
-        open={showInvestments}
-        onClose={() => setShowInvestments(false)}
-        onSubmit={handleSaveInvestment}
-        initialValues={null}
-        accounts={accounts}
-        assetTypeConfigs={assetTypeConfigs}
-        taxonomyNodes={taxonomyNodes}
-        title="Add Investment"
         submitLabel="Add"
       />
 

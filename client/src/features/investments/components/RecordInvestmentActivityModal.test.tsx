@@ -106,4 +106,14 @@ describe('RecordInvestmentActivityModal', () => {
     });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('prevents recording a contribution that exceeds the linked account balance', () => {
+    renderModal({
+      accounts: [{ ...accounts[0], currentBalance: 100 }],
+    });
+
+    expect(screen.getByText(/Insufficient balance in Primary Account/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Record Contribution' })).toBeDisabled();
+    expect(mocks.recordContribution).not.toHaveBeenCalled();
+  });
 });

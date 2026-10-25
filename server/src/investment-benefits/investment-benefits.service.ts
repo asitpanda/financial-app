@@ -66,21 +66,23 @@ export class InvestmentBenefitsService {
 
   async realize(id: string, investmentId: string, data: RealizeInvestmentBenefitDto, userId: number) {
     const benefit = await this.findOne(id, investmentId, userId);
-    await this.assertOpenInvestment(investmentId, userId);
+    const investment = await this.assertOpenInvestment(investmentId, userId);
     if (data.benefitAmount !== undefined) this.assertValidAmount(data.benefitAmount);
     this.assertRealizable(
       benefit.status,
       data.components,
       data.benefitAmount ?? benefit.amount,
     );
-    await this.assertRealizationDestinationAccounts(data, userId);
+    await this.assertRealizationDestinationAccounts(data, userId, investment.currency);
+    await this.assertDestinationAccount(investment.accountId, userId, investment.currency);
     return this.repository.realize(id, investmentId, userId, data);
   }
 
   async quickRealize(investmentId: string, data: QuickRealizeInvestmentBenefitDto, userId: number) {
-    await this.assertOpenInvestment(investmentId, userId);
+    const investment = await this.assertOpenInvestment(investmentId, userId);
     this.assertValidAmount(data.amount);
-    await this.assertRealizationDestinationAccounts(data, userId);
+    await this.assertRealizationDestinationAccounts(data, userId, investment.currency);
+    await this.assertDestinationAccount(investment.accountId, userId, investment.currency);
     return this.repository.quickRealize(investmentId, userId, data);
   }
 
@@ -98,25 +100,29 @@ export class InvestmentBenefitsService {
     return investment;
   }
 
-  private async assertDestinationAccount(destinationAccountId: number | null | undefined, userId: number) {
+  private async assertDestinationAccount(destinationAccountId: number | null | undefined, userId: number, currency?: string) {
     if (destinationAccountId == null) return;
     const account = await this.financialAccountsService.findOne(destinationAccountId, userId);
     if (!account) throw new BadRequestException('Destination account was not found for the current user.');
+    if (currency && account.currency.toUpperCase() !== currency.toUpperCase()) {
+      throw new BadRequestException('Benefit cash accounts must use the investment currency.');
+    }
   }
 
   private async assertRealizationDestinationAccounts(
     data: RealizeInvestmentBenefitDto | QuickRealizeInvestmentBenefitDto,
     userId: number,
+    currency: string,
   ) {
     const destinationAccountIds = [
       ...('components' in data
-        ? data.components.map((component) => component.transaction?.destinationAccountId)
-        : [data.transaction?.destinationAccountId]),
+        ? data.components.flatMap((component) => [component.transaction?.sourceAccountId, component.transaction?.destinationAccountId])
+        : [data.transaction?.sourceAccountId, data.transaction?.destinationAccountId]),
       ...('destinationAccountId' in data ? [data.destinationAccountId] : []),
     ];
 
     for (const destinationAccountId of destinationAccountIds) {
-      await this.assertDestinationAccount(destinationAccountId, userId);
+      await this.assertDestinationAccount(destinationAccountId, userId, currency);
     }
   }
 

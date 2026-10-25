@@ -70,6 +70,8 @@ import {
 } from "../../../colors";
 import { getCadenceLabel } from "../../../utils/investmentHelpers";
 
+const formatCurrencyAmount = formatInvestmentCurrency;
+
 const DRAWER_TABS = [
   "overview",
   "contribution",
@@ -573,7 +575,15 @@ export function InvestmentViewDrawer({
   onEdit,
   onRecordActivity,
   onEditActivity,
+  eventsLoading = false,
+  eventsError = null,
+  snapshotsLoading = false,
+  snapshotsError = null,
+  performanceLoading = false,
+  performanceError = null,
+  onRetryHistory,
 }) {
+  const formatInvestmentCurrency = (value) => formatCurrencyAmount(value, investment?.currency || 'INR');
   const theme = useTheme();
   const [activeTab, setActiveTab] = React.useState("overview");
   const [contributionFilter, setContributionFilter] = React.useState("all");
@@ -2556,6 +2566,9 @@ export function InvestmentViewDrawer({
     const benefits = benefitsQuery.data || [];
     const isLoading = benefitsQuery.isLoading;
 
+    if (benefitsQuery.error) {
+      return <Alert severity="error" action={<AppButton size="small" onClick={() => benefitsQuery.refetch()}>Retry</AppButton>}>Failed to load investment benefits.</Alert>;
+    }
     if (isLoading) {
       return <EmptyState text="Loading benefits..." />;
     }
@@ -2995,6 +3008,14 @@ export function InvestmentViewDrawer({
 
   const renderActiveTab = () => {
     if (!investment) return null;
+    const needsEvents = activeTab === 'overview' || activeTab === 'contribution';
+    const needsValuation = activeTab === 'overview' || activeTab === 'valuation';
+    if ((needsEvents && eventsError) || (needsValuation && (snapshotsError || performanceError))) {
+      return <Alert severity="error" action={<AppButton size="small" onClick={onRetryHistory}>Retry</AppButton>}>Failed to load investment history.</Alert>;
+    }
+    if ((needsEvents && eventsLoading) || (needsValuation && (snapshotsLoading || performanceLoading))) {
+      return <Typography color="text.secondary">Loading investment history...</Typography>;
+    }
     if (activeTab === "overview") return renderOverviewTab();
     if (activeTab === "contribution") return renderContributionTab();
     if (activeTab === "valuation") return renderValuationTab();

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InvestmentEventStatus, InvestmentEventType } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { EventRepository } from './repositories/event.repository';
 import { CreateInvestmentEventDto } from './dto/create-investment-event.dto';
 import { UpdateInvestmentEventDto } from './dto/update-investment-event.dto';
@@ -12,14 +13,17 @@ export class InvestmentEventsService {
     private readonly investmentRepository: InvestmentRepository,
   ) {}
 
-  async create(createInvestmentEventDto: CreateInvestmentEventDto, userId?: number) {
+  async create(createInvestmentEventDto: CreateInvestmentEventDto, userId?: number, transaction?: Prisma.TransactionClient) {
+    if (userId !== undefined && !transaction && (createInvestmentEventDto.linkedTransactionId != null || createInvestmentEventDto.linkedBenefitId != null)) {
+      throw new BadRequestException('Linked investment activity must be recorded through its financial command.');
+    }
     if (userId !== undefined) {
       await this.assertOpenInvestment(createInvestmentEventDto.investmentId, userId);
     }
 
     this.assertIncomeCreditIsInvestmentOnly(createInvestmentEventDto);
 
-    return this.repository.create(createInvestmentEventDto);
+    return this.repository.create(createInvestmentEventDto, transaction);
   }
 
   async findAll(userId: number) {
@@ -49,6 +53,12 @@ export class InvestmentEventsService {
     const existingEvent = await this.findOne(id, userId);
     if (!existingEvent) return null;
 
+    if (existingEvent.linkedTransactionId != null || updateInvestmentEventDto.linkedTransactionId != null || existingEvent.linkedBenefitId != null || updateInvestmentEventDto.linkedBenefitId != null) {
+      throw new BadRequestException(
+        'Investment events linked to transactions cannot be edited independently.',
+      );
+    }
+
     if (userId !== undefined) {
       await this.assertOpenInvestment(existingEvent.investmentId, userId);
       if (updateInvestmentEventDto.investmentId !== undefined) {
@@ -67,9 +77,16 @@ export class InvestmentEventsService {
   }
 
   async remove(id: string, userId?: number) {
+    const existingEvent = await this.findOne(id, userId);
+    if (!existingEvent) return;
+
+    if (existingEvent.linkedTransactionId != null || existingEvent.linkedBenefitId != null) {
+      throw new BadRequestException(
+        'Investment events linked to transactions cannot be deleted independently.',
+      );
+    }
+
     if (userId !== undefined) {
-      const existingEvent = await this.findOne(id, userId);
-      if (!existingEvent) return;
       await this.assertOpenInvestment(existingEvent.investmentId, userId);
     }
 

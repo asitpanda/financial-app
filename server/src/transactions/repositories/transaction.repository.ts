@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import type { TransactionRecord } from '../transaction.types';
 import type { CreateTransactionDto } from '../dto/create-transaction.dto';
 import type { UpdateTransactionDto } from '../dto/update-transaction.dto';
@@ -19,8 +20,8 @@ export class TransactionRepository {
     return this.dataSource.findOne(id, userId);
   }
 
-  async create(data: CreateTransactionDto, userId: number): Promise<TransactionRecord> {
-    return this.dataSource.create(data, userId);
+  async create(data: CreateTransactionDto, userId: number, transaction?: Prisma.TransactionClient): Promise<TransactionRecord> {
+    return this.dataSource.create(data, userId, transaction);
   }
 
   async update(id: number, data: UpdateTransactionDto, userId: number): Promise<TransactionRecord | null> {

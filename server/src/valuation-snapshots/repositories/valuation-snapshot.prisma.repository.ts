@@ -5,6 +5,7 @@ import { CreateValuationSnapshotDto } from '../dto/create-valuation-snapshot.dto
 import { UpdateValuationSnapshotDto } from '../dto/update-valuation-snapshot.dto';
 import { IValuationSnapshotDataSourcePort } from './valuation-snapshot.datasource.port';
 import { parseRequiredDateInput } from '../../common/utils/date-input';
+import { syncInvestmentDerivedValues } from '../../investments/repositories/investment-valuation';
 
 const normalizeNullableNumber = (value?: string | number | null) =>
   value === undefined || value === null || value === '' ? null : Number(value);
@@ -23,16 +24,20 @@ export class ValuationSnapshotPrismaRepository
   }
 
   async create(data: CreateValuationSnapshotDto): Promise<ValuationSnapshotRecord> {
-    return this.prisma.valuationSnapshot.create({
-      data: {
-        ...data,
-        userId: Number(data.userId),
-        investmentId: Number(data.investmentId),
-        snapshotDate: parseRequiredDateInput(data.snapshotDate, 'snapshotDate'),
-        units: normalizeNullableNumber(data.units),
-        price: normalizeNullableNumber(data.price),
-      },
-    });
+    return this.prisma.$transaction(async (transaction) => {
+      const snapshot = await transaction.valuationSnapshot.create({
+        data: {
+          ...data,
+          userId: Number(data.userId),
+          investmentId: Number(data.investmentId),
+          snapshotDate: parseRequiredDateInput(data.snapshotDate, 'snapshotDate'),
+          units: normalizeNullableNumber(data.units),
+          price: normalizeNullableNumber(data.price),
+        },
+      });
+      await syncInvestmentDerivedValues(transaction, snapshot.investmentId, false);
+      return snapshot;
+    }, { isolationLevel: 'Serializable' });
   }
 
   async findAllByInvestment(investmentId: string): Promise<ValuationSnapshotRecord[]> {
@@ -49,22 +54,33 @@ export class ValuationSnapshotPrismaRepository
   }
 
   async update(id: string, data: UpdateValuationSnapshotDto): Promise<ValuationSnapshotRecord | null> {
-    return this.prisma.valuationSnapshot.update({
-      where: { id: Number(id) },
-      data: {
-        ...data,
-        userId: data.userId !== undefined ? Number(data.userId) : undefined,
-        investmentId: data.investmentId !== undefined ? Number(data.investmentId) : undefined,
-        snapshotDate: data.snapshotDate !== undefined ? parseRequiredDateInput(data.snapshotDate, 'snapshotDate') : undefined,
-        units: data.units !== undefined ? normalizeNullableNumber(data.units) : undefined,
-        price: data.price !== undefined ? normalizeNullableNumber(data.price) : undefined,
-      },
-    });
+    return this.prisma.$transaction(async (transaction) => {
+      const existing = await transaction.valuationSnapshot.findUnique({ where: { id: Number(id) } });
+      if (!existing) return null;
+      const snapshot = await transaction.valuationSnapshot.update({
+        where: { id: Number(id) },
+        data: {
+          ...data,
+          userId: data.userId !== undefined ? Number(data.userId) : undefined,
+          investmentId: data.investmentId !== undefined ? Number(data.investmentId) : undefined,
+          snapshotDate: data.snapshotDate !== undefined ? parseRequiredDateInput(data.snapshotDate, 'snapshotDate') : undefined,
+          units: data.units !== undefined ? normalizeNullableNumber(data.units) : undefined,
+          price: data.price !== undefined ? normalizeNullableNumber(data.price) : undefined,
+        },
+      });
+      for (const investmentId of new Set([existing.investmentId, snapshot.investmentId])) {
+        await syncInvestmentDerivedValues(transaction, investmentId, false);
+      }
+      return snapshot;
+    }, { isolationLevel: 'Serializable' });
   }
 
   async delete(id: string): Promise<void> {
-    await this.prisma.valuationSnapshot.delete({
-      where: { id: Number(id) },
-    });
+    await this.prisma.$transaction(async (transaction) => {
+      const snapshot = await transaction.valuationSnapshot.delete({
+        where: { id: Number(id) },
+      });
+      await syncInvestmentDerivedValues(transaction, snapshot.investmentId, false);
+    }, { isolationLevel: 'Serializable' });
   }
 }

@@ -1,5 +1,6 @@
 import { SectionCard } from "../../../components/common";
 import type { DashboardCategoryPieItem } from "../dashboard.types";
+import { useTheme } from "@mui/material/styles";
 
 interface DashboardTopCategoriesSectionProps {
   items: DashboardCategoryPieItem[];
@@ -13,6 +14,8 @@ export default function DashboardTopCategoriesSection({
   items,
   onViewAll,
 }: DashboardTopCategoriesSectionProps) {
+  const theme = useTheme();
+
   return (
     <SectionCard
       title="Top Spending Categories"
@@ -20,7 +23,8 @@ export default function DashboardTopCategoriesSection({
         <button
           type="button"
           onClick={onViewAll}
-          className="text-sm font-semibold text-emerald-600 transition hover:text-emerald-700"
+          className="text-sm font-semibold transition"
+          style={{ color: theme.palette.primary.main }}
         >
           View All
         </button>
@@ -39,7 +43,7 @@ export default function DashboardTopCategoriesSection({
             key={item.name}
             className="grid grid-cols-[minmax(0,112px)_minmax(0,1fr)_auto] items-center gap-3"
           >
-            <div className="truncate text-sm font-medium text-slate-700">
+            <div className="truncate text-sm font-medium" style={{ color: theme.palette.text.primary }}>
               {item.name}
             </div>
             <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
@@ -52,7 +56,7 @@ export default function DashboardTopCategoriesSection({
               />
             </div>
             <div className="text-right text-sm">
-              <div className="font-semibold text-slate-800">
+              <div className="font-semibold" style={{ color: theme.palette.text.primary }}>
                 {formatCurrency(item.value)}
               </div>
               <div className="text-xs text-slate-400">

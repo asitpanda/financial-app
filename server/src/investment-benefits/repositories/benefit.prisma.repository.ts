@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { syncInvestmentDerivedValues } from '../../investments/repositories/investment-valuation';
 import { InvestmentBenefitStatus, InvestmentBenefitType, InvestmentEventSource, InvestmentEventStatus, Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { parseRequiredDateInput } from '../../common/utils/date-input';
@@ -145,9 +146,10 @@ export class BenefitPrismaRepository implements IBenefitDataSourcePort {
     return this.prisma.$transaction(async (tx) => {
       const benefit = await tx.investmentBenefit.findFirst({
         where: { id: Number(id), investmentId: Number(investmentId), investment: { userId } },
-        include: { investment: { select: { accountId: true } } },
+        include: { investment: { select: { accountId: true, status: true } } },
       });
       if (!benefit) throw new Error('Investment benefit not found');
+      if (benefit.investment.status.toLowerCase() === 'closed') throw new Error('Closed investments cannot be modified.');
       if (benefit.status !== InvestmentBenefitStatus.EXPECTED) throw new Error('Investment benefit was already realized');
 
       const events = [] as InvestmentEventRecord[];
@@ -228,14 +230,16 @@ export class BenefitPrismaRepository implements IBenefitDataSourcePort {
           data: { status: 'paused' },
         });
       }
+      await syncInvestmentDerivedValues(tx, benefit.investmentId);
       return { benefit: mapBenefit(updatedBenefit), events };
-    });
+    }, { isolationLevel: 'Serializable' });
   }
 
   async quickRealize(investmentId: string, userId: number, data: QuickRealizeInvestmentBenefitDto) {
     return this.prisma.$transaction(async (tx) => {
       const investment = await tx.investment.findFirst({ where: { id: Number(investmentId), userId } });
       if (!investment) throw new Error('Investment not found');
+      if (investment.status.toLowerCase() === 'closed') throw new Error('Closed investments cannot be modified.');
       const benefit = await tx.investmentBenefit.create({
         data: {
           investmentId: Number(investmentId),
@@ -249,7 +253,7 @@ export class BenefitPrismaRepository implements IBenefitDataSourcePort {
       });
       const result = await this.realizeInTransaction(tx, benefit, userId, data, investment.accountId);
       return result;
-    });
+    }, { isolationLevel: 'Serializable' });
   }
 
   private async realizeInTransaction(
@@ -300,7 +304,12 @@ export class BenefitPrismaRepository implements IBenefitDataSourcePort {
           lastValuationAt: data.eventDate ? new Date(data.eventDate) : new Date(),
         },
       });
+      await tx.investmentContributionPlan.updateMany({
+        where: { investmentId: benefit.investmentId, status: 'active' },
+        data: { status: 'paused' },
+      });
     }
+    await syncInvestmentDerivedValues(tx, benefit.investmentId);
     return { benefit: mapBenefit(updatedBenefit), events: [mapEvent(event)] };
   }
 }

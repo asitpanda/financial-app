@@ -1,6 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { renderWithProviders } from "../../test/test-utils";
 import { useNotificationStore } from "../../store/notificationStore";
 import Investments, {
@@ -15,6 +16,13 @@ import Investments, {
 const mocks = vi.hoisted(() => ({
   summary: {
     investments: [] as Array<Record<string, unknown>>,
+    pagination: {
+      page: 1,
+      limit: 25,
+      total: 0,
+      totalPages: 0,
+      hasNextPage: false,
+    },
     loading: false,
     error: null as Error | null,
   },
@@ -408,6 +416,13 @@ const investmentDetails = {
 
 const resetMocks = () => {
   mocks.summary.investments = [];
+  mocks.summary.pagination = {
+    page: 1,
+    limit: 25,
+    total: 0,
+    totalPages: 0,
+    hasNextPage: false,
+  };
   mocks.summary.loading = false;
   mocks.summary.error = null;
   mocks.reference.taxonomyNodes = [];
@@ -428,6 +443,22 @@ const resetMocks = () => {
   mocks.confirmRecurring.mockReset();
   mocks.updateRecurring.mockReset();
   mocks.useHeaderAction.mockReset();
+};
+
+const RouterHistoryControls = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  return (
+    <>
+      <output data-testid="router-location">
+        {location.pathname}{location.search}
+      </output>
+      <button type="button" onClick={() => navigate(-1)}>
+        Go back
+      </button>
+    </>
+  );
 };
 
 describe("Investments", () => {
@@ -501,6 +532,32 @@ describe("Investments", () => {
       "investments",
       expect.objectContaining({ disabled: false }),
     );
+  });
+
+  it("opens the create form from the action query and replaces that history entry", async () => {
+    const user = userEvent.setup();
+    mocks.reference.accounts = [{ id: 42, name: "Checking" }];
+
+    renderWithProviders(
+      <>
+        <Routes>
+          <Route path="/dashboard" element={<p>Dashboard origin</p>} />
+          <Route path="/investments" element={<Investments />} />
+        </Routes>
+        <RouterHistoryControls />
+      </>,
+      { router: { initialEntries: ["/dashboard", "/investments?action=create"], initialIndex: 1 } },
+    );
+
+    expect(
+      await screen.findByRole("region", { name: "Investment form drawer" }),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("router-location")).toHaveTextContent("/investments"),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Go back" }));
+    expect(await screen.findByText("Dashboard origin")).toBeInTheDocument();
   });
 
   it("renders the source dashboard filters and filtered-empty state", async () => {
@@ -1170,6 +1227,7 @@ const baseFormValues = {
     frequency: "halfyearly",
     amount: "5000",
     anchorDate: "2026-02-01T12:00:00Z",
+    nextContributionDate: "2026-03-01T12:00:00Z",
     endDate: "2027-02-01T12:00:00Z",
     historicalImportMode: "OPENING_BALANCE",
     openingPrincipalAmount: "12000",
@@ -1184,6 +1242,7 @@ describe("buildRecurringPayloadFromFormValues", () => {
       cadenceUnit: "month",
       cadenceInterval: 6,
       anchorDate: "2026-02-01",
+      nextDueDate: "2026-03-01",
       endDate: "2027-02-01",
       historicalImportMode: "OPENING_BALANCE",
       autoCreateEvent: false,
@@ -1263,6 +1322,20 @@ describe("buildRecurringPlanUpdatePayloadFromFormValues", () => {
     expect(
       buildRecurringPlanUpdatePayloadFromFormValues(baseFormValues, null),
     ).toHaveProperty("status", undefined);
+  });
+
+  it("clears the next due date when the optional form date is cleared", () => {
+    const formValues = {
+      ...baseFormValues,
+      recurringPlan: {
+        ...baseFormValues.recurringPlan,
+        nextContributionDate: null,
+      },
+    };
+
+    expect(
+      buildRecurringPlanUpdatePayloadFromFormValues(formValues, null),
+    ).toHaveProperty("nextDueDate", null);
   });
 });
 

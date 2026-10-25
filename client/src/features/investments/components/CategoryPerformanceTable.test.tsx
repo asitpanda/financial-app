@@ -74,4 +74,21 @@ describe("CategoryPerformanceTable", () => {
     await user.click(screen.getByText("Fund A"));
     expect(onSelectRow).toHaveBeenCalledWith(holding);
   });
+
+  it("shows the complete available sparkline in the All range", async () => {
+    const user = userEvent.setup();
+    const { container } = renderWithProviders(
+      <CategoryPerformanceTable
+        rows={[row("equity", "Equity", { sparkline: Array.from({ length: 15 }, (_, index) => index + 1) })]}
+        formatValue={(value) => `$${value}`}
+      />,
+    );
+
+    const getSegmentCount = () => container.querySelector("path")?.getAttribute("d")?.match(/L/g)?.length;
+    await user.click(screen.getByRole("button", { name: "All" }));
+    expect(getSegmentCount()).toBe(14);
+
+    await user.click(screen.getByRole("button", { name: "1Y" }));
+    expect(getSegmentCount()).toBe(11);
+  });
 });

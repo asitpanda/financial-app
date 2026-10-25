@@ -137,7 +137,7 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
   private resolveGoalDelta(transaction: TransactionGoalDeltaSource) {
     if (!transaction?.goalId) return 0;
     const amount = Number(transaction.amount || 0);
-    return transaction.type === 'expense' ? -amount : amount;
+    return transaction.type === 'EXPENSE' ? -amount : amount;
   }
 
   async findAll(userId: number): Promise<TransactionRecord[]> {
@@ -170,12 +170,13 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
     };
   }
 
-  async create(data: CreateTransactionDto, userId: number): Promise<TransactionRecord> {
-    return this.prisma.$transaction(async (tx) => {
+  async create(data: CreateTransactionDto, userId: number, transaction?: Prisma.TransactionClient): Promise<TransactionRecord> {
+    const create = async (tx: Prisma.TransactionClient) => {
       const createData: TransactionCreateData = {
         ...data,
         userId,
         date: parseRequiredDateInput(data.date, 'date'),
+        categoryId: this.normalizeOptionalInt(data.categoryId, 'categoryId'),
         goalId: this.normalizeOptionalInt(data.goalId, 'goalId'),
         sourceAccountId: this.normalizeOptionalInt(data.sourceAccountId, 'sourceAccountId'),
         destinationAccountId: this.normalizeOptionalInt(data.destinationAccountId, 'destinationAccountId'),
@@ -200,7 +201,8 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
       }
 
       return createdTransaction;
-    });
+    };
+    return transaction ? create(transaction) : this.prisma.$transaction(create);
   }
 
   async update(id: number, data: UpdateTransactionDto, userId: number): Promise<TransactionRecord | null> {

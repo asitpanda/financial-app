@@ -86,4 +86,5 @@ export type RecurringPlanLike = {
   anchorDate: string | Date;
   cadenceUnit: string;
   cadenceInterval: number;
+  endDate?: string | Date | null;
 };

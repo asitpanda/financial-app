@@ -18,6 +18,7 @@ const TREND_OPTIONS = [
   { value: "3m", label: "3M", months: 3 },
   { value: "6m", label: "6M", months: 6 },
   { value: "1y", label: "1Y", months: 12 },
+  { value: "all", label: "All", months: null },
 ] as const;
 
 const createSparklinePath = (values: number[], width: number, height: number) => {
@@ -143,7 +144,9 @@ export default function CategoryPerformanceTable({
       </Box>
 
       {visibleRows.map((row) => {
-        const sparklineValues = row.sparkline.slice(-selectedTrend.months);
+        const sparklineValues = selectedTrend.months === null
+          ? row.sparkline
+          : row.sparkline.slice(-selectedTrend.months);
         const sparklinePath = createSparklinePath(sparklineValues, 96, 28);
         const hasDrillChildren = drilledType
           ? (!drilledCategory && row.holdings > 1 && holdingRows?.some(

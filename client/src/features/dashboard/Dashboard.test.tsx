@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Dashboard from './Dashboard';
 import { useDashboard } from './useDashboard';
 import { useInvestmentMetadata } from '../investments/hooks/useInvestments';
-import { useCreateGoal, useUpdateGoal } from '../goals/useGoals';
+import { useSaveGoal } from '../goals/useGoals';
 import { saveTransaction } from '../transactions/transactions.service';
 import { createCategory } from '../categories/categories.api';
 import { createInvestment, getInvestments } from '../investments/api/investments.api';
@@ -13,7 +13,7 @@ import { navigateTo } from '../../services/navigation';
 
 vi.mock('./useDashboard', () => ({ useDashboard: vi.fn() }));
 vi.mock('../investments/hooks/useInvestments', () => ({ useInvestmentMetadata: vi.fn() }));
-vi.mock('../goals/useGoals', () => ({ useCreateGoal: vi.fn(), useUpdateGoal: vi.fn() }));
+vi.mock('../goals/useGoals', () => ({ useSaveGoal: vi.fn() }));
 vi.mock('../transactions/transactions.service', () => ({ saveTransaction: vi.fn() }));
 vi.mock('../transactions/components/TransactionsAddEditDrawer', () => ({
   default: ({ open, onSubmit }: { open: boolean; onSubmit: (payload: unknown) => void }) =>
@@ -59,8 +59,7 @@ describe('Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useInvestmentMetadata).mockReturnValue({ data: { asset_configs: [] } } as never);
-    vi.mocked(useCreateGoal).mockReturnValue({ mutateAsync: vi.fn() } as never);
-    vi.mocked(useUpdateGoal).mockReturnValue({ mutateAsync: vi.fn() } as never);
+    vi.mocked(useSaveGoal).mockReturnValue({ mutateAsync: vi.fn() } as never);
   });
 
   it('shows the loading state before page data arrives', () => {
@@ -128,13 +127,13 @@ describe('Dashboard', () => {
   it('keeps the goal drawer open when goal creation fails', async () => {
     const user = userEvent.setup();
     const mutateAsync = vi.fn().mockRejectedValue(new Error('Goal failed'));
-    vi.mocked(useCreateGoal).mockReturnValue({ mutateAsync } as never);
+    vi.mocked(useSaveGoal).mockReturnValue({ mutateAsync } as never);
     vi.mocked(useDashboard).mockReturnValue({ data: emptyData, loading: false, error: null } as never);
     renderDashboard();
 
     await user.click(screen.getByRole('button', { name: /Add Goal/ }));
     await user.click(screen.getByRole('button', { name: 'Submit Goal' }));
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ name: 'Emergency Fund' }));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ payload: { name: 'Emergency Fund' } }));
     expect(screen.getByRole('button', { name: 'Submit Goal' })).toBeInTheDocument();
   });
 
@@ -155,13 +154,13 @@ describe('Dashboard', () => {
   it('closes the goal drawer after a successful goal creation', async () => {
     const user = userEvent.setup();
     const mutateAsync = vi.fn().mockResolvedValue({ id: 'goal-1' });
-    vi.mocked(useCreateGoal).mockReturnValue({ mutateAsync } as never);
+    vi.mocked(useSaveGoal).mockReturnValue({ mutateAsync } as never);
     vi.mocked(useDashboard).mockReturnValue({ data: emptyData, loading: false, error: null } as never);
     renderDashboard();
 
     await user.click(screen.getByRole('button', { name: /Add Goal/ }));
     await user.click(screen.getByRole('button', { name: 'Submit Goal' }));
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ name: 'Emergency Fund' }));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ payload: { name: 'Emergency Fund' } }));
     expect(screen.queryByRole('button', { name: 'Submit Goal' })).not.toBeInTheDocument();
   });
 

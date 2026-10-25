@@ -1,11 +1,10 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
-import { Box, Typography } from "@mui/material";
+import { Alert, Box, Typography } from "@mui/material";
+import AppDrawer from "../../components/drawers/AppDrawer";
 import type { GridSortModel } from "@mui/x-data-grid";
-import dayjs from "dayjs";
 import InvestmentAssetTaxonomyFormDrawer from "./components/InvestmentAssetTaxonomyFormDrawer";
-import InvestmentFormDrawer from "./components/InvestmentFormDrawer";
-import RecurringOccurrencesReviewDialog from "./components/RecurringOccurrencesReviewDialog";
+import InvestmentSaveDrawer from "./components/InvestmentSaveDrawer";
 import AppButton from "../../components/common/AppButton";
 import { EmptyState } from "../../components/common";
 import ConfirmDialog from "../../components/dialogs/ConfirmDialog";
@@ -16,12 +15,10 @@ import { getInvestmentsTableColumns } from "./components/investmentsTableColumns
 import { useHeaderAction } from "../../hooks/useHeaderAction";
 import { useNotificationStore } from "../../store/notificationStore";
 import {
-  buildInvestmentFromForm,
   formatInvestmentCurrency,
   normalizeInvestmentForUi,
 } from "../../utils/investmentHelpers";
 import { getRuntimeErrorMessage } from "../../utils/errorMessage";
-import { frequencyToCadence } from "../../utils/investmentHelpers";
 import {
   useInvestmentDashboardAnalytics,
   useInvestment,
@@ -31,7 +28,6 @@ import {
   useInvestmentSnapshotsByInvestment,
   useInvestmentSummaryPageData,
   useRemoveInvestment,
-  useSaveInvestment,
 } from "./hooks/useInvestments";
 import {
   useRemoveInvestmentAssetTaxonomy,
@@ -42,140 +38,19 @@ import {
   getNormalizedInvestments,
   getInvestmentContributionViewItems,
   getInvestmentHoldingPerformanceRows,
-  getInvestmentTimeSeriesData,
 } from "./investments.selectors";
 import type { InvestmentDrawerData } from "./types/investment.types";
 import type { InvestmentSummaryPagination } from "./types/investment.types";
-import {
-  useConfirmRecurringInvestmentContributionPlan,
-  useUpdateInvestmentContributionPlan,
-} from "./hooks/useContributionPlans";
 import { useInvestmentBenefits } from "./hooks/useInvestmentBenefits";
 
-export const mapFrequencyToCadence = frequencyToCadence;
-
-export const toDateOnly = (value) => {
-  if (!value) return null;
-  const parsed = dayjs(value);
-  if (!parsed.isValid()) return null;
-  return parsed.format("YYYY-MM-DD");
-};
-
-export const buildRecurringPayloadFromFormValues = (baseValues) => {
-  const plan = baseValues?.recurringPlan || {};
-  const cadence = mapFrequencyToCadence(plan.frequency);
-
-  return {
-    amount: Number(plan.amount || 0),
-    cadenceUnit: cadence.cadenceUnit,
-    cadenceInterval: cadence.cadenceInterval,
-    anchorDate: toDateOnly(plan.anchorDate || baseValues.startDate),
-    endDate: toDateOnly(plan.endDate) || undefined,
-    historicalImportMode: plan.historicalImportMode || "TRACK_FROM_TODAY",
-    autoCreateEvent: false,
-    openingPrincipalAmount:
-      plan.openingPrincipalAmount !== "" &&
-      plan.openingPrincipalAmount !== undefined
-        ? Number(plan.openingPrincipalAmount)
-        : undefined,
-    openingIncomeAmount:
-      plan.openingIncomeAmount !== "" && plan.openingIncomeAmount !== undefined
-        ? Number(plan.openingIncomeAmount)
-        : undefined,
-  };
-};
-
-export const buildRecurringPlanUpdatePayloadFromFormValues = (
-  formValues,
-  existingPlan,
-) => {
-  const recurringPayload = buildRecurringPayloadFromFormValues(formValues);
-  return {
-    amount: recurringPayload.amount,
-    cadenceUnit: recurringPayload.cadenceUnit,
-    cadenceInterval: recurringPayload.cadenceInterval,
-    anchorDate: recurringPayload.anchorDate,
-    endDate: recurringPayload.endDate,
-    historicalImportMode: recurringPayload.historicalImportMode,
-    status: existingPlan?.status || undefined,
-  };
-};
-
-export const buildRecurringReviewState = ({
-  formValues,
-  nextInvestment,
-  drawerMode,
-  selectedInvestmentId,
-  selectedInvestment,
-}) => {
-  const recurringPayload = buildRecurringPayloadFromFormValues(formValues);
-  const existingPlan = selectedInvestment?.activeContributionPlan;
-  const alreadyHasActivePlan = drawerMode === "edit" && Boolean(existingPlan);
-  const reviewedHistoricalItems = [];
-
-  if (
-    recurringPayload.historicalImportMode === "OPENING_BALANCE" &&
-    !alreadyHasActivePlan
-  ) {
-    const openingDate = toDateOnly(formValues?.startDate) || toDateOnly(dayjs());
-    const openingItems = [
-      ["openingPrincipalAmount", "OPENING_BALANCE", "Opening principal import"],
-      ["openingIncomeAmount", "OPENING_INCOME_CREDIT", "Opening historical income import"],
-    ];
-
-    openingItems.forEach(([amountKey, eventType, notes]) => {
-      const amount = Number(formValues?.recurringPlan?.[amountKey] || 0);
-      if (amount > 0) {
-        reviewedHistoricalItems.push({
-          dueDate: openingDate,
-          eventDate: openingDate,
-          amount,
-          selected: true,
-          status: "CONFIRMED",
-          eventType,
-          notes,
-        });
-      }
-    });
-  }
-
-  return {
-    formValues,
-    investmentPayload: nextInvestment,
-    recurringPayload,
-    reviewedHistoricalItems,
-    historicalImportMode: recurringPayload.historicalImportMode,
-    drawerMode,
-    selectedInvestmentId,
-    alreadyHasActivePlan,
-    activePlanId: existingPlan?.id || null,
-    investmentName: nextInvestment?.name || selectedInvestment?.name || "",
-    reviewSummary: {
-      investment: [
-        { label: "Name", value: nextInvestment?.name || "-" },
-        { label: "Status", value: nextInvestment?.status || "-" },
-      ],
-      valuation: [
-        { label: "Current value", value: formatInvestmentCurrency(nextInvestment?.currentValue) },
-      ],
-      recurring: [
-        { label: "Contribution", value: formatInvestmentCurrency(recurringPayload.amount) },
-        { label: "Anchor date", value: recurringPayload.anchorDate || "-" },
-        { label: "Import mode", value: recurringPayload.historicalImportMode },
-      ],
-    },
-  };
-};
-
-export const buildRecurringConfirmPayload = (
-  recurringPayload,
-  reviewedHistoricalItems,
-) => ({
-  ...recurringPayload,
-  reviewedHistoricalItems: Array.isArray(reviewedHistoricalItems)
-    ? reviewedHistoricalItems
-    : [],
-});
+export {
+  mapFrequencyToCadence,
+  toDateOnly,
+  buildRecurringPayloadFromFormValues,
+  buildRecurringPlanUpdatePayloadFromFormValues,
+  buildRecurringReviewState,
+  buildRecurringConfirmPayload,
+} from "../../utils/investmentHelpers";
 
 export default function Investments() {
   const [investmentPage, setInvestmentPage] = useState(1);
@@ -197,22 +72,15 @@ export default function Investments() {
   const [taxonomyFormError, setTaxonomyFormError] = useState("");
   const [recordActivityModalOpen, setRecordActivityModalOpen] = useState(false);
   const [recordActivityMode, setRecordActivityMode] = useState("contribution");
-  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
-  const [recurringConfirmLoading, setRecurringConfirmLoading] = useState(false);
-  const [pendingRecurringReview, setPendingRecurringReview] = useState(null);
   const [selectedInvestmentActivity, setSelectedInvestmentActivity] = useState(null);
   const pushNotification = useNotificationStore(
     (state) => state.pushNotification,
   );
-  const saveInvestmentMutation = useSaveInvestment();
   const removeInvestmentMutation = useRemoveInvestment();
-  const updateContributionPlanMutation = useUpdateInvestmentContributionPlan();
-  const confirmContributionPlanMutation =
-    useConfirmRecurringInvestmentContributionPlan();
   const saveTaxonomyMutation = useSaveInvestmentAssetTaxonomy();
   const removeTaxonomyMutation = useRemoveInvestmentAssetTaxonomy();
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => setDebouncedSearch(search), 300);
+    const timeoutId = window.setTimeout(() => setDebouncedSearch(search), 500);
     return () => window.clearTimeout(timeoutId);
   }, [search]);
 
@@ -239,17 +107,12 @@ export default function Investments() {
     assetTypeConfigs,
     loading: referenceDataLoading,
     error: referenceDataError,
-    reload: reloadReferenceData,
   } = useInvestmentReferenceData();
   const dashboardEnabled = true;
   const dashboardAnalyticsQuery = useInvestmentDashboardAnalytics(dashboardEnabled);
   const investmentBenefitsQuery = useInvestmentBenefits();
   const investmentBenefitsData = investmentBenefitsQuery.data;
-  const loading =
-    investmentsLoading ||
-    referenceDataLoading ||
-    investmentBenefitsQuery.isLoading ||
-    (dashboardEnabled && dashboardAnalyticsQuery.isLoading);
+  const loading = investmentsLoading;
   const error =
     uiError ||
     (pageDataError
@@ -390,9 +253,10 @@ export default function Investments() {
     [assetTypeConfigs],
   );
   const dashboardWidgets = dashboardAnalyticsQuery.data?.widgets;
-  const dashboardInvestments = (dashboardWidgets?.assets ?? []).map(
-    (investment) => normalizeInvestmentForUi(investment, taxonomyNodes),
-  );
+  const dashboardInvestments = (dashboardWidgets?.assets ?? []).map((investment) => ({
+    ...normalizeInvestmentForUi(investment, taxonomyNodes),
+    benefits: (investmentBenefitsData ?? []).filter((benefit) => String(benefit.investmentId) === String(investment.id)),
+  }));
   const isFirstInvestmentSetup =
     investmentPagination.total === 0 && !hasInvestmentFilters;
   const portfolioPoints = (dashboardWidgets?.portfolioGrowth.order ?? []).map(
@@ -409,43 +273,31 @@ export default function Investments() {
     ...row,
     label: assetCategoryLabelMap[row.key] || row.label || row.key,
   }));
-  const holdingRows = getInvestmentHoldingPerformanceRows(dashboardInvestments, 12);
+  const holdingRows = getInvestmentHoldingPerformanceRows(dashboardInvestments, null);
   const categoryBreakdown = categoryPerformanceRows.map((row) => ({ key: row.key, label: row.label, value: row.invested, investmentIds: row.investmentIds, assetType: row.assetType }));
-  const categorySubBreakdown = categoryPerformanceSubRows.map((row) => ({ key: row.key, label: row.label, value: row.invested, investmentIds: row.investmentIds, assetCategory: row.key }));
-  const holdingContributionRows = categoryPerformanceRows.map((row) => ({ key: row.key, label: row.label, value: row.invested, investmentIds: row.investmentIds }));
+  const categorySubBreakdown = categoryPerformanceSubRows.map((row) => ({ key: row.key, label: row.label, value: row.invested, investmentIds: row.investmentIds, assetType: row.assetType, assetCategory: row.assetCategory ?? row.key }));
+  const holdingContributionRows = holdingRows.map((row) => ({ key: row.key, label: row.label, value: row.invested, investmentIds: row.investmentIds, assetType: row.assetType, assetCategory: row.assetCategory }));
   const currentValueBreakdown = categoryPerformanceRows.map((row) => ({ key: row.key, label: row.label, value: row.currentValue, investmentIds: row.investmentIds, assetType: row.assetType }));
-  const currentValueSubBreakdown = categoryPerformanceSubRows.map((row) => ({ key: row.key, label: row.label, value: row.currentValue, investmentIds: row.investmentIds, assetCategory: row.key }));
-  const holdingCurrentValueRows = categoryPerformanceRows.map((row) => ({ key: row.key, label: row.label, value: row.currentValue, investmentIds: row.investmentIds }));
-  const breakdownPoints = getInvestmentTimeSeriesData(
-    dashboardInvestments,
-    selectedYearForDrill,
-  );
-  const breakdownByLabel = Object.fromEntries(
-    breakdownPoints.map((point) => [point.label, point]),
-  );
-  const fallbackInvestedBreakdown = Object.fromEntries(
-    categoryPerformanceRows.map((row) => [row.key, row.invested]),
-  );
-  const fallbackReturnBreakdown = Object.fromEntries(
-    categoryPerformanceRows.map((row) => [row.key, row.returnAmount]),
-  );
-  const timeSeriesData = selectedYearForDrill
-    ? breakdownPoints
-    : deploymentPoints.map((point) => ({
+  const currentValueSubBreakdown = categoryPerformanceSubRows.map((row) => ({ key: row.key, label: row.label, value: row.currentValue, investmentIds: row.investmentIds, assetType: row.assetType, assetCategory: row.assetCategory ?? row.key }));
+  const holdingCurrentValueRows = holdingRows.map((row) => ({ key: row.key, label: row.label, value: row.currentValue, investmentIds: row.investmentIds, assetType: row.assetType, assetCategory: row.assetCategory }));
+  const selectedDeploymentPoints = selectedYearForDrill
+    ? dashboardWidgets?.capitalDeployment.monthlyByYear?.[selectedYearForDrill] ?? []
+    : deploymentPoints;
+  const timeSeriesData = selectedDeploymentPoints.map((point) => ({
         label: point.period.label,
         invested: point.state.cumulativeInvested,
         return: point.state.returnAmount ?? 0,
-        investedBreakdown: breakdownByLabel[point.period.label]?.investedBreakdown ?? fallbackInvestedBreakdown,
-        returnBreakdown: breakdownByLabel[point.period.label]?.returnBreakdown ?? fallbackReturnBreakdown,
+        investedBreakdown: point.breakdown?.invested ?? {},
+        returnBreakdown: point.breakdown?.returns ?? {},
       }));
   const portfolioGrowthData = portfolioPoints.map((point) => ({
     label: point.period.label,
     investedToDate: point.state.cumulativeInvested,
     currentValueToDate: point.state.portfolioValue,
     returnToDate: point.state.returnAmount ?? 0,
-    snapshotBackedValue: point.state.portfolioValue ?? 0,
-    estimatedValue: 0,
-    investedOnlyValue: 0,
+    snapshotBackedValue: point.valueSources?.snapshot ?? 0,
+    estimatedValue: point.valueSources?.derived ?? 0,
+    investedOnlyValue: point.valueSources?.invested ?? 0,
   }));
   const dashboardKpiWidgets = dashboardWidgets?.kpis;
   const dashboardKpis = {
@@ -590,170 +442,6 @@ export default function Investments() {
     setInvestmentPageSize(pageSize);
   };
 
-  const handleSaveInvestment = async (formValues) => {
-    const nextInvestment = buildInvestmentFromForm(
-      formValues,
-      drawerMode === "edit" ? selectedInvestmentId : null,
-      taxonomyNodes,
-    );
-
-    try {
-      const wantsRecurringPlan = formValues?.contributionType === "recurring";
-      const alreadyHasActivePlan =
-        drawerMode === "edit" &&
-        Boolean(selectedInvestment?.activeContributionPlan);
-
-      if (wantsRecurringPlan) {
-        setPendingRecurringReview(
-          buildRecurringReviewState({
-            formValues,
-            nextInvestment,
-            drawerMode,
-            selectedInvestmentId,
-            selectedInvestment,
-            accounts,
-          }),
-        );
-
-        setReviewDialogOpen(true);
-        return null;
-      }
-
-      await saveInvestmentMutation.mutateAsync({
-        payload: nextInvestment,
-        selectedInvestmentId:
-          drawerMode === "edit" ? selectedInvestmentId : null,
-      });
-
-      pushNotification({
-        type: "success",
-        message: wantsRecurringPlan
-          ? drawerMode === "edit"
-            ? alreadyHasActivePlan
-              ? "Investment updated. Existing recurring plan kept as-is"
-              : "Investment updated with recurring plan"
-            : "Investment added with recurring plan"
-          : drawerMode === "edit"
-            ? "Investment updated"
-            : "Investment added",
-      });
-
-      setUiError("");
-      closeInvestmentDrawer();
-      return null;
-    } catch (error) {
-      setUiError(
-        drawerMode === "edit"
-          ? "Failed to update investment"
-          : "Failed to add investment",
-      );
-      return getRuntimeErrorMessage(
-        error,
-        drawerMode === "edit"
-          ? "Failed to update investment"
-          : "Failed to add investment",
-      );
-    }
-  };
-
-  const handleCancelRecurringReview = async () => {
-    setReviewDialogOpen(false);
-    setPendingRecurringReview(null);
-    pushNotification({
-      type: "info",
-      message:
-        "Returned to the investment form. Update the draft and confirm again when ready.",
-    });
-  };
-
-  const handleConfirmRecurringReview = async () => {
-    if (!pendingRecurringReview) return;
-
-    setRecurringConfirmLoading(true);
-    let createdInvestmentId = null;
-
-    try {
-      const savedInvestment = await saveInvestmentMutation.mutateAsync({
-        payload: pendingRecurringReview.investmentPayload,
-        selectedInvestmentId: pendingRecurringReview.selectedInvestmentId,
-      });
-
-      const targetInvestmentId =
-        pendingRecurringReview.drawerMode === "edit"
-          ? pendingRecurringReview.selectedInvestmentId
-          : savedInvestment?.id ||
-            savedInvestment?.investment?.id ||
-            savedInvestment?.data?.id;
-
-      if (!targetInvestmentId) {
-        throw new Error(
-          "Investment ID was not available in the save response.",
-        );
-      }
-
-      if (pendingRecurringReview.drawerMode === "create") {
-        createdInvestmentId = targetInvestmentId;
-      }
-
-      if (pendingRecurringReview.alreadyHasActivePlan) {
-        const planId = pendingRecurringReview.activePlanId;
-
-        if (!planId) {
-          throw new Error("Recurring plan ID was not available in the save response.");
-        }
-
-        await updateContributionPlanMutation.mutateAsync({
-          investmentId: targetInvestmentId,
-          planId,
-          payload: buildRecurringPlanUpdatePayloadFromFormValues(
-            pendingRecurringReview.formValues,
-            selectedInvestment?.activeContributionPlan,
-          ),
-        });
-      } else {
-        await confirmContributionPlanMutation.mutateAsync({
-          investmentId: targetInvestmentId,
-          payload: buildRecurringConfirmPayload(
-            pendingRecurringReview.recurringPayload,
-            pendingRecurringReview.reviewedHistoricalItems,
-          ),
-        });
-      }
-
-      setReviewDialogOpen(false);
-      setPendingRecurringReview(null);
-      setUiError("");
-      closeInvestmentDrawer();
-      pushNotification({
-        type: "success",
-        message:
-          pendingRecurringReview.drawerMode === "edit"
-            ? "Investment updated and recurring plan confirmed"
-            : "Investment and recurring plan created",
-      });
-    } catch (error) {
-      if (createdInvestmentId) {
-        try {
-          await removeInvestmentMutation.mutateAsync(createdInvestmentId);
-        } catch (cleanupError) {
-          void cleanupError;
-        }
-      }
-
-      pushNotification({
-        type: "error",
-        message: getRuntimeErrorMessage(
-          error,
-          pendingRecurringReview.drawerMode === "edit"
-            ? "Failed to save recurring plan confirmation"
-            : "Failed to create investment and recurring plan",
-        ),
-      });
-    } finally {
-      setRecurringConfirmLoading(false);
-    }
-  };
-
   const handleDeleteInvestment = () => {
     if (!deleteTarget) return;
 
@@ -781,7 +469,6 @@ export default function Investments() {
       setTaxonomyFormError("");
       try {
         const savedNode = await saveTaxonomyMutation.mutateAsync(formValues);
-        await reloadReferenceData();
         pushNotification({
           type: "success",
           message: formValues.id
@@ -810,7 +497,6 @@ export default function Investments() {
     const removeAssetTaxonomy = async () => {
       try {
         await removeTaxonomyMutation.mutateAsync(targetNode.id);
-        await reloadReferenceData();
         pushNotification({
           type: "success",
           message: "Asset taxonomy removed",
@@ -841,6 +527,11 @@ export default function Investments() {
   const renderDashboardView = () => (
     <InvestmentsDashboardView
       investments={summaryInvestments}
+      portfolioInvestments={dashboardInvestments}
+      analyticsLoading={dashboardAnalyticsQuery.isPending}
+      analyticsError={dashboardAnalyticsQuery.error ? getRuntimeErrorMessage(dashboardAnalyticsQuery.error, 'Failed to load portfolio analytics') : ''}
+      benefitsLoading={investmentBenefitsQuery.isPending}
+      benefitsError={Boolean(investmentBenefitsQuery.error)}
       portfolioGrowthData={portfolioGrowthData}
       timeSeriesData={timeSeriesData}
       isDrillMode={Boolean(selectedYearForDrill)}
@@ -875,7 +566,7 @@ export default function Investments() {
       onResetFilters={handleResetFilters}
       onCreateInvestment={openCreateDrawer}
       onRecordContribution={openRecordContributionModal}
-      formatCurrency={formatInvestmentCurrency}
+      formatCurrency={(value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: dashboardAnalyticsQuery.data?.responseContext.currency ?? 'INR', maximumFractionDigits: 0 }).format(Number(value) || 0)}
         pagination={investmentPagination}
         onPageChange={handlePageChange}
         focusedAssetIds={focusedAssetIds}
@@ -965,21 +656,22 @@ export default function Investments() {
       ) : null}
       {!loading && !isFirstInvestmentSetup ? renderDashboardView() : null}
 
-      <InvestmentFormDrawer
-        open={
-          drawerOpen &&
-          drawerMode !== "view" &&
-          (drawerMode === "create" || Boolean(selectedInvestmentQuery.data))
-        }
-        onClose={closeInvestmentDrawer}
-        onSubmit={handleSaveInvestment}
-        initialValues={drawerMode === "edit" ? selectedInvestment : null}
-        accounts={accounts}
-        assetTypeConfigs={assetTypeConfigs}
-        taxonomyNodes={taxonomyNodes}
-        title={drawerMode === "edit" ? "Edit Investment" : "Add Investment"}
-        submitLabel={drawerMode === "edit" ? "Update" : "Add"}
-      />
+      {drawerOpen && selectedInvestmentId != null && (!selectedInvestmentQuery.data || (drawerMode === 'edit' && (selectedInvestmentEventsQuery.isLoading || selectedInvestmentEventsQuery.error))) ? (
+        <AppDrawer open onClose={closeInvestmentDrawer} title="Investment">
+          {selectedInvestmentQuery.error || selectedInvestmentEventsQuery.error || (!selectedInvestmentQuery.isPending && !selectedInvestmentQuery.data)
+            ? <Alert severity="error" action={<AppButton size="small" onClick={() => { selectedInvestmentQuery.refetch(); selectedInvestmentEventsQuery.refetch(); }}>Retry</AppButton>}>Failed to load the investment draft.</Alert>
+            : <Typography color="text.secondary">Loading investment...</Typography>}
+        </AppDrawer>
+      ) : null}
+
+      {drawerOpen && drawerMode !== "view" &&
+        (drawerMode === "create" || (Boolean(selectedInvestmentQuery.data) && !selectedInvestmentEventsQuery.isLoading && !selectedInvestmentEventsQuery.error)) ? (
+        <InvestmentSaveDrawer
+          onClose={closeInvestmentDrawer}
+          onSaved={() => setUiError("")}
+          initialValues={drawerMode === "edit" ? selectedInvestment : null}
+        />
+      ) : null}
 
       <InvestmentViewDrawer
         open={
@@ -994,6 +686,17 @@ export default function Investments() {
         onEdit={openEditDrawer}
         onRecordActivity={openRecordInvestmentActivity}
         onEditActivity={openEditInvestmentActivity}
+        eventsLoading={selectedInvestmentEventsQuery.isLoading}
+        eventsError={selectedInvestmentEventsQuery.error}
+        snapshotsLoading={selectedInvestmentSnapshotsQuery.isLoading}
+        snapshotsError={selectedInvestmentSnapshotsQuery.error}
+        performanceLoading={selectedInvestmentPerformanceQuery.isLoading}
+        performanceError={selectedInvestmentPerformanceQuery.error}
+        onRetryHistory={() => {
+          selectedInvestmentEventsQuery.refetch();
+          selectedInvestmentSnapshotsQuery.refetch();
+          selectedInvestmentPerformanceQuery.refetch();
+        }}
       />
 
       <InvestmentAssetTaxonomyFormDrawer
@@ -1031,26 +734,6 @@ export default function Investments() {
         editingBenefit={selectedInvestmentActivity?.editingBenefit}
       />
 
-      <RecurringOccurrencesReviewDialog
-        open={reviewDialogOpen}
-        loading={recurringConfirmLoading}
-        items={pendingRecurringReview?.reviewedHistoricalItems || []}
-        historicalImportMode={pendingRecurringReview?.historicalImportMode}
-        investmentName={pendingRecurringReview?.investmentName}
-        reviewSummary={pendingRecurringReview?.reviewSummary}
-        dialogTitle={
-          pendingRecurringReview?.drawerMode === "edit"
-            ? "Review Investment Update"
-            : "Review Investment Setup"
-        }
-        onCancel={handleCancelRecurringReview}
-        onConfirm={handleConfirmRecurringReview}
-        confirmLabel={
-          pendingRecurringReview?.drawerMode === "edit"
-            ? "Confirm Changes"
-            : "Confirm and Create"
-        }
-      />
     </Box>
   );
 }

@@ -33,7 +33,7 @@ export class TransactionMockRepository implements ITransactionDataSourcePort {
   }
 
   async findOne(id: number, userId: number): Promise<TransactionRecord | null> {
-    return mockTransactions.find((t) => t.id === id && t.userId === userId);
+    return mockTransactions.find((t) => t.id === id && t.userId === userId) ?? null;
   }
 
   async create(data: CreateTransactionDto, userId: number): Promise<TransactionRecord> {

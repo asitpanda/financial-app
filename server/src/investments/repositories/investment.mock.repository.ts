@@ -156,11 +156,11 @@ export class InvestmentMockRepository implements IInvestmentDataSourcePort {
   }
 
   async findOne(id: number, userId: number): Promise<InvestmentRecord | null> {
-    return mockInvestments.find((investment) => investment.id === id && investment.userId === userId);
+    return mockInvestments.find((investment) => investment.id === id && investment.userId === userId) ?? null;
   }
 
   async findById(id: number): Promise<InvestmentRecord | null> {
-    return mockInvestments.find((investment) => investment.id === id);
+    return mockInvestments.find((investment) => investment.id === id) ?? null;
   }
 
   async update(id: number, data: UpdateInvestmentDto, userId: number): Promise<InvestmentRecord | null> {

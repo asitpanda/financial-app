@@ -136,12 +136,28 @@ export class InvestmentsService {
     }));
   }
 
-  private async assertInvestmentCrudRules(investment: InvestmentCrudRuleInput) {
-    if (investment.accountId == null || Number(investment.accountId) < 1) {
+  private async assertInvestmentCrudRules(investment: InvestmentCrudRuleInput, userId: number) {
+    const accountId = Number(investment.accountId);
+    if (!Number.isInteger(accountId) || accountId < 1) {
       throw new BadRequestException({
         message: 'Account is required',
         field: 'accountId',
       });
+    }
+
+    const account = await this.prisma.financialAccount.findFirst({
+      where: { id: accountId, userId },
+      select: { id: true, currency: true },
+    });
+    if (!account) {
+      throw new BadRequestException({
+        message: 'Selected account was not found for the current user',
+        field: 'accountId',
+      });
+    }
+
+    if (investment.currency && account.currency.toUpperCase() !== investment.currency.toUpperCase()) {
+      throw new BadRequestException({ message: 'Investment and linked account must use the same currency', field: 'accountId' });
     }
 
     if (!String(investment.name || '').trim()) {
@@ -236,57 +252,72 @@ export class InvestmentsService {
   }
 
   async create(createInvestmentDto: CreateInvestmentDto, userId: number) {
-    await this.assertInvestmentCrudRules(createInvestmentDto);
+    await this.assertInvestmentCrudRules(createInvestmentDto, userId);
     await this.assertTaxonomyOwnership(createInvestmentDto.assetTaxonomyId, userId);
-    const created = await this.repository.create(createInvestmentDto, userId);
+    return this.prisma.$transaction(async (transaction) => {
+      const created = await this.repository.create(createInvestmentDto, userId, transaction);
 
-    // Seed opening events so totalInvested/currentValue are event-sourced from day one.
-    // Recurring plans seed their own opening events via contribution-plan confirm, so skip here.
-    if (String(createInvestmentDto.contributionMode || '').toUpperCase() === 'ONE_TIME') {
-      const openingPrincipal = Number(createInvestmentDto.totalInvested || 0);
-      const openingIncome =
-        Number(createInvestmentDto.currentValue ?? createInvestmentDto.totalInvested ?? 0) - openingPrincipal;
-      const eventDate = createInvestmentDto.startDate;
+      // Seed opening events so totalInvested/currentValue are event-sourced from day one.
+      // Recurring plans seed their own opening events via contribution-plan confirm, so skip here.
+      if (String(createInvestmentDto.contributionMode || '').toUpperCase() === 'ONE_TIME') {
+        const openingPrincipal = Number(createInvestmentDto.totalInvested || 0);
+        const eventDate = createInvestmentDto.startDate;
 
-      if (openingPrincipal > 0) {
-        await this.investmentEventsService.create({
-          investmentId: String(created.id),
-          eventType: InvestmentEventType.OPENING_BALANCE,
-          status: 'CONFIRMED',
-          eventSource: 'MANUAL',
-          eventDate,
-          amount: openingPrincipal,
-          netAmount: openingPrincipal,
+        if (openingPrincipal > 0) {
+          await this.investmentEventsService.create({
+            investmentId: String(created.id),
+            eventType: created.accountingTreatment === 'INVESTMENT'
+              ? InvestmentEventType.OPENING_BALANCE : InvestmentEventType.PREMIUM,
+            status: 'CONFIRMED',
+            eventSource: 'MANUAL',
+            eventDate,
+            amount: openingPrincipal,
+            netAmount: openingPrincipal,
+          }, undefined, transaction);
+        }
+
+        if (createInvestmentDto.currentValue != null && created.accountingTreatment !== 'PROTECTION_EXPENSE') {
+          await transaction.valuationSnapshot.create({
+            data: {
+              userId,
+              investmentId: created.id,
+              snapshotDate: new Date(createInvestmentDto.lastValuationAt ?? new Date().toISOString()),
+              marketValue: createInvestmentDto.currentValue,
+              source: 'manual',
+            },
+          });
+          await transaction.investment.update({
+            where: { id: created.id },
+            data: { currentValue: createInvestmentDto.currentValue, currentValueSource: 'valuation_snapshot', lastValuationAt: new Date(createInvestmentDto.lastValuationAt ?? new Date().toISOString()) },
+          });
+        }
+      }
+
+      for (const benefit of createInvestmentDto.expectedBenefits ?? []) {
+        if (benefit.destinationAccountId != null) {
+          const account = await transaction.financialAccount.findFirst({
+            where: { id: benefit.destinationAccountId, userId, currency: createInvestmentDto.currency },
+          });
+          if (!account) throw new BadRequestException('Benefit destination must be an owned account in the investment currency.');
+        }
+        await transaction.investmentBenefit.create({
+          data: {
+            investmentId: created.id,
+            benefitType: benefit.benefitType,
+            amount: benefit.amount,
+            benefitDate: new Date(benefit.benefitDate),
+            destinationAccountId: benefit.destinationAccountId ?? null,
+            notes: benefit.notes,
+          },
         });
       }
 
-      if (openingIncome > 0) {
-        await this.investmentEventsService.create({
-          investmentId: String(created.id),
-          eventType: InvestmentEventType.OPENING_INCOME_CREDIT,
-          status: 'CONFIRMED',
-          eventSource: 'MANUAL',
-          eventDate,
-          amount: openingIncome,
-          netAmount: openingIncome,
-        });
+      if (createInvestmentDto.recurringPlan) {
+        await this.contributionPlansService.confirmRecurringPlan(String(created.id), createInvestmentDto.recurringPlan, userId, transaction);
       }
-    }
-
-    for (const benefit of createInvestmentDto.expectedBenefits ?? []) {
-      await this.prisma.investmentBenefit.create({
-        data: {
-          investmentId: created.id,
-          benefitType: benefit.benefitType,
-          amount: benefit.amount,
-          benefitDate: new Date(benefit.benefitDate),
-          destinationAccountId: benefit.destinationAccountId ?? null,
-          notes: benefit.notes,
-        },
-      });
-    }
-
-    return created;
+      const saved = await transaction.investment.findUnique({ where: { id: created.id } });
+      return { ...created, ...saved };
+    }, { isolationLevel: 'Serializable' });
   }
 
   async getMetadata() {
@@ -392,6 +423,18 @@ export class InvestmentsService {
     return (left.getFullYear() - right.getFullYear()) * 12 + (left.getMonth() - right.getMonth());
   }
 
+  private buildMonthlyTrendDates(startDate: Date) {
+    const today = new Date();
+    const startMonth = this.startOfMonth(startDate);
+    const currentMonth = this.startOfMonth(today);
+    const monthCount = Math.max(this.diffMonths(currentMonth, startMonth) + 1, 1);
+
+    return Array.from({ length: monthCount }, (_, index) => {
+      const monthEnd = this.endOfMonth(this.addMonths(startMonth, index));
+      return monthEnd.getTime() > today.getTime() ? today : monthEnd;
+    });
+  }
+
   private formatMonthYear(value: Date) {
     return `${this.monthNames[value.getMonth()]} ${value.getFullYear()}`;
   }
@@ -468,55 +511,7 @@ export class InvestmentsService {
     pointDate: Date,
     events: EventLike[] = [],
   ) {
-    const investedValue = Number(investment?.totalInvested || 0);
-
-    const latestSnapshot = [...snapshots]
-      .filter((snapshot) => {
-        const snapshotDate = this.parseDate(snapshot?.snapshotDate);
-        return snapshotDate && snapshotDate.getTime() <= pointDate.getTime();
-      })
-      .sort(
-        (left, right) =>
-          this.parseDate(right.snapshotDate)!.getTime() -
-          this.parseDate(left.snapshotDate)!.getTime(),
-      )[0];
-
-    if (latestSnapshot) {
-      return {
-        value: Number(latestSnapshot.marketValue || investedValue),
-        source: 'snapshot',
-      };
-    }
-
-    const derivedValuation = this.buildDerivedEventValuation(
-      events,
-      investment?.accountingTreatment,
-    );
-    if (derivedValuation) {
-      return {
-        value: derivedValuation.currentValue,
-        source: derivedValuation.currentValueSource ?? 'estimated',
-      };
-    }
-
-    const lastValuationAt = this.parseDate(investment?.lastValuationAt);
-    const currentValue = Number(investment?.currentValue ?? Number.NaN);
-
-    if (
-      lastValuationAt &&
-      lastValuationAt.getTime() <= pointDate.getTime() &&
-      Number.isFinite(currentValue)
-    ) {
-      return {
-        value: currentValue,
-        source: 'estimated',
-      };
-    }
-
-    return {
-      value: investedValue,
-      source: 'invested',
-    };
+    return this.analyticsEngine.resolveInvestmentValueAtDate(investment, snapshots, pointDate, events);
   }
 
   private buildResolvedAnalyticsRecord(
@@ -697,7 +692,7 @@ export class InvestmentsService {
     );
   }
 
-  private buildCategoryPerformanceRows(records: ResolvedAnalyticsRecord[], months = 12) {
+  private buildCategoryPerformanceRows(records: ResolvedAnalyticsRecord[]) {
     const categoryGroups = records.reduce<Record<string, ResolvedAnalyticsRecord[]>>((groups, record) => {
       if (!groups[record.category]) {
         groups[record.category] = [];
@@ -707,13 +702,15 @@ export class InvestmentsService {
       return groups;
     }, {});
 
-    const startMonth = this.startOfMonth(new Date());
-    const monthPoints = Array.from({ length: Math.max(months, 1) }, (_, index) =>
-      this.endOfMonth(this.addMonths(startMonth, -(Math.max(months, 1) - 1 - index))),
-    );
-
     return Object.entries(categoryGroups)
       .map(([key, items]) => {
+        const earliestStart = items.reduce(
+          (earliest, item) => item.timelineStartDate.getTime() < earliest.getTime()
+            ? item.timelineStartDate
+            : earliest,
+          items[0].timelineStartDate,
+        );
+        const monthPoints = this.buildMonthlyTrendDates(earliestStart);
         const invested = items.reduce((sum, item) => sum + item.investedAmount, 0);
         const currentValue = items.reduce((sum, item) => sum + item.currentValue, 0);
         const returnAmount = currentValue - invested;
@@ -748,7 +745,7 @@ export class InvestmentsService {
 
   private getEffectiveCurrentValue(investment: InvestmentLike) {
     const currentValue = Number(investment?.currentValue ?? Number.NaN);
-    if (Number.isFinite(currentValue) && currentValue > 0) {
+    if (Number.isFinite(currentValue)) {
       return currentValue;
     }
 
@@ -878,7 +875,10 @@ export class InvestmentsService {
 
   private async getSummaryInvestments(userId: number): Promise<SummaryInvestment[]> {
     const investments = await this.repository.findAllForPortfolio(userId);
-    return investments.map((investment) => this.mapInvestmentSummaryItem(investment));
+    const plans = await this.contributionPlansService.findAllByInvestmentIds(
+      investments.map((investment) => investment.id),
+    );
+    return this.findAllWithInvestments(investments, userId, plans);
   }
 
   private mapActiveContributionPlan(
@@ -1078,74 +1078,6 @@ export class InvestmentsService {
     }, [] as InvestmentPerformanceResponseDto['performanceHistory']);
   }
 
-  private buildDerivedEventValuation(events: EventLike[] = [], accountingTreatment: AccountingTreatment = 'INVESTMENT') {
-    const confirmedEvents = events.filter(
-      (event) => this.normalizeEventStatus(event?.status) === 'CONFIRMED',
-    );
-
-    if (confirmedEvents.length === 0) {
-      return null;
-    }
-
-    // Premiums are pure expense here; never counted as invested capital or product value.
-    if (accountingTreatment === 'PROTECTION_EXPENSE') {
-      return null;
-    }
-
-    const principalIn = confirmedEvents
-      .filter((event) => {
-        const eventType = event?.eventType;
-        if (eventType === InvestmentEventType.CONTRIBUTION || eventType === InvestmentEventType.OPENING_BALANCE) {
-          return true;
-        }
-        // For insurance-savings, PREMIUM is the "premium paid" contribution equivalent of CONTRIBUTION.
-        return accountingTreatment === 'INSURANCE_SAVINGS' && eventType === InvestmentEventType.PREMIUM;
-      })
-      .reduce((sum, event) => sum + Number(event?.amount || 0), 0);
-
-    const principalOut = confirmedEvents
-      .filter(
-        (event) =>
-          event?.eventType === InvestmentEventType.WITHDRAWAL_PRINCIPAL,
-      )
-      .reduce((sum, event) => sum + Number(event?.amount || 0), 0);
-
-    const incomeCredits = confirmedEvents
-      .filter(
-        (event) =>
-          event?.eventType === InvestmentEventType.OPENING_INCOME_CREDIT ||
-          event?.eventType === InvestmentEventType.INCOME_CREDIT,
-      )
-      .reduce((sum, event) => sum + Number(event?.amount || 0), 0);
-
-    const latestConfirmedEvent = confirmedEvents
-      .filter((event) => event?.eventDate)
-      .sort(
-        (left, right) =>
-          new Date(right.eventDate).getTime() - new Date(left.eventDate).getTime(),
-      )[0] ?? null;
-
-    if (accountingTreatment === 'INSURANCE_SAVINGS') {
-      // Premium-paid history is permanent: a money-back/payout (WITHDRAWAL_PRINCIPAL) must not retroactively reduce it.
-      // Until an explicit valuation/benefit value exists, insurance savings are valued at premiums paid.
-      return {
-        totalInvested: principalIn,
-        currentValue: principalIn,
-        lastValuationAt: latestConfirmedEvent?.eventDate ?? null,
-        currentValueSource: 'manual',
-      };
-    }
-
-    const totalInvested = principalIn - principalOut;
-
-    return {
-      totalInvested,
-      currentValue: totalInvested + incomeCredits,
-      lastValuationAt: latestConfirmedEvent?.eventDate ?? null,
-      currentValueSource: 'manual',
-    };
-  }
-
   private hydrateInvestmentWithDerivedEventValuation<T extends InvestmentLike>(
     investment: T,
     events: EventLike[] = [],
@@ -1161,9 +1093,7 @@ export class InvestmentsService {
     const storedCurrentValue = Number(investment?.currentValue ?? Number.NaN);
     const derivedValuation = this.analyticsEngine.deriveEventValuation(events, investment?.accountingTreatment);
     const hasStoredCurrentValue = Number.isFinite(storedCurrentValue);
-    const shouldKeepStoredValue =
-      hasStoredCurrentValue &&
-      (storedCurrentValue !== 0 || !derivedValuation);
+    const shouldKeepStoredValue = hasStoredCurrentValue;
 
     if (shouldKeepStoredValue || !derivedValuation) {
       return investment;
@@ -1249,7 +1179,6 @@ export class InvestmentsService {
   private buildCategorySubPerformanceRows(
     investments: SummaryInvestment[],
     snapshotsByInvestment: Map<string, SnapshotLike[]>,
-    months = 12,
   ) {
     const groups: Record<string, { typeKey: string; catKey: string; records: ResolvedAnalyticsRecord[] }> = {};
     investments.forEach((investment) => {
@@ -1264,12 +1193,15 @@ export class InvestmentsService {
         this.buildResolvedAnalyticsRecord(investment, snapshotsByInvestment.get(String(investment.id)) ?? []),
       );
     });
-    const startMonth = this.startOfMonth(new Date());
-    const monthPoints = Array.from({ length: Math.max(months, 1) }, (_, index) =>
-      this.endOfMonth(this.addMonths(startMonth, -(Math.max(months, 1) - 1 - index))),
-    );
     return Object.entries(groups)
       .map(([, { typeKey, catKey, records }]) => {
+        const earliestStart = records.reduce(
+          (earliest, record) => record.timelineStartDate.getTime() < earliest.getTime()
+            ? record.timelineStartDate
+            : earliest,
+          records[0].timelineStartDate,
+        );
+        const monthPoints = this.buildMonthlyTrendDates(earliestStart);
         const invested = records.reduce((sum, r) => sum + r.investedAmount, 0);
         const currentValue = records.reduce((sum, r) => sum + r.currentValue, 0);
         const returnAmount = currentValue - invested;
@@ -1494,20 +1426,15 @@ export class InvestmentsService {
   ): Promise<SummaryInvestment[]> {
     const plans = suppliedPlans ?? (await this.contributionPlansService.findAllByUser(userId));
     const plansByInvestmentId = new Map<string, ActivePlanLike[]>();
-    const requiresDerivedValuation = investments.some(
-      (investment) => {
-        const currentValue = Number(investment?.currentValue ?? Number.NaN);
-
-        return !Number.isFinite(currentValue) || currentValue === 0;
-      },
-    );
     const eventsByInvestmentId = new Map<string, EventLike[]>();
+    const investmentsNeedingEvents = investments.filter((investment) => {
+      const needsDerivedValuation = !Number.isFinite(
+        Number(investment?.currentValue ?? Number.NaN),
+      );
+      return needsDerivedValuation || this.isClosedInvestment(investment);
+    });
 
-    if (requiresDerivedValuation) {
-      const investmentsNeedingEvents = investments.filter((investment) => {
-        const currentValue = Number(investment?.currentValue ?? Number.NaN);
-        return !Number.isFinite(currentValue) || currentValue === 0;
-      });
+    if (investmentsNeedingEvents.length > 0) {
       const eventGroups = await Promise.all(
         investmentsNeedingEvents.map(async (investment) => ({
           investmentId: String(investment.id),
@@ -1527,21 +1454,25 @@ export class InvestmentsService {
     });
 
     return investments.map((investment) => {
+      const investmentEvents = eventsByInvestmentId.get(String(investment.id)) ?? [];
       const hydratedInvestment = this.hydrateInvestmentWithDerivedEventValuation(
         investment,
-        eventsByInvestmentId.get(String(investment.id)) ?? [],
+        investmentEvents,
       );
-
-      const gainLossAmount =
+      const realizedMetrics = this.isClosedInvestment(investment)
+        ? this.buildRealizedInvestmentMetrics(investment, investmentEvents)
+        : null;
+      const gainLossAmount = realizedMetrics?.realizedProfitLoss ??
         Number(hydratedInvestment.currentValue || 0) - Number(hydratedInvestment.totalInvested || 0);
 
       return {
         ...hydratedInvestment,
         gainLossAmount,
-        gainLossPercentage:
+        gainLossPercentage: realizedMetrics?.realizedProfitLossPercentage ?? (
           Number(hydratedInvestment.totalInvested || 0) > 0
             ? (gainLossAmount / Number(hydratedInvestment.totalInvested)) * 100
-            : null,
+            : null
+        ),
         activeContributionPlan: this.mapActiveContributionPlan(
           this.selectDisplayContributionPlan(
             plansByInvestmentId.get(String(investment.id)) ?? [],
@@ -1637,6 +1568,10 @@ export class InvestmentsService {
     const investments = allInvestments.filter(
       (investment) => !this.isClosedInvestment(investment),
     );
+    const currencies = new Set(investments.map((investment) => investment.currency.toUpperCase()));
+    if (currencies.size > 1) {
+      throw new BadRequestException('Portfolio analytics cannot aggregate different currencies without an exchange-rate policy. Holdings remain available separately.');
+    }
     const facts = await this.analyticsEngine.loadFacts(userId, investments);
     const query = {
       range: 'ALL' as const,
@@ -1644,7 +1579,10 @@ export class InvestmentsService {
       calendar: 'FISCAL' as const,
       fiscalYearStartMonth: 3,
     };
-    const points = await this.analyticsEngine.calculate(query, facts);
+    const [points, monthlyPoints] = await Promise.all([
+      this.analyticsEngine.calculate(query, facts),
+      this.analyticsEngine.calculate({ ...query, granularity: 'MONTH' }, facts),
+    ]);
     const snapshots = facts.snapshots;
     const treatmentByInvestmentId = new Map(
       investments.map((investment) => [String(investment.id), investment.accountingTreatment ?? 'INVESTMENT']),
@@ -1659,8 +1597,9 @@ export class InvestmentsService {
       (event) => event.eventType === InvestmentEventType.CONTRIBUTION || event.eventType === InvestmentEventType.OPENING_BALANCE,
       'INVESTMENT',
     );
-    const insuranceSavingsPremiums = eventTotal((event) => event.eventType === InvestmentEventType.PREMIUM, 'INSURANCE_SAVINGS');
-    const protectionPremiums = eventTotal((event) => event.eventType === InvestmentEventType.PREMIUM, 'PROTECTION_EXPENSE');
+    const isPremiumHistory = (event: EventLike) => event.eventType === InvestmentEventType.PREMIUM || event.eventType === InvestmentEventType.CONTRIBUTION || event.eventType === InvestmentEventType.OPENING_BALANCE;
+    const insuranceSavingsPremiums = eventTotal(isPremiumHistory, 'INSURANCE_SAVINGS');
+    const protectionPremiums = eventTotal(isPremiumHistory, 'PROTECTION_EXPENSE');
     const eventBasedContributions = investmentContributions + insuranceSavingsPremiums;
     const snapshotsByInvestment = this.buildSnapshotsByInvestment(snapshots);
     const records = investments.map((investment) =>
@@ -1680,8 +1619,8 @@ export class InvestmentsService {
       (investment) => (investment.accountingTreatment ?? 'INVESTMENT') === 'INVESTMENT',
     );
     const summary = this.buildDashboardSummary(investments, records);
-    const categoryPerformance = this.buildCategoryPerformanceRows(investmentOnlyRecords, 12);
-    const categorySubPerformance = this.buildCategorySubPerformanceRows(investmentOnlyInvestments, snapshotsByInvestment, 12);
+    const categoryPerformance = this.buildCategoryPerformanceRows(investmentOnlyRecords);
+    const categorySubPerformance = this.buildCategorySubPerformanceRows(investmentOnlyInvestments, snapshotsByInvestment);
     const byKey = points.reduce<Record<string, typeof points[number]>>((result, point) => {
       result[point.period.key] = point;
       return result;
@@ -1729,18 +1668,21 @@ export class InvestmentsService {
           },
         },
         portfolioGrowth: {
-          order: points.map((point) => point.period.key),
-          byKey,
+          order: monthlyPoints.map((point) => point.period.key),
+          byKey: Object.fromEntries(monthlyPoints.map((point) => [point.period.key, point])),
         },
         capitalDeployment: {
           order: points.map((point) => point.period.key),
           byKey,
+          monthlyByYear: Object.fromEntries(points.map((point) => [point.period.label, monthlyPoints.filter((month) => month.period.startDate >= point.period.startDate && month.period.startDate <= point.period.endDate)])),
         },
         sourceOfValue: summary.valueSourceSummary,
         assetTypePerformance: { rows: categoryPerformance },
-        assets: investments.map((investment) =>
-          this.normalizeDashboardInvestment(investment),
-        ),
+        assets: investments.map((investment) => ({
+          ...this.normalizeDashboardInvestment(investment),
+          premiumsPaid: investment.accountingTreatment === 'INVESTMENT' ? undefined
+            : eventTotal((event) => String(event.investmentId) === String(investment.id) && isPremiumHistory(event)),
+        })),
         insurancePosition: {
           cover: summary.insuranceCover,
           premiumsPaid: insuranceSavingsPremiums + protectionPremiums,
@@ -1803,54 +1745,77 @@ export class InvestmentsService {
   }
 
   async update(id: number, updateInvestmentDto: UpdateInvestmentDto, userId: number) {
-    const existingInvestment = await this.repository.findOne(id, userId);
-    if (!existingInvestment) {
-      return null;
-    }
+    return this.prisma.$transaction(async (transaction) => {
+      const existingInvestment = await this.repository.findOne(id, userId);
+      if (!existingInvestment) {
+        return null;
+      }
 
-    if (String(existingInvestment.status || '').trim().toLowerCase() === 'closed') {
-      throw new BadRequestException('Closed investments cannot be modified.');
-    }
+      if (String(existingInvestment.status || '').trim().toLowerCase() === 'closed') {
+        throw new BadRequestException('Closed investments cannot be modified.');
+      }
 
-    if (
-      updateInvestmentDto.status?.toLowerCase() === 'closed' &&
-      String(existingInvestment.status || '').toLowerCase() !== 'closed'
-    ) {
-      throw new BadRequestException(
-        'Investments must be closed through benefit realization so settlement and cash movement are recorded.',
+      if (
+        updateInvestmentDto.status?.toLowerCase() === 'closed' &&
+        String(existingInvestment.status || '').toLowerCase() !== 'closed'
+      ) {
+        throw new BadRequestException(
+          'Investments must be closed through benefit realization so settlement and cash movement are recorded.',
+        );
+      }
+
+      await this.assertInvestmentCrudRules({
+        ...existingInvestment,
+        ...updateInvestmentDto,
+      }, userId);
+
+      await this.assertTaxonomyOwnership(
+        updateInvestmentDto.assetTaxonomyId ?? existingInvestment.assetTaxonomyId,
+        userId,
       );
-    }
 
-    await this.assertInvestmentCrudRules({
-      ...existingInvestment,
-      ...updateInvestmentDto,
-    });
+      const financialFields = ['totalInvested', 'currentValue', 'currentValueSource', 'lastValuationAt', 'currency'] as const;
+      if (financialFields.some((field) => updateInvestmentDto[field] !== undefined && updateInvestmentDto[field] !== existingInvestment[field])) {
+        throw new BadRequestException('Change principal through investment activity and valuation through snapshots. Investment currency cannot be changed.');
+      }
+      if (updateInvestmentDto.expectedBenefits !== undefined) {
+        throw new BadRequestException('Manage existing investment benefits through the benefits endpoints.');
+      }
+      const updated = await this.repository.update(id, updateInvestmentDto, userId, transaction);
 
-    await this.assertTaxonomyOwnership(
-      updateInvestmentDto.assetTaxonomyId ?? existingInvestment.assetTaxonomyId,
-      userId,
-    );
+      if (updateInvestmentDto.recurringPlanUpdate) {
+        const plan = await transaction.investmentContributionPlan.findFirst({
+          where: { id: updateInvestmentDto.recurringPlanId ?? -1, investmentId: id },
+        });
+        if (!plan) throw new BadRequestException('Recurring plan does not belong to this investment.');
+        if (updateInvestmentDto.recurringPlanUpdate.investmentId != null && Number(updateInvestmentDto.recurringPlanUpdate.investmentId) !== id) {
+          throw new BadRequestException('Recurring plans cannot be reassigned through investment edits.');
+        }
+        await this.contributionPlansService.update(String(plan.id), updateInvestmentDto.recurringPlanUpdate, userId, transaction);
+      } else if (updateInvestmentDto.recurringPlan) {
+        await this.contributionPlansService.confirmRecurringPlan(String(id), updateInvestmentDto.recurringPlan, userId, transaction);
+      }
 
-    const updated = await this.repository.update(id, updateInvestmentDto, userId);
-
-    if (
-      updateInvestmentDto.status &&
-      updateInvestmentDto.status.toLowerCase() !== String(existingInvestment.status || '').toLowerCase() &&
-      ['matured', 'closed'].includes(updateInvestmentDto.status.toLowerCase())
-    ) {
-      const activePlans = await this.contributionPlansService.findAllByInvestment(String(id));
-      for (const plan of activePlans) {
-        if (String(plan.status || '').toLowerCase() === 'active') {
-          await this.contributionPlansService.update(
-            String(plan.id),
-            { status: 'paused' },
-            userId,
-          );
+      if (
+        updateInvestmentDto.status &&
+        updateInvestmentDto.status.toLowerCase() !== String(existingInvestment.status || '').toLowerCase() &&
+        ['matured', 'closed'].includes(updateInvestmentDto.status.toLowerCase())
+      ) {
+        const activePlans = await this.contributionPlansService.findAllByInvestment(String(id));
+        for (const plan of activePlans) {
+          if (String(plan.status || '').toLowerCase() === 'active') {
+            await this.contributionPlansService.update(
+              String(plan.id),
+              { status: 'paused' },
+              userId,
+              transaction,
+            );
+          }
         }
       }
-    }
 
-    return updated;
+      return updated;
+    }, { isolationLevel: 'Serializable' });
   }
 
   async remove(id: number, userId: number) {

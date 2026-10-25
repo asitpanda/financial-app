@@ -1,6 +1,7 @@
 import { SectionCard } from "../../../components/common";
 import type { DashboardAccountOverviewRow } from "../dashboard.types";
 import { getProfitLossHexColor } from "../../../colors";
+import { useTheme } from "@mui/material/styles";
 
 interface DashboardAccountsSectionProps {
   accountOverviewRows: DashboardAccountOverviewRow[];
@@ -16,6 +17,8 @@ export default function DashboardAccountsSection({
   onAddAccount,
   onEditAccount,
 }: DashboardAccountsSectionProps) {
+  const theme = useTheme();
+
   return (
     <SectionCard
       title="Account Overview"
@@ -23,7 +26,8 @@ export default function DashboardAccountsSection({
         <button
           type="button"
           onClick={onAddAccount}
-          className="text-sm font-semibold text-emerald-600 transition hover:text-emerald-700"
+          className="text-sm font-semibold transition"
+          style={{ color: theme.palette.primary.main }}
         >
           Add Account
         </button>
@@ -48,10 +52,14 @@ export default function DashboardAccountsSection({
                 type="button"
                 onClick={() => onEditAccount(bank.name)}
                 key={bank.name}
-                className="flex w-full items-center justify-between gap-4 rounded-[20px] border border-slate-200 bg-slate-50/80 px-4 py-4 text-left"
+                className="flex w-full items-center justify-between gap-4 rounded-lg border px-4 py-4 text-left"
+                style={{
+                  borderColor: theme.palette.divider,
+                  backgroundColor: theme.palette.action.hover,
+                }}
               >
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-900">
+                  <div className="truncate text-sm font-semibold" style={{ color: theme.palette.text.primary }}>
                     {bank.name}
                   </div>
                 </div>
@@ -72,7 +80,10 @@ export default function DashboardAccountsSection({
           })}
 
           {accountOverviewRows.length === 0 ? (
-            <div className="rounded-[24px] bg-slate-50 px-4 py-10 text-center text-sm font-medium text-slate-500">
+            <div
+              className="rounded-lg px-4 py-10 text-center text-sm font-medium"
+              style={{ backgroundColor: theme.palette.action.hover, color: theme.palette.text.secondary }}
+            >
               No account activity yet
             </div>
           ) : null}

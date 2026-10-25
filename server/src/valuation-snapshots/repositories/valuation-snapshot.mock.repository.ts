@@ -4,6 +4,7 @@ import { CreateValuationSnapshotDto } from '../dto/create-valuation-snapshot.dto
 import { UpdateValuationSnapshotDto } from '../dto/update-valuation-snapshot.dto';
 import { IValuationSnapshotDataSourcePort } from './valuation-snapshot.datasource.port';
 import { mockValuationSnapshotsData } from '../../mockdata';
+import { InvestmentRepository } from '../../investments/repositories/investment.repository';
 
 let mockValuationSnapshots = [...mockValuationSnapshotsData];
 
@@ -13,6 +14,21 @@ const normalizeNullableNumber = (value?: string | number | null) =>
 
 @Injectable()
 export class ValuationSnapshotMockRepository implements IValuationSnapshotDataSourcePort {
+  constructor(private readonly investmentRepository: InvestmentRepository) {}
+
+  private async syncValue(investmentId: number) {
+    const investment = await this.investmentRepository.findById(investmentId);
+    if (!investment || investment.status.toLowerCase() === 'closed') return;
+    const latest = mockValuationSnapshots
+      .filter((snapshot) => snapshot.investmentId === investmentId)
+      .sort((left, right) => new Date(right.snapshotDate).getTime() - new Date(left.snapshotDate).getTime() || right.id - left.id)[0];
+    await this.investmentRepository.update(investmentId, {
+      currentValue: latest?.marketValue ?? investment.totalInvested,
+      currentValueSource: latest ? 'valuation_snapshot' : 'manual',
+      lastValuationAt: latest ? new Date(latest.snapshotDate).toISOString() : null,
+    }, investment.userId);
+  }
+
   async findAll(userId: number): Promise<ValuationSnapshotRecord[]> {
     return mockValuationSnapshots.filter(
       (snapshot) => snapshot.userId === userId,
@@ -34,6 +50,7 @@ export class ValuationSnapshotMockRepository implements IValuationSnapshotDataSo
     };
 
     mockValuationSnapshots.push(newSnapshot);
+    await this.syncValue(newSnapshot.investmentId);
     return newSnapshot;
   }
 
@@ -48,6 +65,7 @@ export class ValuationSnapshotMockRepository implements IValuationSnapshotDataSo
   async update(id: string, data: UpdateValuationSnapshotDto): Promise<ValuationSnapshotRecord | null> {
     const index = mockValuationSnapshots.findIndex((snapshot) => snapshot.id === Number(id));
     if (index === -1) return null;
+    const previousInvestmentId = mockValuationSnapshots[index].investmentId;
 
     mockValuationSnapshots[index] = {
       ...mockValuationSnapshots[index],
@@ -60,10 +78,15 @@ export class ValuationSnapshotMockRepository implements IValuationSnapshotDataSo
       snapshotDate: data.snapshotDate !== undefined ? new Date(data.snapshotDate) : mockValuationSnapshots[index].snapshotDate,
     };
 
+    for (const investmentId of new Set([previousInvestmentId, mockValuationSnapshots[index].investmentId])) {
+      await this.syncValue(investmentId);
+    }
     return mockValuationSnapshots[index];
   }
 
   async delete(id: string): Promise<void> {
+    const snapshot = await this.findOne(id);
     mockValuationSnapshots = mockValuationSnapshots.filter((snapshot) => snapshot.id !== Number(id));
+    if (snapshot) await this.syncValue(snapshot.investmentId);
   }
 }

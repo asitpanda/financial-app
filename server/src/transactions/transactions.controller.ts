@@ -48,10 +48,10 @@ export class TransactionsController {
   @ApiOperation({ summary: 'Get all transactions' })
   findAll(
     @CurrentUserId() userId: number,
-    @Query('type', new ParseEnumPipe(TransactionType, { optional: true })) type?: TransactionType,
+    @Query('type', new ParseEnumPipe(TransactionType, { optional: true })) type?: string,
   ) {
     if (type) {
-      return this.transactionsService.findByType(userId, type);
+      return this.transactionsService.findByType(userId, type as TransactionType);
     }
     return this.transactionsService.findAll(userId);
   }

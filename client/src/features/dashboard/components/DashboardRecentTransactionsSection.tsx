@@ -4,6 +4,7 @@ import { getIconPathByKey } from "../../../constants/categoryIcons";
 import type { CategoryRecord } from "../../categories/categories.types";
 import type { TransactionRecord } from "../../transactions/transaction.types";
 import { getProfitLossHexColor } from "../../../colors";
+import { useTheme } from "@mui/material/styles";
 
 interface DashboardRecentTransactionsSectionProps {
   recentTransactions: TransactionRecord[];
@@ -35,6 +36,8 @@ export default function DashboardRecentTransactionsSection({
   onOpenTransactions,
   onAddTransaction,
 }: DashboardRecentTransactionsSectionProps) {
+  const theme = useTheme();
+
   return (
     <SectionCard
       title="Recent Transactions"
@@ -42,7 +45,8 @@ export default function DashboardRecentTransactionsSection({
         <button
           type="button"
           onClick={onOpenTransactions}
-          className="text-sm font-semibold text-emerald-600 transition hover:text-emerald-700"
+          className="text-sm font-semibold transition"
+          style={{ color: theme.palette.primary.main }}
         >
           View All
         </button>
@@ -87,7 +91,7 @@ export default function DashboardRecentTransactionsSection({
                   <Icon path={iconPath} size={0.82} color="currentColor" />
                 </div>
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-900">
+                  <div className="truncate text-sm font-semibold" style={{ color: theme.palette.text.primary }}>
                        {transaction.categoryLabelSnapshot || transaction.category || "Transaction"}
                   </div>
                   <div className="text-xs text-slate-500">

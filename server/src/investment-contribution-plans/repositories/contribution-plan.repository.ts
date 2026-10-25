@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import type { InvestmentContributionPlanRecord } from '../investment-contribution-plan.types';
 import {
   ContributionPlanUpdateInput,
@@ -37,15 +38,16 @@ export class ContributionPlanRepository {
     return this.dataSource.findAllActiveByUser(userId);
   }
 
-  async findOne(id: string): Promise<InvestmentContributionPlanRecord | null> {
-    return this.dataSource.findOne(id);
+  async findOne(id: string, transaction?: Prisma.TransactionClient): Promise<InvestmentContributionPlanRecord | null> {
+    return this.dataSource.findOne(id, transaction);
   }
 
   async update(
     id: string,
     data: ContributionPlanUpdateInput,
+    transaction?: Prisma.TransactionClient,
   ): Promise<InvestmentContributionPlanRecord | null> {
-    return this.dataSource.update(id, data);
+    return this.dataSource.update(id, data, transaction);
   }
 
   async delete(id: string): Promise<void> {
@@ -60,8 +62,9 @@ export class ContributionPlanRepository {
 
   async createPlanWithHistoricalEvents(
     data: CreatePlanWithHistoricalEventsInput,
+    transaction?: Prisma.TransactionClient,
   ): Promise<CreatePlanWithHistoricalEventsResult> {
-    return this.dataSource.createPlanWithHistoricalEvents(data);
+    return this.dataSource.createPlanWithHistoricalEvents(data, transaction);
   }
 
   async skipCurrentContribution(

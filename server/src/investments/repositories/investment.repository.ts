@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import type { InvestmentRecord } from '../investment.types';
 import type { CreateInvestmentDto } from '../dto/create-investment.dto';
 import type { UpdateInvestmentDto } from '../dto/update-investment.dto';
@@ -12,8 +13,8 @@ export class InvestmentRepository {
     private readonly dataSource: IInvestmentDataSourcePort,
   ) {}
 
-  async create(data: CreateInvestmentDto, userId: number): Promise<InvestmentRecord> {
-    return this.dataSource.create(data, userId);
+  async create(data: CreateInvestmentDto, userId: number, transaction?: Prisma.TransactionClient): Promise<InvestmentRecord> {
+    return this.dataSource.create(data, userId, transaction);
   }
 
   async findAll(userId: number): Promise<InvestmentRecord[]> {
@@ -36,8 +37,8 @@ export class InvestmentRepository {
     return this.dataSource.findById(id);
   }
 
-  async update(id: number, data: UpdateInvestmentDto, userId: number): Promise<InvestmentRecord | null> {
-    return this.dataSource.update(id, data, userId);
+  async update(id: number, data: UpdateInvestmentDto, userId: number, transaction?: Prisma.TransactionClient): Promise<InvestmentRecord | null> {
+    return this.dataSource.update(id, data, userId, transaction);
   }
 
   async delete(id: number, userId: number): Promise<void> {

@@ -149,6 +149,7 @@ export interface InvestmentBase {
 	currentValueSource?: string | null;
 	lastValuationAt?: string | null;
 	insuranceCover?: number;
+	premiumsPaid?: number;
 	referenceNumber?: string | null;
 	notes?: string | null;
 	benefits?: InvestmentBenefit[];
@@ -299,6 +300,8 @@ export interface InvestmentDashboardPoint {
 		portfolioValue: number;
 		returnAmount: number;
 	};
+	breakdown?: { invested: Record<string, number>; returns: Record<string, number> };
+	valueSources?: { snapshot: number; derived: number; invested: number };
 	dataQuality: {
 		cashFlow: string;
 		portfolioValue: string;
@@ -325,7 +328,7 @@ export interface InvestmentDashboardWidgetResponse {
 			insurancePremiumsPaid: { value: number; savingsLinked: number; protection: number };
 		};
 		portfolioGrowth: { order: string[]; byKey: Record<string, InvestmentDashboardPoint> };
-		capitalDeployment: { order: string[]; byKey: Record<string, InvestmentDashboardPoint> };
+		capitalDeployment: { order: string[]; byKey: Record<string, InvestmentDashboardPoint>; monthlyByYear?: Record<string, InvestmentDashboardPoint[]> };
 		sourceOfValue: InvestmentDashboardSummaryPayload['valueSourceSummary'];
 		assetTypePerformance: { rows: InvestmentDashboardCategoryPerformanceRow[] };
 		assets: InvestmentSummary[];
@@ -347,6 +350,27 @@ export interface InvestmentDrawerData extends InvestmentDetailShell {
 
 export type Investment = InvestmentSummary;
 
+export interface InvestmentRecurringPlanPayload {
+	amount: number;
+	cadenceUnit: string;
+	cadenceInterval: number;
+	anchorDate: string;
+	endDate?: string;
+	historicalImportMode: 'TRACK_FROM_TODAY' | 'OPENING_BALANCE';
+	autoCreateEvent?: boolean;
+	openingPrincipalAmount?: number;
+	openingIncomeAmount?: number;
+	reviewedHistoricalItems?: Array<{
+		dueDate: string;
+		eventDate?: string;
+		amount: number;
+		selected: boolean;
+		status?: string;
+		eventType?: InvestmentEventType;
+		notes?: string;
+	}>;
+}
+
 export interface CreateInvestmentDto {
 	accountId?: number | null;
 	assetTaxonomyId?: string | number | null;
@@ -366,6 +390,10 @@ export interface CreateInvestmentDto {
 	insuranceCover?: number;
 	referenceNumber?: string | null;
 	notes?: string | null;
+	expectedBenefits?: Array<Pick<InvestmentBenefit, 'benefitType' | 'amount' | 'benefitDate'> & { notes?: string; destinationAccountId?: number | null }>;
+	recurringPlan?: InvestmentRecurringPlanPayload;
+	recurringPlanId?: number;
+	recurringPlanUpdate?: Partial<Omit<InvestmentRecurringPlanPayload, 'reviewedHistoricalItems'>> & { status?: string; nextDueDate?: string | null };
 }
 
 export interface UpdateInvestmentDto extends Partial<CreateInvestmentDto> {}

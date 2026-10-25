@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InvestmentEventType } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { CreateInvestmentContributionPlanDto } from './dto/create-investment-contribution-plan.dto';
 import { UpdateInvestmentContributionPlanDto } from './dto/update-investment-contribution-plan.dto';
 import { ConfirmRecurringContributionPlanDto } from './dto/confirm-recurring-contribution-plan.dto';
@@ -228,8 +229,9 @@ export class InvestmentContributionPlansService {
     investmentId: string,
     dto: ConfirmRecurringContributionPlanDto,
     userId: number,
+    transaction?: Prisma.TransactionClient,
   ) {
-    await this.assertOpenInvestment(investmentId, userId);
+    await this.assertOpenInvestment(investmentId, userId, transaction);
     this.validatePlanDates(dto.anchorDate, dto.endDate);
 
     const today = this.toUtcDateOnly(new Date());
@@ -317,7 +319,7 @@ export class InvestmentContributionPlansService {
         userId,
         planPayload,
         selectedHistoricalItems,
-      });
+      }, transaction);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
 
@@ -346,25 +348,25 @@ export class InvestmentContributionPlansService {
     return this.repository.findAllByInvestment(investmentId);
   }
 
-  async findOne(id: string, userId?: number) {
-    const plan = await this.repository.findOne(id);
+  async findOne(id: string, userId?: number, transaction?: Prisma.TransactionClient) {
+    const plan = await this.repository.findOne(id, transaction);
     if (!plan) return null;
 
     if (userId !== undefined) {
-      await this.assertOwnedInvestment(String(plan.investmentId), userId);
+      await this.assertOwnedInvestment(String(plan.investmentId), userId, transaction);
     }
 
     return plan;
   }
 
-  async update(id: string, updateDto: UpdateInvestmentContributionPlanDto, userId?: number) {
-    const plan = await this.findOne(id, userId);
+  async update(id: string, updateDto: UpdateInvestmentContributionPlanDto, userId?: number, transaction?: Prisma.TransactionClient) {
+    const plan = await this.findOne(id, userId, transaction);
     if (!plan) return null;
 
     if (userId !== undefined) {
-      await this.assertOpenInvestment(plan.investmentId, userId);
+      await this.assertOpenInvestment(plan.investmentId, userId, transaction);
       const investmentId = String(updateDto.investmentId ?? plan.investmentId);
-      await this.assertOpenInvestment(investmentId, userId);
+      await this.assertOpenInvestment(investmentId, userId, transaction);
     }
 
     this.validatePlanMutationInput(updateDto, plan);
@@ -379,7 +381,7 @@ export class InvestmentContributionPlansService {
       await this.assertNoConflictingActivePlan(targetInvestmentId, id);
     }
 
-    return this.repository.update(id, updateDto);
+    return this.repository.update(id, updateDto, transaction);
   }
 
   async remove(id: string, userId?: number) {
@@ -431,9 +433,9 @@ export class InvestmentContributionPlansService {
     }
   }
 
-  async advanceNextDueDate(id: number) {
+  async advanceNextDueDate(id: number, transaction?: Prisma.TransactionClient) {
     // Get the current plan
-    const plan = await this.repository.findOne(String(id));
+    const plan = await this.repository.findOne(String(id), transaction);
     if (!plan) return null;
 
     if (this.normalizePlanStatus(plan.status) !== 'active') {
@@ -445,7 +447,7 @@ export class InvestmentContributionPlansService {
       nextDueDate: this.calculateNextDueDate(plan),
     };
 
-    return this.repository.update(String(id), updateDto);
+    return this.repository.update(String(id), updateDto, transaction);
   }
 
   async generateDueRecurringInvestmentEvents(cutoffDate: Date) {
@@ -478,8 +480,10 @@ export class InvestmentContributionPlansService {
     return value.toISOString().split('T')[0];
   }
 
-  private async assertOwnedInvestment(investmentId: string, userId: number) {
-    const investment = await this.investmentRepository.findOne(Number(investmentId), userId);
+  private async assertOwnedInvestment(investmentId: string, userId: number, transaction?: Prisma.TransactionClient) {
+    const investment = transaction
+      ? await transaction.investment.findFirst({ where: { id: Number(investmentId), userId } })
+      : await this.investmentRepository.findOne(Number(investmentId), userId);
     if (!investment) {
       throw new NotFoundException(`Investment ${investmentId} not found`);
     }
@@ -487,8 +491,8 @@ export class InvestmentContributionPlansService {
     return investment;
   }
 
-  private async assertOpenInvestment(investmentId: string | number, userId: number) {
-    const investment = await this.assertOwnedInvestment(String(investmentId), userId);
+  private async assertOpenInvestment(investmentId: string | number, userId: number, transaction?: Prisma.TransactionClient) {
+    const investment = await this.assertOwnedInvestment(String(investmentId), userId, transaction);
     if (String(investment.status || '').trim().toLowerCase() === 'closed') {
       throw new BadRequestException('Closed investments cannot be modified.');
     }
@@ -516,6 +520,7 @@ export class InvestmentContributionPlansService {
       anchorDate: this.toDateOnlyString(this.toUtcDateOnly(plan.anchorDate)),
       cadenceUnit: this.toCadenceUnit(plan.cadenceUnit),
       cadenceInterval: Number(plan.cadenceInterval) || 1,
+      endDate: plan.endDate ? this.toDateOnlyString(this.toUtcDateOnly(plan.endDate)) : undefined,
       referenceDate: this.toDateOnlyString(
         this.toUtcDateOnly(new Date(new Date(plan.nextDueDate).getTime() + 24 * 60 * 60 * 1000)),
       ),

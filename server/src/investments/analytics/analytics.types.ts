@@ -3,7 +3,7 @@ import type { EventLike, SnapshotLike, SummaryInvestment } from '../investment.t
 
 export type AnalyticsQuery = {
   range: 'ALL';
-  granularity: 'YEAR';
+  granularity: 'YEAR' | 'MONTH';
   calendar: 'FISCAL';
   fiscalYearStartMonth: number;
   from?: Date;
@@ -13,7 +13,7 @@ export type AnalyticsQuery = {
 export type AnalyticsPeriod = { key: string; label: string; startDate: Date; endDate: Date };
 export type AnalyticsActivity = { newContribution: number; newWithdrawal: number; newPremium: number; newIncomeCredit: number; netCashFlow: number };
 export type AnalyticsState = { cumulativeInvested: number; cumulativeWithdrawn: number; portfolioValue: number; returnAmount: number };
-export type AnalyticsPoint = { period: AnalyticsPeriod; activity: AnalyticsActivity; state: AnalyticsState; dataQuality: { cashFlow: 'complete'; portfolioValue: 'observed' | 'derived' | 'carried_forward' | 'unknown' } };
+export type AnalyticsPoint = { period: AnalyticsPeriod; activity: AnalyticsActivity; state: AnalyticsState; breakdown: { invested: Record<string, number>; returns: Record<string, number> }; valueSources: { snapshot: number; derived: number; invested: number }; dataQuality: { cashFlow: 'complete'; portfolioValue: 'observed' | 'derived' | 'carried_forward' | 'unknown' } };
 export type AnalyticsFacts = { investments: SummaryInvestment[]; events: EventLike[]; snapshots: SnapshotLike[] };
 
 export const ACTIVITY_EVENT_TYPES = new Set<InvestmentEventType>([

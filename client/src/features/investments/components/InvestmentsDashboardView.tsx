@@ -6,6 +6,7 @@ import {
   mdiTrendingUp,
 } from "@mdi/js";
 import {
+  Alert,
   Box,
   Chip,
   Divider,
@@ -47,6 +48,11 @@ import type { InvestmentSummaryPagination } from "../types/investment.types";
 
 interface InvestmentDashboardViewProps {
   investments: Investment[];
+  portfolioInvestments?: Investment[];
+  analyticsLoading?: boolean;
+  analyticsError?: string;
+  benefitsLoading?: boolean;
+  benefitsError?: boolean;
   portfolioGrowthData: InvestmentPortfolioGrowthPoint[];
   timeSeriesData: InvestmentSeriesPoint[];
   isDrillMode: boolean;
@@ -95,6 +101,11 @@ interface InvestmentDashboardViewProps {
 
 export default function InvestmentsDashboardView({
   investments,
+  portfolioInvestments = investments,
+  analyticsLoading = false,
+  analyticsError = '',
+  benefitsLoading = false,
+  benefitsError = false,
   portfolioGrowthData,
   timeSeriesData,
   isDrillMode,
@@ -249,6 +260,8 @@ export default function InvestmentsDashboardView({
 
   return (
     <Stack spacing={2}>
+      {analyticsLoading ? <Typography color="text.secondary">Loading portfolio analytics...</Typography>
+        : analyticsError ? <Alert severity="error">{analyticsError}</Alert> : <>
       {/* 5 KPI Cards */}
       <Box
         sx={{
@@ -514,7 +527,7 @@ export default function InvestmentsDashboardView({
       >
         <SectionCard
           title="Asset Type Performance"
-          subtitle="Compare invested base, current value, and 6-month trend by asset type."
+          subtitle="Compare invested base, current value, and trend across available history."
           sx={widgetCardSx}
           contentSx={widgetContentSx}
           empty={categoryPerformanceRows.length === 0}
@@ -570,7 +583,7 @@ export default function InvestmentsDashboardView({
         }}
       >
         <InsurancePositionWidget
-          investments={investments}
+          investments={portfolioInvestments}
           taxonomyNodes={taxonomyNodes}
           formatCurrency={formatCurrency}
           onSelectPolicies={(investmentIds, title, description) =>
@@ -580,15 +593,16 @@ export default function InvestmentsDashboardView({
           contentSx={widgetContentSx}
         />
 
-        <UpcomingMaturitiesBenefitsCard
-          investments={investments}
+        {benefitsLoading ? <Typography color="text.secondary">Loading upcoming benefits...</Typography>
+          : benefitsError ? <Alert severity="error">Failed to load upcoming benefits.</Alert> : <UpcomingMaturitiesBenefitsCard
+          investments={portfolioInvestments}
           formatCurrency={formatCurrency}
           onSelectInvestment={(investmentId, name) =>
             focusAssets([investmentId], name, "Focused from Upcoming Maturities & Benefits.")
           }
           sx={widgetCardSx}
           contentSx={widgetContentSx}
-        />
+        />}
       </Box>
 
       {/* Row 5: 4-Column Bottom Grid */}
@@ -788,7 +802,7 @@ export default function InvestmentsDashboardView({
                       .join(" • ")}
                   />
                   <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {formatCurrency(item.currentValue || item.totalInvested)}
+                    {formatCurrency(item.currentValue ?? item.totalInvested)}
                   </Typography>
                 </ListItem>
               </Fragment>
@@ -881,6 +895,7 @@ export default function InvestmentsDashboardView({
         </SectionCard>
       </Box>
 
+      </>}
       {/* Primary Workspace */}
       <Box ref={focusedSectionRef} sx={{ scrollMarginTop: 88 }}>
         <InvestmentsAssetsView

@@ -103,7 +103,8 @@ export const createEmptyInvestmentForm = () => ({
   notes: '',
 });
 
-export const formatInvestmentCurrency = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
+export const formatInvestmentCurrency = (value, currency = 'INR') =>
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency }).format(Number(value) || 0);
 
 export const formatInvestmentDate = (value) => {
   if (!value) return 'Not set';
@@ -322,13 +323,14 @@ export const buildFormFromInvestment = (investment, taxonomyNodes = []) => {
 
   return {
     accountId: investment.accountId != null ? String(investment.accountId) : '',
+    currency: investment.currency || 'INR',
     name: investment.name || '',
     type: investment.assetType || investment.type || typeMeta.type || '',
     category: investment.assetCategory || investment.category || '',
     assetTaxonomyId: investment.assetTaxonomyId || null,
     institution: investment.institutionName || investment.institution || '',
     totalInvested: investment.totalInvested ? String(investment.totalInvested) : '',
-    currentValue: investment.currentValue ? String(investment.currentValue) : '',
+    currentValue: investment.currentValue != null ? String(investment.currentValue) : '',
     startDate: investment.startDate ? dayjs(investment.startDate) : dayjs(),
     status: investment.status || 'active',
     maturityDate: investment.maturityDate ? dayjs(investment.maturityDate) : null,
@@ -338,8 +340,9 @@ export const buildFormFromInvestment = (investment, taxonomyNodes = []) => {
   };
 };
 
-export const buildInvestmentFromForm = (form, existingId, taxonomyNodes = []) => {
+export const buildInvestmentFromForm = (form, existingId, taxonomyNodes = [], accounts = []) => {
   const parsedAccountId = form.accountId !== '' && form.accountId != null ? Number(form.accountId) : null;
+  const account = accounts.find((item) => Number(item.id) === parsedAccountId);
 
   return {
     accountId: Number.isFinite(parsedAccountId) ? parsedAccountId : null,
@@ -348,19 +351,22 @@ export const buildInvestmentFromForm = (form, existingId, taxonomyNodes = []) =>
     assetType: String(form.type || '').trim(),
     assetCategory: String(form.category || '').trim(),
     institutionName: form.institution.trim() || null,
-    totalInvested: Number(form.totalInvested || 0),
-    currentValue: form.currentValue ? Number(form.currentValue) : Number(form.totalInvested || 0),
+    ...(existingId == null ? {
+      totalInvested: Number(form.totalInvested || 0),
+      currentValue: form.currentValue !== '' && form.currentValue != null
+        ? Number(form.currentValue) : undefined,
+      currency: account?.currency || form.currency || 'INR',
+      currentValueSource: 'manual',
+      lastValuationAt: dayjs().format('YYYY-MM-DD'),
+    } : {}),
     startDate: normalizeDateValue(form.startDate),
     status: form.status,
     maturityDate: normalizeDateValue(form.maturityDate),
-    currency: 'INR',
-    currentValueSource: 'manual',
-    lastValuationAt: normalizeDateValue(form.startDate),
     insuranceCover: form.insuranceCover ? Number(form.insuranceCover) : 0,
     contributionMode: form.contributionType === 'recurring' ? 'RECURRING' : 'ONE_TIME',
     referenceNumber: form.referenceNumber.trim() || null,
     notes: form.notes.trim() || null,
-    expectedBenefits: Array.isArray(form.expectedBenefits) && form.expectedBenefits.length > 0
+    expectedBenefits: existingId == null && Array.isArray(form.expectedBenefits) && form.expectedBenefits.length > 0
       ? form.expectedBenefits.map((benefit) => ({
           benefitType: benefit.benefitType,
           amount: Number(benefit.amount || 0),
@@ -370,3 +376,115 @@ export const buildInvestmentFromForm = (form, existingId, taxonomyNodes = []) =>
       : undefined,
   };
 };
+
+export const mapFrequencyToCadence = frequencyToCadence;
+
+export const toDateOnly = (value) => {
+  if (!value) return null;
+  const parsed = dayjs(value);
+  if (!parsed.isValid()) return null;
+  return parsed.format("YYYY-MM-DD");
+};
+
+export const buildRecurringPayloadFromFormValues = (baseValues) => {
+  const plan = baseValues?.recurringPlan || {};
+  const cadence = mapFrequencyToCadence(plan.frequency);
+
+  return {
+    amount: Number(plan.amount || 0),
+    cadenceUnit: cadence.cadenceUnit,
+    cadenceInterval: cadence.cadenceInterval,
+    anchorDate: toDateOnly(plan.anchorDate || baseValues.startDate),
+    endDate: toDateOnly(plan.endDate) || undefined,
+    historicalImportMode: plan.historicalImportMode || "TRACK_FROM_TODAY",
+    autoCreateEvent: false,
+    openingPrincipalAmount:
+      plan.openingPrincipalAmount !== "" && plan.openingPrincipalAmount !== undefined
+        ? Number(plan.openingPrincipalAmount) : undefined,
+    openingIncomeAmount:
+      plan.openingIncomeAmount !== "" && plan.openingIncomeAmount !== undefined
+        ? Number(plan.openingIncomeAmount) : undefined,
+  };
+};
+
+export const buildRecurringPlanUpdatePayloadFromFormValues = (formValues, existingPlan) => {
+  const recurringPayload = buildRecurringPayloadFromFormValues(formValues);
+  return {
+    amount: recurringPayload.amount,
+    cadenceUnit: recurringPayload.cadenceUnit,
+    cadenceInterval: recurringPayload.cadenceInterval,
+    anchorDate: recurringPayload.anchorDate,
+    nextDueDate: toDateOnly(formValues?.recurringPlan?.nextContributionDate),
+    endDate: recurringPayload.endDate,
+    historicalImportMode: recurringPayload.historicalImportMode,
+    status: existingPlan?.status || undefined,
+  };
+};
+
+export const buildRecurringReviewState = ({
+  formValues,
+  nextInvestment,
+  drawerMode,
+  selectedInvestmentId,
+  selectedInvestment,
+}) => {
+  const recurringPayload = buildRecurringPayloadFromFormValues(formValues);
+  const existingPlan = selectedInvestment?.activeContributionPlan;
+  const alreadyHasActivePlan = drawerMode === "edit" && Boolean(existingPlan);
+  const reviewedHistoricalItems = [];
+
+  if (recurringPayload.historicalImportMode === "OPENING_BALANCE" && !alreadyHasActivePlan) {
+    const openingDate = toDateOnly(formValues?.startDate) || toDateOnly(dayjs());
+    const openingItems = [
+      ["openingPrincipalAmount", "OPENING_BALANCE", "Opening principal import"],
+      ["openingIncomeAmount", "OPENING_INCOME_CREDIT", "Opening historical income import"],
+    ];
+
+    openingItems.forEach(([amountKey, eventType, notes]) => {
+      const amount = Number(formValues?.recurringPlan?.[amountKey] || 0);
+      if (amount > 0) {
+        reviewedHistoricalItems.push({
+          dueDate: openingDate,
+          eventDate: openingDate,
+          amount,
+          selected: true,
+          status: "CONFIRMED",
+          eventType,
+          notes,
+        });
+      }
+    });
+  }
+
+  return {
+    formValues,
+    investmentPayload: nextInvestment,
+    recurringPayload,
+    reviewedHistoricalItems,
+    historicalImportMode: recurringPayload.historicalImportMode,
+    drawerMode,
+    selectedInvestmentId,
+    alreadyHasActivePlan,
+    activePlanId: existingPlan?.id || null,
+    investmentName: nextInvestment?.name || selectedInvestment?.name || "",
+    reviewSummary: {
+      investment: [
+        { label: "Name", value: nextInvestment?.name || "-" },
+        { label: "Status", value: nextInvestment?.status || "-" },
+      ],
+      valuation: [
+        { label: "Current value", value: formatInvestmentCurrency(nextInvestment?.currentValue) },
+      ],
+      recurring: [
+        { label: "Contribution", value: formatInvestmentCurrency(recurringPayload.amount) },
+        { label: "Anchor date", value: recurringPayload.anchorDate || "-" },
+        { label: "Import mode", value: recurringPayload.historicalImportMode },
+      ],
+    },
+  };
+};
+
+export const buildRecurringConfirmPayload = (recurringPayload, reviewedHistoricalItems) => ({
+  ...recurringPayload,
+  reviewedHistoricalItems: Array.isArray(reviewedHistoricalItems) ? reviewedHistoricalItems : [],
+});

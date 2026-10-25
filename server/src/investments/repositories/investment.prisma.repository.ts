@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { InvestmentListQuery, InvestmentRecord } from '../investment.types';
 import { resolveAccountingTreatment } from '../investment.types';
@@ -173,14 +174,14 @@ export class InvestmentPrismaRepository implements IInvestmentDataSourcePort {
     };
   }
 
-  async create(data: CreateInvestmentDto, userId: number): Promise<InvestmentRecord> {
+  async create(data: CreateInvestmentDto, userId: number, transaction?: Prisma.TransactionClient): Promise<InvestmentRecord> {
     const { assetTypeMetaId, assetCategoryMetaId } = await this.resolveAssetMetaIds(
       data.assetType,
       data.assetCategory,
     );
-    const prismaClient = this.prisma as any;
+    const prismaClient = transaction ?? this.prisma;
 
-    const createData: any = {
+    const createData: Prisma.InvestmentUncheckedCreateInput = {
       userId,
       accountId: normalizeNullableNumber(data.accountId),
       assetTaxonomyId: normalizeNullableNumber(data.assetTaxonomyId),
@@ -359,9 +360,9 @@ export class InvestmentPrismaRepository implements IInvestmentDataSourcePort {
     return investment ? mapInvestmentOutput(investment) : null;
   }
 
-  async update(id: number, data: UpdateInvestmentDto, userId: number): Promise<InvestmentRecord | null> {
+  async update(id: number, data: UpdateInvestmentDto, userId: number, transaction?: Prisma.TransactionClient): Promise<InvestmentRecord | null> {
     await this.repairNullMetaIdsIfNeeded();
-    const prismaClient = this.prisma as any;
+    const prismaClient = transaction ?? this.prisma;
 
     const existing = await prismaClient.investment.findFirst({
       where: { id, userId },

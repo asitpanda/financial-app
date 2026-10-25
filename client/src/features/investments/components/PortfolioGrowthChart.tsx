@@ -1,4 +1,5 @@
 import { Box, Stack, Typography, useTheme } from "@mui/material";
+import dayjs from "dayjs";
 import { useState } from "react";
 import AppButton from "../../../components/common/AppButton";
 import type { InvestmentPortfolioGrowthPoint } from "../investments.selectors";
@@ -14,11 +15,11 @@ interface PortfolioGrowthChartProps {
   formatValue: (value: number) => string;
 }
 
-const TIMEFRAME_OPTIONS = [
-  { value: "6m", label: "6M", months: 6 },
-  { value: "1y", label: "1Y", months: 12 },
-  { value: "all", label: "All", months: null },
-] as const;
+const getFiscalYearLabel = (label: string) => {
+  const date = dayjs(label);
+  const year = date.month() >= 3 ? date.year() : date.year() - 1;
+  return `FY ${year}-${String(year + 1).slice(-2)}`;
+};
 
 const createLinePath = (points: Array<{ x: number; y: number }>) => {
   if (points.length === 0) return "";
@@ -33,11 +34,7 @@ const createLinePath = (points: Array<{ x: number; y: number }>) => {
 };
 
 const getXAxisStep = (pointCount: number) => {
-  if (pointCount > 84) return 12;
-  if (pointCount > 48) return 6;
-  if (pointCount > 24) return 3;
-  if (pointCount > 12) return 2;
-  return 1;
+  return Math.max(1, Math.ceil((pointCount - 1) / 5));
 };
 
 export default function PortfolioGrowthChart({
@@ -45,16 +42,18 @@ export default function PortfolioGrowthChart({
   formatValue,
 }: PortfolioGrowthChartProps) {
   const theme = useTheme();
-  const [timeframe, setTimeframe] = useState<(typeof TIMEFRAME_OPTIONS)[number]["value"]>("1y");
+  const [selectedYear, setSelectedYear] = useState("all");
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  const selectedOption = TIMEFRAME_OPTIONS.find(
-    (option) => option.value === timeframe,
-  );
-  const visibleData =
-    !selectedOption || selectedOption.months === null
-      ? data
-      : data.slice(-selectedOption.months);
+  const yearlyPoints = new Map<string, InvestmentPortfolioGrowthPoint>();
+  data.forEach((item) => {
+    const label = getFiscalYearLabel(item.label);
+    yearlyPoints.set(label, { ...item, label });
+  });
+  const isYearlyView = !yearlyPoints.has(selectedYear);
+  const visibleData = isYearlyView
+    ? Array.from(yearlyPoints.values())
+    : data.filter((item) => getFiscalYearLabel(item.label) === selectedYear);
 
   if (data.length === 0) {
     return (
@@ -131,31 +130,16 @@ export default function PortfolioGrowthChart({
 
   return (
     <Stack spacing={2}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
-        <Typography variant="caption" color="text.secondary" sx={{ alignSelf: "center" }}>
-          View portfolio growth over a shorter or longer history.
-        </Typography>
-        <Box sx={{ display: "inline-flex", gap: 0.5, p: 0.5, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
-          {TIMEFRAME_OPTIONS.map((option) => {
-            const selected = timeframe === option.value;
-
-            return (
-              <AppButton
-                key={option.value}
-                size="small"
-                variant={selected ? "contained" : "text"}
-                onClick={() => {
-                  setTimeframe(option.value);
-                  setHoveredIndex(null);
-                }}
-                sx={{ minWidth: 52, px: 1.25 }}
-              >
-                {option.label}
-              </AppButton>
-            );
-          })}
+      {!isYearlyView && (
+        <Box>
+          <AppButton variant="text" onClick={() => {
+            setSelectedYear("all");
+            setHoveredIndex(null);
+          }}>
+            Back to Yearly View
+          </AppButton>
         </Box>
-      </Box>
+      )}
 
       <Box
         sx={{
@@ -269,22 +253,50 @@ export default function PortfolioGrowthChart({
             strokeLinejoin="round"
           />
 
-          {points.map((point) => (
+          {points.filter((point) =>
+            point.index === 0 ||
+            point.index === points.length - 1 ||
+            (point.index % xAxisStep === 0 && points.length - 1 - point.index >= xAxisStep),
+          ).map((point) => (
             <text
               key={`x-${point.label}`}
               x={point.x}
               y={chartHeight - padding.bottom + 20}
-              textAnchor="middle"
+              textAnchor={point.index === 0 ? "start" : point.index === points.length - 1 ? "end" : "middle"}
               style={{ fontSize: 11, fill: theme.palette.text.secondary }}
             >
-              {point.index === 0 ||
-              point.index === points.length - 1 ||
-              point.index % xAxisStep === 0
-                ? xAxisStep >= 12
-                  ? point.label.slice(-4)
-                  : point.label
-                : ""}
+              {isYearlyView ? point.label : dayjs(point.label).format("MMM")}
             </text>
+          ))}
+
+          {isYearlyView && points.map((point) => (
+            <rect
+              key={`select-${point.label}`}
+              x={Math.max(padding.left, point.x - plotWidth / Math.max(points.length - 1, 1) / 2)}
+              y={padding.top}
+              width={points.length === 1 ? plotWidth : plotWidth / (points.length - 1) / (point.index === 0 || point.index === points.length - 1 ? 2 : 1)}
+              height={plotHeight}
+              fill="transparent"
+              role="button"
+              tabIndex={0}
+              aria-label={`View monthly breakdown for ${point.label}`}
+              onMouseEnter={() => setHoveredIndex(point.index)}
+              onMouseLeave={() => setHoveredIndex(null)}
+              onFocus={() => setHoveredIndex(point.index)}
+              onBlur={() => setHoveredIndex(null)}
+              onClick={() => {
+                setSelectedYear(point.label);
+                setHoveredIndex(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setSelectedYear(point.label);
+                  setHoveredIndex(null);
+                }
+              }}
+              style={{ cursor: "pointer" }}
+            />
           ))}
 
           {activePoint ? (
@@ -428,9 +440,6 @@ export default function PortfolioGrowthChart({
         </Box>
       </Box>
 
-      <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center" }}>
-        Hover a month to inspect cumulative invested amount, portfolio value, and return. The gap is green for gain and red for loss.
-      </Typography>
     </Stack>
   );
 }

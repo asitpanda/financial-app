@@ -10,14 +10,10 @@ const invalidateBenefitQueries = (
   investmentId: string | number,
 ) => {
   queryClient.invalidateQueries({ queryKey: ['investment-benefits'] });
-  queryClient.invalidateQueries({ queryKey: ['investment-benefits', investmentId] });
-  queryClient.invalidateQueries({ queryKey: ['investments'], exact: true });
-  queryClient.invalidateQueries({ queryKey: ['investments', 'dashboard'], exact: true });
+  queryClient.invalidateQueries({ queryKey: ['investments'] });
   queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-  queryClient.invalidateQueries({ queryKey: ['investment', investmentId] });
-  queryClient.invalidateQueries({ queryKey: ['investment', investmentId, 'performance'] });
+  queryClient.invalidateQueries({ queryKey: ['investment', Number(investmentId)] });
   queryClient.invalidateQueries({ queryKey: ['investment-events'] });
-  queryClient.invalidateQueries({ queryKey: ['investment-events', investmentId] });
 };
 
 export const useInvestmentBenefits = (enabled = true) =>
@@ -32,7 +28,7 @@ export const useInvestmentBenefitsByInvestment = (
   enabled = true,
 ) =>
   useQuery({
-    queryKey: ['investment-benefits', investmentId],
+    queryKey: ['investment-benefits', Number(investmentId)],
     queryFn: () => investmentBenefitsApi.getByInvestmentId(investmentId),
     enabled: Boolean(investmentId) && enabled,
   });
@@ -43,7 +39,7 @@ export const useInvestmentBenefit = (
   enabled = true,
 ) =>
   useQuery({
-    queryKey: ['investment-benefits', investmentId, benefitId],
+    queryKey: ['investment-benefits', Number(investmentId), benefitId],
     queryFn: () => investmentBenefitsApi.getById(investmentId, benefitId),
     enabled: Boolean(investmentId) && Boolean(benefitId) && enabled,
   });
@@ -108,7 +104,10 @@ export const useRealizeInvestmentBenefit = () => {
       benefitId: string | number;
       payload: RealizeInvestmentBenefitPayload;
     }) => investmentBenefitsApi.realize(investmentId, benefitId, payload),
-    onSuccess: (_result, variables) => invalidateBenefitQueries(queryClient, variables.investmentId),
+    onSuccess: (_result, variables) => {
+      invalidateBenefitQueries(queryClient, variables.investmentId);
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
   });
 };
 
@@ -123,6 +122,9 @@ export const useQuickRealizeInvestmentBenefit = () => {
       investmentId: string | number;
       payload: QuickRealizeInvestmentBenefitPayload;
     }) => investmentBenefitsApi.quickRealize(investmentId, payload),
-    onSuccess: (_result, variables) => invalidateBenefitQueries(queryClient, variables.investmentId),
+    onSuccess: (_result, variables) => {
+      invalidateBenefitQueries(queryClient, variables.investmentId);
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
   });
 };

@@ -30,7 +30,7 @@ export class CategoryMockRepository implements ICategoryDataSourcePort {
   }
 
   async findOne(id: number, userId: number): Promise<CategoryRecord | null> {
-    return mockCategories.find(cat => cat.id === id && cat.userId === userId);
+    return mockCategories.find(cat => cat.id === id && cat.userId === userId) ?? null;
   }
 
   async update(id: number, data: UpdateCategoryDto, userId: number): Promise<CategoryRecord | null> {

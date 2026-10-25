@@ -110,7 +110,7 @@ Datasource tokens use uppercase snake case, for example `TRANSACTION_DATA_SOURCE
     <feature>.mock.repository.ts
 ```
 
-Feature folders use kebab-case for multi-word names. The active modules are registered from `server/src/app.module.ts`. `investment-goal-allocations` is currently scaffolded but not registered and should be treated as inactive infrastructure.
+Feature folders use kebab-case for multi-word names. The active modules are registered from `server/src/app.module.ts`.
 
 ### Folder ownership agreement
 
@@ -418,6 +418,26 @@ This keeps reporting, contribution totals, expenses, portfolio inclusion, and va
 `InvestmentContributionPlan` is reused for investment contributions and insurance premiums because both require amount, cadence, dates, reminders, status, and event generation. The generated event type distinguishes `CONTRIBUTION` from `PREMIUM`.
 
 `InvestmentBenefit` represents an expected entitlement. It is not cash history or a valuation. When realized, it can produce an investment event and a linked transaction where money moves.
+
+### Investment write boundaries
+
+- Database-backed contribution and withdrawal commands share a serializable transaction across cash, event, principal synchronization, and recurring schedule writes. An expected scheduled event is confirmed in place rather than duplicated.
+- Contributions and withdrawals accept an optional UUID `requestId`. Retries must reuse the same ID and payload; confirmed events retain the ID in metadata. The activity form preserves it after a failed request and clears it after success. This does not provide replay protection for holding creation or quick benefit creation.
+- Investment creation saves the holding, opening activity, initial valuation, expected benefits, and optional reviewed recurring plan together. `recurringPlan` carries a new reviewed plan; updates use `recurringPlanId` plus `recurringPlanUpdate` for an existing plan. The client does not compensate for a failed plan save by deleting the holding.
+- Dashboard and Investments open the shared `InvestmentSaveDrawer` in place, without creation-time navigation. It owns the form, recurring review, and save mutation; successful saves invalidate Dashboard and investment queries. Open edit drafts are initialized once per entity/open cycle, after required event data loads, and do not reset on background query refreshes.
+- Linked cash/activity and benefit/activity records cannot be edited independently. Metadata updates cannot change ledger-owned principal, snapshot-owned valuation, or investment currency. Expected benefits are seeded only on creation; later changes use the benefit endpoints.
+- Account associations are user-owned and use the investment currency. Contributions, withdrawals, and benefit cash movements do not implicitly convert currencies.
+
+### Investment valuation and analytics ownership
+
+- The event ledger owns principal. A latest valuation snapshot, including a zero value, owns observed value. Without a snapshot, ordinary investments use principal plus retained income; insurance premiums do not manufacture a policy value. Event, plan-import, and snapshot repositories share the persistence synchronization helper. Snapshot mutation and synchronization commit together.
+- An explicitly entered one-time current value, including zero, creates an initial valuation snapshot, not a retained-income event. A blank value does not create a snapshot. Explicit historical income imports remain supported separately.
+- New insurance payments are `PREMIUM` events. Premium reports also recognize legacy insurance `CONTRIBUTION` and `OPENING_BALANCE` history without rewriting it. Protection products are excluded from portfolio capital/value; insurance savings enter growth capital/value only when an observed snapshot exists.
+- Grouped asset rows expose confirmed `premiumsPaid` separately from principal. Insurance widgets use this history, show only expected benefits as upcoming, and exclude paused plans from due dates. Recurrence advancement respects the plan end date.
+- Analytics events and snapshots are scoped to the selected non-closed holdings and exclude future facts. This is a current-holdings view, not a realized lifetime-return report for closed products. Principal redemption is represented by `WITHDRAWAL_PRINCIPAL`, not inferred from a generic benefit receipt.
+- The grouped dashboard response exposes monthly portfolio growth, annual fiscal capital deployment, monthly drill-down children, and dated breakdown/value-source components. The client selects and formats these facts rather than rebuilding history from current holding totals.
+- Mixed-currency aggregation is rejected until an exchange-rate or explicit currency-grouping contract exists. The paginated holdings workspace remains available when analytics fails. Portfolio widgets use the full dashboard asset collection rather than the table page.
+- Query keys normalize investment IDs to numbers. Financial mutations refresh cash consumers, and benefit changes invalidate paginated investment queries. Detail history and benefits distinguish loading, failed reads, and actual empty results.
 
 ## 7. Cross-cutting runtime contracts
 

@@ -1,8 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDateString, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString } from 'class-validator';
+import { IsDateString, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID } from 'class-validator';
 
 export class RecordWithdrawalDto {
+  @ApiProperty({ required: false, description: 'Stable identity for retries of the same activity' })
+  @IsOptional()
+  @IsUUID()
+  requestId?: string;
+
   @ApiProperty({ description: 'Investment id' })
   @IsNotEmpty()
   @IsString()

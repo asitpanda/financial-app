@@ -746,20 +746,21 @@ export const getInvestmentCategoryPerformanceRows = (
 // Derives one performance row per individual investment for the 3rd drill level.
 export const getInvestmentHoldingPerformanceRows = (
   investments: Investment[],
-  months = 12,
+  months: number | null = 12,
 ): InvestmentCategoryPerformanceRow[] => {
   const records = getResolvedInvestmentRecords(investments).filter((item) =>
     isPortfolioInvestment(item.investment),
   );
-  const trendMonths = Math.max(months, 1);
-  const monthPoints = Array.from({ length: trendMonths }, (_, index) =>
-    dayjs()
-      .startOf('month')
-      .subtract(trendMonths - 1 - index, 'month')
-      .endOf('month'),
-  );
+  const currentMonth = dayjs().startOf('month');
 
   return records.map((record) => {
+    const startMonth = months === null
+      ? record.timelineStartDate
+      : currentMonth.subtract(Math.max(months, 1) - 1, 'month');
+    const trendMonths = Math.max(currentMonth.diff(startMonth, 'month') + 1, 1);
+    const monthPoints = Array.from({ length: trendMonths }, (_, index) =>
+      startMonth.add(index, 'month').endOf('month'),
+    );
     const invested = record.investedAmount;
     const currentValue = record.currentValue;
     const returnAmount = currentValue - invested;
@@ -780,7 +781,8 @@ export const getInvestmentHoldingPerformanceRows = (
       investmentIds: [record.id],
       assetType: assetTypeKey,
       assetCategory: rawCat || undefined,
-      sparkline: monthPoints.map((pointDate) =>
+      sparkline: !(record.investment.valuationSnapshots?.length || ('investmentEvents' in record.investment && Array.isArray(record.investment.investmentEvents) && record.investment.investmentEvents.length))
+        ? [] : monthPoints.map((pointDate) =>
         record.timelineStartDate.isAfter(pointDate)
           ? 0
           : getInvestmentCurrentValueAtDate(record.investment, pointDate),
@@ -991,6 +993,8 @@ export const getUpcomingMaturitiesAndBenefits = (
         if (benefit.status === 'CANCELLED') return;
         const benefitDate = dayjs(benefit.benefitDate).startOf('day');
         if (!benefitDate.isValid()) return;
+        if (benefit.benefitType === 'MATURITY') seenBenefitDates.add(benefitDate.format('YYYY-MM-DD'));
+        if ((benefit.status ?? 'EXPECTED') !== 'EXPECTED') return;
 
         const daysUntil = benefitDate.diff(today, 'day');
         // Non-overlapping exclusive bucket rules:
@@ -1020,7 +1024,6 @@ export const getUpcomingMaturitiesAndBenefits = (
             daysUntil,
             status: benefit.status || 'EXPECTED',
           });
-          seenBenefitDates.add(benefitDate.format('YYYY-MM-DD'));
         }
       });
     }
@@ -1050,7 +1053,7 @@ export const getUpcomingMaturitiesAndBenefits = (
             accountingTreatment: treatment,
             benefitType: 'MATURITY',
             benefitLabel: 'Maturity',
-            amount: Number(investment.currentValue || investment.totalInvested || 0),
+            amount: Number(investment.currentValue ?? investment.totalInvested ?? 0),
             dueDate: investment.maturityDate,
             daysUntil,
             status: 'EXPECTED',
@@ -1173,7 +1176,7 @@ export const getInsurancePositionData = (
   insuranceInvestments.forEach((item) => {
     const treatment = getAccountingTreatment(item);
     const cover = Number(item.insuranceCover || 0);
-    const invested = Number(item.totalInvested || 0);
+    const invested = Number(item.premiumsPaid ?? item.totalInvested ?? 0);
     const annPremium = getAnnualizedPremium(item);
 
     if (treatment === 'PROTECTION_EXPENSE') {
@@ -1188,7 +1191,7 @@ export const getInsurancePositionData = (
 
     if (Array.isArray(item.benefits)) {
       item.benefits.forEach((benefit) => {
-        if (benefit.status !== 'CANCELLED') {
+        if (benefit.status === 'EXPECTED') {
           expectedBenefitsTotal += Number(benefit.amount || 0);
         }
       });
@@ -1221,7 +1224,7 @@ export const getInsurancePositionData = (
   const categoryRows: InsurancePositionRow[] = Object.entries(categoryGroups).map(
     ([catKey, items]) => {
       const cover = items.reduce((sum, item) => sum + Number(item.insuranceCover || 0), 0);
-      const premium = items.reduce((sum, item) => sum + Number(item.totalInvested || 0), 0);
+      const premium = items.reduce((sum, item) => sum + Number(item.premiumsPaid ?? item.totalInvested ?? 0), 0);
       const annPremium = items.reduce((sum, item) => sum + getAnnualizedPremium(item), 0);
       const val = items.reduce((sum, item) => sum + Number(item.currentValue || 0), 0);
       const benefits = items.reduce(
@@ -1229,7 +1232,7 @@ export const getInsurancePositionData = (
           sum +
           (Array.isArray(item.benefits)
             ? item.benefits
-                .filter((b) => b.status !== 'CANCELLED')
+                .filter((b) => b.status === 'EXPECTED')
                 .reduce((bSum, b) => bSum + Number(b.amount || 0), 0)
             : 0),
         0,
@@ -1238,7 +1241,7 @@ export const getInsurancePositionData = (
 
       // Find earliest upcoming due date among group
       const duePlans = items
-        .filter((item) => item.activeContributionPlan?.nextDueDate)
+        .filter((item) => item.activeContributionPlan?.nextDueDate && item.activeContributionPlan.status?.toLowerCase() === 'active')
         .map((item) => ({
           dueDate: item.activeContributionPlan!.nextDueDate,
           dueAmount: Number(item.activeContributionPlan!.amount || 0),
@@ -1272,12 +1275,13 @@ export const getInsurancePositionData = (
   const policyRows: InsurancePositionRow[] = insuranceInvestments.map((item) => {
     const benefits = Array.isArray(item.benefits)
       ? item.benefits
-          .filter((b) => b.status !== 'CANCELLED')
+          .filter((b) => b.status === 'EXPECTED')
           .reduce((bSum, b) => bSum + Number(b.amount || 0), 0)
       : 0;
 
     const { nextBenefitLabel, nextBenefitAmount, nextBenefitDate } = getNextBenefitInfo(item);
-    const { daysUntilDue, dueUrgency } = getDueUrgencyInfo(item.activeContributionPlan?.nextDueDate);
+    const activePlan = item.activeContributionPlan?.status?.toLowerCase() === 'active' ? item.activeContributionPlan : null;
+    const { daysUntilDue, dueUrgency } = getDueUrgencyInfo(activePlan?.nextDueDate);
 
     return {
       key: String(item.id),
@@ -1286,15 +1290,15 @@ export const getInsurancePositionData = (
       holdingsCount: 1,
       treatment: getAccountingTreatment(item),
       insuranceCover: Number(item.insuranceCover || 0),
-      totalInvestedOrPremium: Number(item.totalInvested || 0),
+      totalInvestedOrPremium: Number(item.premiumsPaid ?? item.totalInvested ?? 0),
       annualPremium: getAnnualizedPremium(item),
       currentValue: Number(item.currentValue || 0) > 0 ? Number(item.currentValue) : undefined,
       expectedBenefits: benefits,
       nextBenefitLabel,
       nextBenefitAmount,
       nextBenefitDate,
-      nextDueDate: item.activeContributionPlan?.nextDueDate,
-      nextDueAmount: item.activeContributionPlan?.amount,
+      nextDueDate: activePlan?.nextDueDate,
+      nextDueAmount: activePlan?.amount,
       daysUntilDue,
       dueUrgency,
       investmentIds: [item.id],

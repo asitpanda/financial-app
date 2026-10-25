@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type { ValuationSnapshotRecord } from './valuation-snapshot.types';
 import { CreateValuationSnapshotDto } from './dto/create-valuation-snapshot.dto';
 import { UpdateValuationSnapshotDto } from './dto/update-valuation-snapshot.dto';
 import { InvestmentRepository } from '../investments/repositories/investment.repository';
@@ -11,16 +10,6 @@ export class ValuationSnapshotsService {
     private readonly repository: ValuationSnapshotRepository,
     private readonly investmentRepository: InvestmentRepository,
   ) {}
-
-  private getLatestSnapshot(snapshots: ValuationSnapshotRecord[] = []): ValuationSnapshotRecord | null {
-    return snapshots
-      .filter((snapshot) => snapshot?.snapshotDate)
-      .sort(
-        (left, right) =>
-          new Date(right.snapshotDate).getTime() -
-          new Date(left.snapshotDate).getTime(),
-      )[0] ?? null;
-  }
 
   private async resolveInvestmentUserId(investmentId: string | number) {
     const investment = await this.investmentRepository.findById(Number(investmentId));
@@ -50,37 +39,6 @@ export class ValuationSnapshotsService {
     return snapshot;
   }
 
-  private async syncInvestmentCurrentValue(investmentId: string | number, userId: number) {
-    const investment = await this.investmentRepository.findOne(Number(investmentId), userId);
-    if (!investment) return;
-
-    const snapshots = await this.repository.findAllByInvestment(String(investmentId));
-    const latestSnapshot = this.getLatestSnapshot(snapshots);
-
-    if (!latestSnapshot) {
-      await this.investmentRepository.update(
-        Number(investmentId),
-        {
-          currentValue: investment.totalInvested,
-          lastValuationAt: null,
-          currentValueSource: 'manual',
-        },
-        userId,
-      );
-      return;
-    }
-
-    await this.investmentRepository.update(
-      Number(investmentId),
-      {
-        currentValue: Number(latestSnapshot.marketValue ?? investment.currentValue ?? 0),
-        lastValuationAt: new Date(latestSnapshot.snapshotDate).toISOString(),
-        currentValueSource: 'valuation_snapshot',
-      },
-      userId,
-    );
-  }
-
   async create(createValuationSnapshotDto: CreateValuationSnapshotDto, userId?: number) {
     const resolvedUserId = userId !== undefined
       ? Number((await this.assertOpenInvestment(createValuationSnapshotDto.investmentId, userId)).userId)
@@ -89,10 +47,6 @@ export class ValuationSnapshotsService {
       ...createValuationSnapshotDto,
       userId: String(resolvedUserId),
     });
-    await this.syncInvestmentCurrentValue(
-      snapshot.investmentId,
-      resolvedUserId,
-    );
     return snapshot;
   }
 
@@ -134,24 +88,6 @@ export class ValuationSnapshotsService {
     }
 
     const snapshot = await this.repository.update(id, updateValuationSnapshotDto);
-    const investmentIds = new Set<string | number>();
-
-    if (existingSnapshot?.investmentId != null) {
-      investmentIds.add(existingSnapshot.investmentId);
-    }
-    if (snapshot?.investmentId != null) {
-      investmentIds.add(snapshot.investmentId);
-    }
-
-    await Promise.all(
-      Array.from(investmentIds).map(async (investmentId) => {
-        const resolvedUserId = userId !== undefined
-          ? Number((await this.assertOwnedInvestment(investmentId, userId)).userId)
-          : await this.resolveInvestmentUserId(investmentId);
-        return this.syncInvestmentCurrentValue(investmentId, resolvedUserId);
-      }),
-    );
-
     return snapshot;
   }
 
@@ -169,16 +105,6 @@ export class ValuationSnapshotsService {
     }
 
     await this.repository.delete(id);
-
-    if (existingSnapshot?.investmentId != null) {
-      const resolvedUserId = userId !== undefined
-        ? Number((await this.assertOwnedInvestment(existingSnapshot.investmentId, userId)).userId)
-        : await this.resolveInvestmentUserId(existingSnapshot.investmentId);
-      await this.syncInvestmentCurrentValue(
-        existingSnapshot.investmentId,
-        resolvedUserId,
-      );
-    }
   }
 
   private async assertOpenInvestment(investmentId: string | number, userId: number) {

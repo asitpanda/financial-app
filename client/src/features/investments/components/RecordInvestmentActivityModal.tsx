@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -21,7 +21,7 @@ import {
   LabeledTextareaField,
 } from '../../../components/common';
 import { getProfitLossHexColor } from '../../../colors';
-import { INVESTMENT_BENEFIT_OPTIONS } from '../../../utils/investmentHelpers';
+import { formatInvestmentCurrency, INVESTMENT_BENEFIT_OPTIONS } from '../../../utils/investmentHelpers';
 import {
   useRecordInvestmentContribution,
   useRecordInvestmentIncomeCredit,
@@ -40,6 +40,7 @@ import { INVESTMENT_EVENT_TYPES } from '../../../types/investmentEventTypes';
 
 interface ActivityAccount {
   id: string | number;
+  currency?: string;
   name?: string;
   displayName?: string;
   institutionName?: string;
@@ -106,11 +107,6 @@ const MODES = {
   },
 };
 
-const formatCurrency = (value) => {
-  const amount = Number(value) || 0;
-  return `₹${Math.abs(amount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
-};
-
 export default function RecordInvestmentActivityModal({
   open,
   onClose,
@@ -123,6 +119,8 @@ export default function RecordInvestmentActivityModal({
   realizationBenefit = null,
   closeMode = false,
 }: RecordInvestmentActivityModalProps) {
+  const formatCurrency = (value) => formatInvestmentCurrency(value, investment?.currency || 'INR');
+  const activityRequest = useRef({ signature: '', requestId: '' });
   const isEditing = Boolean(editingEvent?.id);
   const isEditingBenefit = Boolean(editingBenefit?.id);
   const isRealizingBenefit = Boolean(realizationBenefit?.id);
@@ -160,9 +158,14 @@ export default function RecordInvestmentActivityModal({
     linkedAccount?.institutionName ||
     (resolvedAccountId ? `Account ${resolvedAccountId}` : 'No linked account');
   const availableBalance = Number(linkedAccount?.currentBalance ?? 0);
+  const requestedContributionAmount = Number(amount);
+  const hasInsufficientContributionBalance =
+    mode === 'contribution' &&
+    requestedContributionAmount > 0 &&
+    requestedContributionAmount > availableBalance;
   const hasLinkedAccount = Boolean(resolvedAccountId);
   const destinationAccountOptions = accounts
-    .filter((account) => account?.isActive !== false)
+    .filter((account) => account?.isActive !== false && (!account.currency || account.currency.toUpperCase() === String(investment?.currency || 'INR').toUpperCase()))
     .map((account) => ({
       value: String(account.id),
       label: [account.displayName || account.name, account.institutionName, account.accountNumberMasked]
@@ -253,6 +256,11 @@ export default function RecordInvestmentActivityModal({
       return;
     }
 
+    if (mode === 'contribution' && numericAmount > availableBalance) {
+      setError(`Insufficient balance in ${accountLabel}. Available: ${formatCurrency(availableBalance)}.`);
+      return;
+    }
+
     if (mode === 'withdrawal' && numericAmount > Number(investment?.totalInvested || 0)) {
       setError('Withdrawal cannot exceed invested principal.');
       return;
@@ -275,6 +283,10 @@ export default function RecordInvestmentActivityModal({
 
     setAction('record');
     setError('');
+    const signature = JSON.stringify({ investmentId: investment.id, planId: contributionPlan?.id, mode, amount: numericAmount, date, notes });
+    if (activityRequest.current.signature !== signature) {
+      activityRequest.current = { signature, requestId: crypto.randomUUID() };
+    }
     try {
       if (isRealizingBenefit) {
         const destinationId = Number(destinationAccountId);
@@ -346,6 +358,7 @@ export default function RecordInvestmentActivityModal({
         });
       } else if (mode === 'contribution') {
         await recordContribution.mutateAsync({
+          requestId: activityRequest.current.requestId,
           investmentId: String(investment.id),
           ...(contributionPlan?.id ? { contributionPlanId: String(contributionPlan.id) } : {}),
           amount: numericAmount,
@@ -354,6 +367,7 @@ export default function RecordInvestmentActivityModal({
         });
       } else if (mode === 'withdrawal') {
         await recordWithdrawal.mutateAsync({
+          requestId: activityRequest.current.requestId,
           investmentId: String(investment.id),
           amount: numericAmount,
           transactionDate: date,
@@ -385,6 +399,7 @@ export default function RecordInvestmentActivityModal({
         });
       }
 
+      activityRequest.current = { signature: '', requestId: '' };
       pushNotification({ type: 'success', message: isRealizingBenefit || closeMode ? 'Investment benefit realized and investment closed successfully' : isEditingBenefit ? 'Investment benefit updated successfully' : isEditing ? 'Income credit updated successfully' : `${modeConfig.label} recorded successfully` });
       onClose();
     } catch (requestError) {
@@ -570,6 +585,11 @@ export default function RecordInvestmentActivityModal({
             value={amount}
             onValueChange={setAmount}
           />
+          {hasInsufficientContributionBalance ? (
+            <Alert severity="error">
+              Insufficient balance in {accountLabel}. Available: {formatCurrency(availableBalance)}.
+            </Alert>
+          ) : null}
           <LabeledTextareaField
             labelText="Notes (Optional)"
             value={notes}
@@ -601,7 +621,7 @@ export default function RecordInvestmentActivityModal({
             <AppButton
               variant="contained"
               onClick={submit}
-              disabled={pending || (showAccount && !hasLinkedAccount)}
+              disabled={pending || (showAccount && !hasLinkedAccount) || hasInsufficientContributionBalance}
               sx={{ whiteSpace: 'nowrap' }}
             >
               {action === 'record' ? <CircularProgress size={18} sx={{ mr: 0.75 }} /> : null}

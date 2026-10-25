@@ -2,6 +2,8 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { InvestmentBenefitType } from '@prisma/client';
 import { IsDateString, IsDefined, IsEnum, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { ConfirmRecurringContributionPlanDto } from '../../investment-contribution-plans/dto/confirm-recurring-contribution-plan.dto';
+import { UpdateInvestmentContributionPlanDto } from '../../investment-contribution-plans/dto/update-investment-contribution-plan.dto';
 
 export class CreateInvestmentExpectedBenefitDto {
   @IsEnum(InvestmentBenefitType)
@@ -136,4 +138,20 @@ export class CreateInvestmentDto {
   @Type(() => CreateInvestmentExpectedBenefitDto)
   @ValidateNested({ each: true })
   expectedBenefits?: CreateInvestmentExpectedBenefitDto[];
+
+  @IsOptional()
+  @Type(() => ConfirmRecurringContributionPlanDto)
+  @ValidateNested()
+  recurringPlan?: ConfirmRecurringContributionPlanDto;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  recurringPlanId?: number;
+
+  @IsOptional()
+  @Type(() => UpdateInvestmentContributionPlanDto)
+  @ValidateNested()
+  recurringPlanUpdate?: UpdateInvestmentContributionPlanDto;
 }

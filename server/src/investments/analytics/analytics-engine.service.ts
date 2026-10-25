@@ -14,14 +14,14 @@ export class AnalyticsEngineService {
   ) {}
 
   async calculate(query: AnalyticsQuery, facts: AnalyticsFacts): Promise<AnalyticsPoint[]> {
-    const confirmedEvents = facts.events.filter((event) => String(event.status ?? '').toUpperCase() === 'CONFIRMED' && event.eventDate);
+    const treatmentById = new Map(facts.investments.map((investment) => [String(investment.id), investment.accountingTreatment ?? 'INVESTMENT']));
+    const confirmedEvents = facts.events.filter((event) => String(event.status ?? '').toUpperCase() === 'CONFIRMED' && event.eventDate && treatmentById.get(String(event.investmentId)) !== 'PROTECTION_EXPENSE');
     const dates = [
       ...confirmedEvents.map((event) => new Date(event.eventDate as Date)),
       ...facts.snapshots.filter((snapshot) => snapshot.snapshotDate).map((snapshot) => new Date(snapshot.snapshotDate as Date)),
       ...facts.investments.filter((investment) => investment.startDate).map((investment) => new Date(investment.startDate as Date)),
     ];
     const periods = generatePeriods(dates, query);
-    let cumulativeInvested = 0;
     let cumulativeWithdrawn = 0;
     let previousPortfolioValue: number | null = null;
     return periods.map((period, periodIndex) => {
@@ -32,21 +32,40 @@ export class AnalyticsEngineService {
         return eventDate >= period.startDate.getTime() && eventDate < periodEnd && ACTIVITY_EVENT_TYPES.has(event.eventType as InvestmentEventType);
       });
       const amount = (event: EventLike) => Number(event.amount ?? 0);
-      const newContribution = periodEvents.filter((event) => event.eventType === 'CONTRIBUTION' || event.eventType === 'OPENING_BALANCE').reduce((sum, event) => sum + amount(event), 0);
+      const isPremium = (event: EventLike) => event.eventType === 'PREMIUM' || (treatmentById.get(String(event.investmentId)) === 'INSURANCE_SAVINGS' && (event.eventType === 'CONTRIBUTION' || event.eventType === 'OPENING_BALANCE'));
+      const newContribution = periodEvents.filter((event) => !isPremium(event) && (event.eventType === 'CONTRIBUTION' || event.eventType === 'OPENING_BALANCE')).reduce((sum, event) => sum + amount(event), 0);
       const newWithdrawal = periodEvents.filter((event) => event.eventType === 'WITHDRAWAL_PRINCIPAL').reduce((sum, event) => sum + amount(event), 0);
-      const newPremium = periodEvents.filter((event) => event.eventType === 'PREMIUM').reduce((sum, event) => sum + amount(event), 0);
+      const newPremium = periodEvents.filter(isPremium).reduce((sum, event) => sum + amount(event), 0);
       const newIncomeCredit = periodEvents.filter((event) => event.eventType === 'INCOME_CREDIT' || event.eventType === 'OPENING_INCOME_CREDIT').reduce((sum, event) => sum + amount(event), 0);
-      cumulativeInvested += newContribution;
       cumulativeWithdrawn += newWithdrawal;
       const resolvedPortfolioValue = this.resolvePortfolioValue(period.endDate, facts);
       const portfolioValue = resolvedPortfolioValue ?? 0;
       const portfolioValueQuality = this.resolvePortfolioValueQuality(period.endDate, facts, resolvedPortfolioValue, previousPortfolioValue);
       previousPortfolioValue = portfolioValue;
-      const invested = cumulativeInvested - cumulativeWithdrawn;
+      const breakdown = { invested: {} as Record<string, number>, returns: {} as Record<string, number> };
+      const valueSources = { snapshot: 0, derived: 0, invested: 0 };
+      for (const investment of facts.investments) {
+        if (investment.accountingTreatment === 'PROTECTION_EXPENSE') continue;
+        const events = confirmedEvents.filter((event) => String(event.investmentId) === String(investment.id) && new Date(event.eventDate as Date) <= period.endDate);
+        const snapshots = facts.snapshots.filter((snapshot) => String(snapshot.investmentId) === String(investment.id));
+        const valuation = this.resolveInvestmentValueAtDate(investment, snapshots, period.endDate, events);
+        if (investment.accountingTreatment === 'INSURANCE_SAVINGS' && valuation.source !== 'snapshot') continue;
+        const principal = this.deriveEventValuation(events, investment.accountingTreatment)?.totalInvested
+          ?? (investment.startDate && new Date(investment.startDate) <= period.endDate ? Number(investment.totalInvested ?? 0) : 0);
+        const key = String(investment.assetType ?? 'OTHER');
+        breakdown.invested[key] = (breakdown.invested[key] ?? 0) + principal;
+        breakdown.returns[key] = (breakdown.returns[key] ?? 0) + valuation.value - principal;
+        if (valuation.source === 'snapshot') valueSources.snapshot += valuation.value;
+        else if (valuation.source === 'invested') valueSources.invested += valuation.value;
+        else valueSources.derived += valuation.value;
+      }
+      const invested = Object.values(breakdown.invested).reduce((total, value) => total + value, 0);
       return {
         period,
-        activity: { newContribution, newWithdrawal, newPremium, newIncomeCredit, netCashFlow: newContribution + newPremium + newIncomeCredit - newWithdrawal },
+        activity: { newContribution, newWithdrawal, newPremium, newIncomeCredit, netCashFlow: newContribution + newPremium - newWithdrawal },
         state: { cumulativeInvested: invested, cumulativeWithdrawn, portfolioValue, returnAmount: portfolioValue - invested },
+        breakdown,
+        valueSources,
         dataQuality: { cashFlow: 'complete' as const, portfolioValue: portfolioValueQuality },
       };
     });
@@ -54,7 +73,13 @@ export class AnalyticsEngineService {
 
   async loadFacts(userId: number, investments: AnalyticsFacts['investments']): Promise<AnalyticsFacts> {
     const [events, snapshots] = await Promise.all([this.investmentEventsService.findAll(userId), this.valuationSnapshotsService.findAll(userId)]);
-    return { investments, events, snapshots };
+    const investmentIds = new Set(investments.map((investment) => Number(investment.id)));
+    const now = new Date();
+    return {
+      investments,
+      events: events.filter((event) => investmentIds.has(Number(event.investmentId)) && (!event.eventDate || new Date(event.eventDate) <= now)),
+      snapshots: snapshots.filter((snapshot) => investmentIds.has(Number(snapshot.investmentId)) && (!snapshot.snapshotDate || new Date(snapshot.snapshotDate) <= now)),
+    };
   }
 
   resolveInvestmentValueAtDate(
@@ -79,6 +104,12 @@ export class AnalyticsEngineService {
       return { value: derivedValuation.currentValue, source: derivedValuation.currentValueSource ?? 'estimated' as const };
     }
 
+    if (investment.lastValuationAt && new Date(investment.lastValuationAt) <= pointDate && investment.currentValue != null) {
+      return { value: Number(investment.currentValue), source: 'estimated' as const };
+    }
+    if (investment.startDate && new Date(investment.startDate) <= pointDate) {
+      return { value: Number(investment.totalInvested ?? 0), source: 'invested' as const };
+    }
     return { value: 0, source: 'invested' as const };
   }
 
@@ -90,7 +121,7 @@ export class AnalyticsEngineService {
       .filter((event) => event.eventType === 'CONTRIBUTION' || event.eventType === 'OPENING_BALANCE' || (accountingTreatment === 'INSURANCE_SAVINGS' && event.eventType === 'PREMIUM'))
       .reduce((sum, event) => sum + Number(event.amount ?? 0), 0);
     const principalOut = confirmedEvents
-      .filter((event) => event.eventType === 'WITHDRAWAL_PRINCIPAL' || event.eventType === 'BENEFIT_RECEIPT')
+      .filter((event) => event.eventType === 'WITHDRAWAL_PRINCIPAL')
       .reduce((sum, event) => sum + Number(event.amount ?? 0), 0);
     const incomeCredits = confirmedEvents
       .filter((event) => event.eventType === 'INCOME_CREDIT' || event.eventType === 'OPENING_INCOME_CREDIT')
@@ -99,7 +130,7 @@ export class AnalyticsEngineService {
     if (accountingTreatment === 'INSURANCE_SAVINGS') {
       return {
         totalInvested: principalIn,
-        currentValue: principalIn,
+        currentValue: 0,
         currentValueSource: 'manual' as const,
         lastValuationAt: confirmedEvents
           .filter((event) => event.eventDate)

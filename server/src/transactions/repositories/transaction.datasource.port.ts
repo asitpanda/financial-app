@@ -1,11 +1,12 @@
 import type { TransactionRecord } from '../transaction.types';
+import type { Prisma } from '@prisma/client';
 import type { CreateTransactionDto } from '../dto/create-transaction.dto';
 import type { UpdateTransactionDto } from '../dto/update-transaction.dto';
 
 export interface ITransactionDataSourcePort {
   findAll(userId: number): Promise<TransactionRecord[]>;
   findOne(id: number, userId: number): Promise<TransactionRecord | null>;
-  create(data: CreateTransactionDto, userId: number): Promise<TransactionRecord>;
+  create(data: CreateTransactionDto, userId: number, transaction?: Prisma.TransactionClient): Promise<TransactionRecord>;
   update(id: number, data: UpdateTransactionDto, userId: number): Promise<TransactionRecord | null>;
   delete(id: number, userId: number): Promise<void>;
   findByDateRange(userId: number, startDate: Date, endDate: Date): Promise<TransactionRecord[]>;

@@ -40,7 +40,7 @@ export class FinancialAccountMockRepository implements IFinancialAccountDataSour
   async findOne(id: string, userId: string): Promise<FinancialAccountRecord | null> {
     const normalizedId = Number(id);
     const normalizedUserId = Number(userId);
-    return mockFinancialAccounts.find((account) => account.id === normalizedId && account.userId === normalizedUserId);
+    return mockFinancialAccounts.find((account) => account.id === normalizedId && account.userId === normalizedUserId) ?? null;
   }
 
   async update(id: string, data: UpdateFinancialAccountDto, userId: string): Promise<FinancialAccountRecord | null> {

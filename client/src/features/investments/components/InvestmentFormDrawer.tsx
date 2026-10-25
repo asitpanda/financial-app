@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** @typedef {import('../types/investment.types').InvestmentDrawerData} InvestmentDrawerData */
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import dayjs from "dayjs";
 import { INVESTMENT_EVENT_TYPES, OPENING_INVESTMENT_EVENT_TYPES } from "../../../types/investmentEventTypes";
 import {
@@ -138,9 +138,16 @@ export default function InvestmentFormDrawer({
     notes: "",
   });
   const [benefitErrors, setBenefitErrors] = useState({});
+  const initializedDraft = useRef(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      initializedDraft.current = null;
+      return;
+    }
+    const draftKey = initialValues?.id ?? 'create';
+    if (initializedDraft.current === draftKey) return;
+    initializedDraft.current = draftKey;
     const existingPlan = initialValues?.activeContributionPlan;
     const defaultHistoricalMode =
       existingPlan?.historicalImportMode || "TRACK_FROM_TODAY";
@@ -312,7 +319,7 @@ export default function InvestmentFormDrawer({
 
   const handleSubmit = async () => {
     const validationErrors = validateInvestmentForm(form);
-    if (!isRecurring && Number(form.totalInvested || 0) <= 0) {
+    if (!initialValues && !isRecurring && Number(form.totalInvested || 0) <= 0) {
       validationErrors.totalInvested =
         "Investment amount must be greater than 0";
     }
@@ -923,7 +930,7 @@ export default function InvestmentFormDrawer({
                   ? "System-calculated from confirmed historical events."
                   : oneTimeAmountHelperText
               }
-              disabled={isRecurring}
+              disabled={isRecurring || Boolean(initialValues)}
             />
             <LabelCurrencyField
               labelText={isInsuranceSavings ? "Current Value (Optional)" : "Current Value"}
@@ -934,9 +941,9 @@ export default function InvestmentFormDrawer({
                   ? "System-calculated from valuation import/history."
                   : isInsuranceSavings
                     ? "Optional policy value; excluded from portfolio return totals."
-                    : "Enter today's value if it differs from the invested amount; any difference is recorded as opening gain."
+                    : "Enter the observed value for the opening valuation snapshot."
               }
-              disabled={isRecurring && !isInsuranceSavings}
+              disabled={Boolean(initialValues) || (isRecurring && !isInsuranceSavings)}
             />
             <LabeledDateField
               labelText={isInsurance ? "Policy Term End Date (Optional)" : "Maturity Date (Optional)"}
@@ -1186,7 +1193,7 @@ export default function InvestmentFormDrawer({
           </SectionCard>
         ) : null}
 
-        <SectionCard
+        {!initialValues ? <SectionCard
           title="Expected Benefits"
           subtitle="Optional: Add contractual future payouts (maturity, surrender, interest, bonuses, etc.)."
         >
@@ -1341,7 +1348,7 @@ export default function InvestmentFormDrawer({
               </Paper>
             ) : null}
           </Stack>
-        </SectionCard>
+        </SectionCard> : null}
 
         <SectionCard title="Notes">
           <LabeledTextareaField

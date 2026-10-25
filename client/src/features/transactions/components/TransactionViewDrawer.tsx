@@ -100,10 +100,13 @@ export function TransactionViewDrawer({
                 borderRadius: 1.5,
                 px: 2,
                 py: 2.5,
-                background:
-                  transaction.type === "EXPENSE"
-                    ? "linear-gradient(180deg, #fff7f7 0%, #ffffff 100%)"
-                    : "linear-gradient(180deg, #f5fff8 0%, #ffffff 100%)",
+                background: (theme) => {
+                  const tone =
+                    transaction.type === "EXPENSE"
+                      ? theme.palette.error.main
+                      : theme.palette.success.main;
+                  return `linear-gradient(180deg, ${tone}18 0%, ${theme.palette.background.paper} 100%)`;
+                },
                 border: "1px solid",
                 borderColor: "divider",
                 display: "grid",

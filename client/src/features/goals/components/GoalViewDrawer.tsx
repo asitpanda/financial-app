@@ -137,7 +137,8 @@ export function GoalViewDrawer({
                   px: { xs: 2, sm: 3 },
                   py: 3,
                   textAlign: "center",
-                  background: "linear-gradient(180deg, #f8fffb 0%, #ffffff 100%)",
+                  background: (theme) =>
+                    `linear-gradient(180deg, ${theme.palette.success.main}18 0%, ${theme.palette.background.paper} 100%)`,
                 }}
               >
                 <Box
@@ -169,11 +170,13 @@ export function GoalViewDrawer({
                         borderRadius: "50%",
                         display: "grid",
                         placeItems: "center",
-                        background: "linear-gradient(180deg, #22c55e 0%, #16a34a 100%)",
-                        boxShadow: "0 14px 32px rgba(34, 197, 94, 0.28)",
+                        background: (theme) =>
+                          `linear-gradient(180deg, ${theme.palette.success.light} 0%, ${theme.palette.success.main} 100%)`,
+                        boxShadow: (theme) =>
+                          `0 14px 32px ${theme.palette.success.main}47`,
                       }}
                     >
-                      <Icon path={mdiCheckBold} size={1.2} color="#ffffff" />
+                      <Icon path={mdiCheckBold} size={1.2} color="currentColor" />
                     </Box>
                   </Box>
 

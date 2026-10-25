@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Box, MenuItem, Select, Stack } from "@mui/material";
-import type { GridColDef } from "@mui/x-data-grid";
+import type { GridColDef, GridSortModel } from "@mui/x-data-grid";
 import {
   DataTable,
   FilterBar,
@@ -15,7 +15,7 @@ import {
   mdiCheckCircleOutline,
   mdiShieldCheckOutline,
 } from "@mdi/js";
-import type { Investment } from "../types/investment.types";
+import type { Investment, InvestmentSummaryPagination } from "../types/investment.types";
 
 interface InvestmentsAssetsViewProps {
   filteredInvestments: Investment[];
@@ -36,6 +36,10 @@ interface InvestmentsAssetsViewProps {
   subtitle?: string;
   action?: ReactNode;
   showSummaryCards?: boolean;
+  pagination: InvestmentSummaryPagination;
+  onPageChange: (page: number, pageSize: number) => void;
+  sortModel?: GridSortModel;
+  onSortModelChange?: (model: GridSortModel) => void;
 }
 
 export default function InvestmentsAssetsView({
@@ -58,6 +62,10 @@ export default function InvestmentsAssetsView({
     "Primary CRUD workspace for all holdings, contribution schedules, maturity dates, and attached notes.",
   action,
   showSummaryCards = true,
+  pagination,
+  onPageChange,
+  sortModel = [],
+  onSortModelChange,
 }: InvestmentsAssetsViewProps) {
   return (
     <Stack spacing={2}>
@@ -170,9 +178,15 @@ export default function InvestmentsAssetsView({
           rows={filteredInvestments}
           columns={columns}
           autoHeight={false}
-          initialState={{
-            pagination: { paginationModel: { pageSize: 10, page: 0 } },
-          }}
+          pagination
+          paginationMode="server"
+          sortingMode="server"
+          pageSizeOptions={[25, 50, 100]}
+          rowCount={pagination.total}
+          sortModel={sortModel}
+          onSortModelChange={onSortModelChange}
+          paginationModel={{ page: pagination.page - 1, pageSize: pagination.limit }}
+          onPaginationModelChange={({ page, pageSize }) => onPageChange(page + 1, pageSize)}
           sx={{ "& .MuiDataGrid-row": { minHeight: 64 } }}
           getRowHeight={() => "auto"}
         />

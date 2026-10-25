@@ -8,7 +8,6 @@ import {
   buildAssetTypeLabelMap,
   formatInvestmentCurrency,
   formatInvestmentDate,
-  getCadenceLabel,
   getInvestmentStatusTone,
   getInvestmentTypeLabel,
 } from "../../../utils/investmentHelpers";
@@ -26,19 +25,16 @@ const getInvestmentReturnMetrics = (investment: Investment) => {
     return null;
   }
 
-  const investedValue = Number(investment?.totalInvested || 0);
-  const currentValue = Number(investment?.currentValue || 0);
-
-  if (currentValue <= 0 || investedValue <= 0) {
+  if (
+    investment?.gainLossAmount == null ||
+    investment?.gainLossPercentage == null
+  ) {
     return null;
   }
 
-  const returnAmount = currentValue - investedValue;
-  const returnPercentage = (returnAmount / investedValue) * 100;
-
   return {
-    returnAmount,
-    returnPercentage,
+    returnAmount: investment.gainLossAmount,
+    returnPercentage: investment.gainLossPercentage,
   };
 };
 
@@ -61,7 +57,7 @@ export const getInvestmentsTableColumns = ({
   return [
     {
       field: "name",
-      headerName: "Name",
+      headerName: "Investment",
       flex: 1.4,
       minWidth: 220,
       renderCell: ({ row }) => (
@@ -85,8 +81,8 @@ export const getInvestmentsTableColumns = ({
       ),
     },
     {
-      field: "contributionType",
-      headerName: "Plan Type",
+      field: "currentValue",
+      headerName: "Current Value",
       flex: 1,
       minWidth: 170,
       renderCell: ({ row }) => (
@@ -101,50 +97,103 @@ export const getInvestmentsTableColumns = ({
           }}
         >
           <Typography variant="body2" sx={{ fontWeight: 700 }}>
-            {row.activeContributionPlan ? "Recurring" : "One-time"}
+            {formatInvestmentCurrency(row.currentValue || 0)}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {row.activeContributionPlan
-              ? `${getCadenceLabel(
-                  row.activeContributionPlan.cadenceUnit,
-                  row.activeContributionPlan.cadenceInterval,
-                )} • ${formatInvestmentCurrency(row.activeContributionPlan.amount)}`
-              : "No active schedule"}
+            {`Invested ${formatInvestmentCurrency(row.totalInvested || 0)}`}
           </Typography>
         </Box>
       ),
     },
     {
-      field: "totalInvested",
-      headerName: "Invested",
-      width: 150,
-      renderCell: ({ row }) => (
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 0.5,
-            height: "100%",
-            justifyContent: "center",
-            py: 1,
-          }}
-        >
-          <Typography variant="body2" sx={{ fontWeight: 700 }}>
-            {formatInvestmentCurrency(row.totalInvested)}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {row.currentValue
-              ? `Current ${formatInvestmentCurrency(row.currentValue)}`
-              : "No current value"}
-          </Typography>
-        </Box>
-      ),
+      field: "gainLoss",
+      headerName: "Gain / Loss",
+      width: 170,
+      sortable: false,
+      renderCell: ({ row }) => {
+        const metrics = getInvestmentReturnMetrics(row);
+
+        return (
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 0.5,
+              height: "100%",
+              justifyContent: "center",
+              py: 1,
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 700,
+                color: metrics
+                  ? getProfitLossMuiColor(metrics.returnAmount)
+                  : "inherit",
+              }}
+            >
+              {row.accountingTreatment === "INSURANCE_SAVINGS"
+                ? "See benefits"
+                : metrics
+                  ? formatInvestmentCurrency(metrics.returnAmount)
+                  : "Not available"}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {row.accountingTreatment === "INSURANCE_SAVINGS"
+                ? "Benefits tracked separately"
+                : row.accountingTreatment === "PROTECTION_EXPENSE"
+                  ? "Not applicable for protection"
+                  : metrics
+                    ? `${metrics.returnPercentage >= 0 ? "+" : ""}${metrics.returnPercentage.toFixed(1)}%`
+                    : "Waiting for cost and value"}
+            </Typography>
+          </Box>
+        );
+      },
     },
     {
-      field: "type",
-      headerName: "Asset Type",
+      field: "status",
+      headerName: "Status",
+      flex: 1,
+      minWidth: 190,
+      sortable: false,
+      renderCell: ({ row }) => {
+        return (
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 0.5,
+              height: "100%",
+              justifyContent: "center",
+              py: 1,
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{ fontWeight: 700 }}
+            >
+              <StatusChip
+                label={row.status}
+                tone={getInvestmentStatusTone(row.status)}
+              />
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {row.lastValuationAt
+                ? `Valued ${formatInvestmentDate(row.lastValuationAt)}`
+                : "No valuation recorded"}
+            </Typography>
+          </Box>
+        );
+      },
+    },
+    {
+      field: "allocation",
+      headerName: "Allocation",
       flex: 1,
       minWidth: 145,
+      sortable: false,
       renderCell: ({ row }) => {
         const typeCode = String(row.assetType || row.type || "");
         const typeLabel =
@@ -165,57 +214,10 @@ export const getInvestmentsTableColumns = ({
             }}
           >
             <Typography variant="body2" sx={{ fontWeight: 700 }}>
-              {typeLabel}
+              {categoryLabel || "Uncategorized"}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              {categoryLabel}
-            </Typography>
-          </Box>
-        );
-      },
-    },
-    {
-      field: "return",
-      headerName: "Return",
-      flex: 1,
-      minWidth: 190,
-      sortable: false,
-      renderCell: ({ row }) => {
-        const metrics = getInvestmentReturnMetrics(row);
-        const returnTone =
-          metrics == null
-            ? "text.secondary"
-            : getProfitLossMuiColor(metrics.returnAmount);
-
-        return (
-          <Box
-            sx={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 0.5,
-              height: "100%",
-              justifyContent: "center",
-              py: 1,
-            }}
-          >
-            <Typography
-              variant="body2"
-              sx={{ fontWeight: 700, color: returnTone }}
-            >
-              {row.accountingTreatment === "INSURANCE_SAVINGS"
-                ? "See benefits"
-                : metrics
-                  ? formatInvestmentCurrency(metrics.returnAmount)
-                  : "Not available"}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {row.accountingTreatment === "INSURANCE_SAVINGS"
-                ? "Benefits tracked separately"
-                : row.accountingTreatment === "PROTECTION_EXPENSE"
-                  ? "Not applicable for protection"
-                  : metrics
-                    ? `${metrics.returnPercentage >= 0 ? "+" : ""}${metrics.returnPercentage.toFixed(1)}% vs invested`
-                    : "Waiting for cost and value"}
+              {[typeLabel, row.currency].filter(Boolean).join(" • ")}
             </Typography>
           </Box>
         );
@@ -223,7 +225,7 @@ export const getInvestmentsTableColumns = ({
     },
     {
       field: "upcomingContribution",
-      headerName: "Upcoming Contribution",
+      headerName: "Next Activity",
       flex: 1,
       minWidth: 175,
       sortable: false,
@@ -239,42 +241,19 @@ export const getInvestmentsTableColumns = ({
           }}
         >
           <Typography variant="body2" sx={{ fontWeight: 700 }}>
-            {row.activeContributionPlan?.nextDueDate
+            {row.activeContributionPlan?.status === "active" && row.activeContributionPlan.nextDueDate
               ? formatInvestmentDate(row.activeContributionPlan.nextDueDate)
-              : "Not scheduled"}
+              : row.maturityDate
+                ? `Matures ${formatInvestmentDate(row.maturityDate)}`
+                : "No upcoming activity"}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {row.activeContributionPlan
+            {row.activeContributionPlan?.status === "active"
               ? `Amount ${formatInvestmentCurrency(row.activeContributionPlan.amount || 0)}`
-              : "No recurring plan"}
+              : row.activeContributionPlan
+                ? "Recurring plan paused"
+                : "No recurring plan"}
           </Typography>
-        </Box>
-      ),
-    },
-    {
-      field: "maturityDate",
-      headerName: "Maturity",
-      flex: 1,
-      minWidth: 160,
-      sortable: false,
-      renderCell: ({ row }) => (
-        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
-          <Typography variant="body2">
-            {formatInvestmentDate(row.maturityDate)}
-          </Typography>
-        </Box>
-      ),
-    },
-    {
-      field: "status",
-      headerName: "Status",
-      width: 120,
-      renderCell: ({ row }) => (
-        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
-          <StatusChip
-            label={row.status}
-            tone={getInvestmentStatusTone(row.status)}
-          />
         </Box>
       ),
     },

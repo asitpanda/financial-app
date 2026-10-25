@@ -62,6 +62,7 @@ CREATE TYPE public."InvestmentBenefitStatus" AS ENUM (
 
 CREATE TYPE public."InvestmentBenefitType" AS ENUM (
     'MATURITY',
+    'SURRENDER',
     'COUPON',
     'INTEREST',
     'PRINCIPAL_REDEMPTION',

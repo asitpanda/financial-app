@@ -485,7 +485,7 @@ export default function InsurancePositionWidget({
                       <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
                         {categoryCover > 0 && (
                           <Box sx={{ textAlign: "right" }}>
-                            <Typography variant="caption" color="text.secondary" display="block">
+                            <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                               Cover
                             </Typography>
                             <Typography variant="body2" sx={{ fontWeight: 700 }}>
@@ -495,7 +495,7 @@ export default function InsurancePositionWidget({
                         )}
                         {categoryAnnualPremium > 0 && (
                           <Box sx={{ textAlign: "right" }}>
-                            <Typography variant="caption" color="text.secondary" display="block">
+                            <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                               Annual Premium
                             </Typography>
                             <Typography variant="body2" sx={{ fontWeight: 700 }}>
@@ -558,7 +558,7 @@ export default function InsurancePositionWidget({
                             <Typography variant="body2" sx={{ fontWeight: 800 }}>
                               {policy.insuranceCover > 0 ? formatCurrency(policy.insuranceCover) : "—"}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary" display="block">
+                            <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                               {policy.insuranceCover > 0 ? "Sum Assured" : "Cover"}
                             </Typography>
                           </Box>

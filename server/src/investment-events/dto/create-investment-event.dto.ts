@@ -3,8 +3,8 @@ import { InvestmentEventType } from '@prisma/client';
 import { IsDateString, IsEnum, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class CreateInvestmentEventDto {
-  @ApiProperty()
-  @IsNotEmpty()
+  @ApiProperty({ required: false, description: 'Provided by the investmentId route parameter.' })
+  @IsOptional()
   @IsString()
   investmentId: string;
 

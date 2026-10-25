@@ -14,11 +14,14 @@ interface ApiErrorShape {
 }
 
 export function parseApiErrorMessages(error: unknown, fallback: string): string[] {
-  const err = error as ApiErrorShape;
+  const err = (error ?? {}) as ApiErrorShape;
   const data = err.response?.data;
 
   if (Array.isArray(data?.message)) {
-    return data.message.filter((msg): msg is string => typeof msg === 'string' && msg.trim().length > 0);
+    const messages = data.message.filter(
+      (msg): msg is string => typeof msg === 'string' && msg.trim().length > 0,
+    );
+    if (messages.length > 0) return messages;
   }
 
   if (typeof data?.message === 'string' && data.message.trim().length > 0) {

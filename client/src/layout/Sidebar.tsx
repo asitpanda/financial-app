@@ -13,7 +13,6 @@ import {
 } from "@mui/material";
 import Icon from "@mdi/react";
 import { mdiMenu, mdiLogout } from "@mdi/js";
-import { colors } from "../colors";
 import { useAuth } from "../features/auth/useAuth";
 import { SIDEBAR_SCREEN_CONFIGS } from "../routing/screenRegistry";
 import type { Screen } from "../store/appStore";
@@ -35,7 +34,7 @@ export default function Sidebar({ onNavigate, children, activeRoute }: SidebarPr
   };
 
   return (
-    <Box sx={{ display: "flex", height: "100vh", bgcolor: colors.background }}>
+    <Box sx={{ display: "flex", height: "100vh", bgcolor: "background.default" }}>
       <Drawer
         variant="permanent"
         anchor="left"
@@ -49,7 +48,8 @@ export default function Sidebar({ onNavigate, children, activeRoute }: SidebarPr
             width: drawerWidth,
             transition: "width 0.2s",
             boxSizing: "border-box",
-            bgcolor: colors.sidebarBg,
+            bgcolor: "background.paper",
+            borderColor: "divider",
             overflowX: "hidden",
             display: "flex",
             flexDirection: "column",
@@ -69,7 +69,7 @@ export default function Sidebar({ onNavigate, children, activeRoute }: SidebarPr
           <Icon
             path={mdiMenu}
             size={1.3}
-            color={colors.primary}
+            color="currentColor"
             onClick={() => setMini((m) => !m)}
           />
           {!mini && (
@@ -79,7 +79,7 @@ export default function Sidebar({ onNavigate, children, activeRoute }: SidebarPr
                 fontWeight: "bold",
                 textAlign: "center",
                 letterSpacing: 1,
-                color: colors.sidebarText,
+                color: "text.primary",
               }}
             >
               FinanceApp
@@ -101,25 +101,24 @@ export default function Sidebar({ onNavigate, children, activeRoute }: SidebarPr
                   sx={{
                     ...(selected
                       ? {
-                          backgroundColor:
-                            colors.sidebarActiveBg + " !important",
-                          color: colors.sidebarActiveText + " !important",
+                          backgroundColor: "action.selected !important",
+                          color: "primary.main !important",
                           "& .MuiListItemText-primary": {
-                            color: colors.sidebarActiveText + " !important",
+                            color: "primary.main !important",
                           },
                           "& .MuiListItemIcon-root": {
-                            color: colors.sidebarActiveText + " !important",
+                            color: "primary.main !important",
                           },
                         }
                       : {}),
                     "&:hover": {
-                      backgroundColor: colors.sidebarHoverBg + " !important",
-                      color: colors.sidebarActiveText + " !important",
+                      backgroundColor: "action.hover !important",
+                      color: "primary.main !important",
                       "& .MuiListItemText-primary": {
-                        color: colors.sidebarActiveText + " !important",
+                        color: "primary.main !important",
                       },
                       "& .MuiListItemIcon-root": {
-                        color: colors.sidebarActiveText + " !important",
+                        color: "primary.main !important",
                       },
                     },
                   }}
@@ -155,13 +154,13 @@ export default function Sidebar({ onNavigate, children, activeRoute }: SidebarPr
                 sx={{
                   py: 1,
                   "&:hover": {
-                    backgroundColor: colors.sidebarHoverBg + " !important",
-                    color: colors.sidebarActiveText + " !important",
+                    backgroundColor: "action.hover !important",
+                    color: "primary.main !important",
                     "& .MuiListItemText-primary": {
-                      color: colors.sidebarActiveText + " !important",
+                      color: "primary.main !important",
                     },
                     "& .MuiListItemIcon-root": {
-                      color: colors.sidebarActiveText + " !important",
+                      color: "primary.main !important",
                     },
                   },
                 }}

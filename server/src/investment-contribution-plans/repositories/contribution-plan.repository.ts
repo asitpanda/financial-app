@@ -25,6 +25,10 @@ export class ContributionPlanRepository {
     return this.dataSource.findAllByInvestment(investmentId);
   }
 
+  async findAllByInvestmentIds(investmentIds: number[]): Promise<InvestmentContributionPlanRecord[]> {
+    return this.dataSource.findAllByInvestmentIds(investmentIds);
+  }
+
   async findAllByUser(userId: number): Promise<InvestmentContributionPlanRecord[]> {
     return this.dataSource.findAllByUser(userId);
   }

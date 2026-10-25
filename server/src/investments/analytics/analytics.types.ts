@@ -20,6 +20,7 @@ export const ACTIVITY_EVENT_TYPES = new Set<InvestmentEventType>([
   'CONTRIBUTION' as InvestmentEventType,
   'OPENING_BALANCE' as InvestmentEventType,
   'WITHDRAWAL_PRINCIPAL' as InvestmentEventType,
+  'BENEFIT_RECEIPT' as InvestmentEventType,
   'PREMIUM' as InvestmentEventType,
   'INCOME_CREDIT' as InvestmentEventType,
   'OPENING_INCOME_CREDIT' as InvestmentEventType,

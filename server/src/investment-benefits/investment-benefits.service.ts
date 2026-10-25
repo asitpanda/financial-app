@@ -25,7 +25,7 @@ export class InvestmentBenefitsService {
   }
 
   async create(investmentId: string, data: CreateInvestmentBenefitDto, userId: number) {
-    await this.assertOwnedInvestment(investmentId, userId);
+    await this.assertOpenInvestment(investmentId, userId);
     this.assertValidAmount(data.amount);
     await this.assertDestinationAccount(data.destinationAccountId, userId);
     return this.repository.create(investmentId, data);
@@ -51,6 +51,7 @@ export class InvestmentBenefitsService {
 
   async update(id: string, investmentId: string, data: UpdateInvestmentBenefitDto, userId: number) {
     const existing = await this.findOne(id, investmentId, userId);
+    await this.assertOpenInvestment(investmentId, userId);
     if (data.amount !== undefined) this.assertValidAmount(data.amount);
     this.assertStatusTransition(existing.status, data.status);
     await this.assertDestinationAccount(data.destinationAccountId, userId);
@@ -59,18 +60,25 @@ export class InvestmentBenefitsService {
 
   async remove(id: string, investmentId: string, userId: number) {
     await this.findOne(id, investmentId, userId);
+    await this.assertOpenInvestment(investmentId, userId);
     return this.repository.delete(id);
   }
 
   async realize(id: string, investmentId: string, data: RealizeInvestmentBenefitDto, userId: number) {
     const benefit = await this.findOne(id, investmentId, userId);
-    this.assertRealizable(benefit.status, data.components, benefit.amount);
+    await this.assertOpenInvestment(investmentId, userId);
+    if (data.benefitAmount !== undefined) this.assertValidAmount(data.benefitAmount);
+    this.assertRealizable(
+      benefit.status,
+      data.components,
+      data.benefitAmount ?? benefit.amount,
+    );
     await this.assertRealizationDestinationAccounts(data, userId);
     return this.repository.realize(id, investmentId, userId, data);
   }
 
   async quickRealize(investmentId: string, data: QuickRealizeInvestmentBenefitDto, userId: number) {
-    await this.assertOwnedInvestment(investmentId, userId);
+    await this.assertOpenInvestment(investmentId, userId);
     this.assertValidAmount(data.amount);
     await this.assertRealizationDestinationAccounts(data, userId);
     return this.repository.quickRealize(investmentId, userId, data);
@@ -79,6 +87,14 @@ export class InvestmentBenefitsService {
   private async assertOwnedInvestment(investmentId: string, userId: number) {
     const investment = await this.investmentRepository.findOne(Number(investmentId), userId);
     if (!investment) throw new NotFoundException(`Investment ${investmentId} not found`);
+    return investment;
+  }
+
+  private async assertOpenInvestment(investmentId: string, userId: number) {
+    const investment = await this.assertOwnedInvestment(investmentId, userId);
+    if (String(investment.status || '').trim().toLowerCase() === 'closed') {
+      throw new BadRequestException('Closed investments cannot be modified.');
+    }
     return investment;
   }
 
@@ -92,9 +108,12 @@ export class InvestmentBenefitsService {
     data: RealizeInvestmentBenefitDto | QuickRealizeInvestmentBenefitDto,
     userId: number,
   ) {
-    const destinationAccountIds = 'components' in data
-      ? data.components.map((component) => component.transaction?.destinationAccountId)
-      : [data.transaction?.destinationAccountId];
+    const destinationAccountIds = [
+      ...('components' in data
+        ? data.components.map((component) => component.transaction?.destinationAccountId)
+        : [data.transaction?.destinationAccountId]),
+      ...('destinationAccountId' in data ? [data.destinationAccountId] : []),
+    ];
 
     for (const destinationAccountId of destinationAccountIds) {
       await this.assertDestinationAccount(destinationAccountId, userId);

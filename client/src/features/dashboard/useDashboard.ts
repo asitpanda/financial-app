@@ -26,7 +26,7 @@ const loadDashboardPageData = async () => {
   const accounts =
     accountsResult.status === 'fulfilled' ? accountsResult.value : [];
   const investments =
-    investmentsResult.status === 'fulfilled' ? investmentsResult.value : [];
+    investmentsResult.status === 'fulfilled' ? investmentsResult.value?.data : [];
   const taxonomyNodes =
     taxonomyNodesResult.status === 'fulfilled' ? taxonomyNodesResult.value : [];
 

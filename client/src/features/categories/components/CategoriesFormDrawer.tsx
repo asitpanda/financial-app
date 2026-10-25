@@ -16,13 +16,13 @@ import { LabeledAutocompleteField, LabeledSelectField, LabeledTextField } from "
 import { useCategories } from "../useCategories";
 import {
   createCategorySchema,
-  createDefaultCategoryForm,
   toCategoryFormState,
 } from "../categories.schema";
 import { CATEGORY_ICON_OPTIONS } from "../../../constants/categoryIcons";
+import type { CategoryRecord, CategorySavePayload } from "../categories.types";
 
 const DEFAULT_TEXT_COLOR = "#111827";
-const DEFAULT_ICON_BY_TYPE = {
+const DEFAULT_ICON_BY_TYPE: Record<"income" | "expense", string> = {
   income: "cash",
   expense: "cart",
 };
@@ -31,7 +31,24 @@ const CATEGORY_TYPE_OPTIONS = [
   { value: "expense", label: "Expense" },
 ];
 
-const normalizeColor = (value) => {
+type CategoryFormValues = {
+  name: string;
+  type: "income" | "expense";
+  icon?: string;
+  color?: string;
+};
+
+interface CategoryFormDrawerProps {
+  open: boolean;
+  onClose: () => void;
+  onSubmit?: (payload: CategorySavePayload) => Promise<string | undefined> | string | undefined;
+  initialValues?: CategoryRecord | null;
+  title?: string;
+  submitLabel?: string;
+  submitError?: string;
+}
+
+const normalizeColor = (value: string) => {
   if (!value) return "";
   return value.startsWith("#") ? value : `#${value}`;
 };
@@ -44,12 +61,12 @@ export default function CategoryFormDrawer({
   title = "Add Category",
   submitLabel = "Add",
   submitError = "",
-}) {
+}: CategoryFormDrawerProps) {
   const [localSubmitError, setLocalSubmitError] = React.useState("");
   const { data: categories = [] } = useCategories();
   const currentCategoryName = initialValues?.name?.trim().toLowerCase() || "";
-  const existingCategoryNames = useMemo(
-    () => categories.map((category) => category?.name?.trim().toLowerCase()).filter(Boolean),
+  const existingCategoryNames = useMemo<string[]>(
+    () => categories.map((category) => category?.name?.trim().toLowerCase()).filter((name): name is string => Boolean(name)),
     [categories]
   );
   const categoryValidationSchema = useMemo(
@@ -67,15 +84,20 @@ export default function CategoryFormDrawer({
     trigger,
     watch,
     formState: { errors },
-  } = useForm({
-    resolver: zodResolver(categoryValidationSchema),
-    defaultValues: createDefaultCategoryForm(),
+  } = useForm<CategoryFormValues>({
+    resolver: zodResolver(categoryValidationSchema) as never,
+    defaultValues: {
+      name: "",
+      type: "expense",
+      icon: "",
+      color: "",
+    },
     mode: "onTouched",
   });
 
   useEffect(() => {
     if (!open) return;
-    const formState = toCategoryFormState(initialValues);
+    const formState = toCategoryFormState(initialValues) as CategoryFormValues;
     const type = formState.type || "expense";
     reset({
       ...formState,
@@ -95,7 +117,7 @@ export default function CategoryFormDrawer({
   const iconValue = watch("icon");
   const colorValue = watch("color");
   const previewColor = /^#?[0-9A-Fa-f]{6}$/.test(colorValue || "")
-    ? normalizeColor(colorValue)
+    ? normalizeColor(colorValue || "")
     : DEFAULT_TEXT_COLOR;
   const previewIconOption =
     CATEGORY_ICON_OPTIONS.find((item) => item.value === (iconValue || DEFAULT_ICON_BY_TYPE[typeValue] || "cart")) ||
@@ -167,8 +189,8 @@ export default function CategoryFormDrawer({
                   options={CATEGORY_TYPE_OPTIONS}
                   errorMessage={errors.type?.message}
                   onChange={(e) => {
-                    const nextType = e.target.value;
-                    const previousType = field.value;
+                    const nextType = e.target.value as "income" | "expense";
+                    const previousType = field.value as "income" | "expense";
                     const currentIcon = getValues("icon");
 
                     field.onChange(e);
@@ -232,8 +254,8 @@ export default function CategoryFormDrawer({
             control={control}
             render={({ field }) => {
               const hasValidValue = /^#?[0-9A-Fa-f]{6}$/.test(field.value || "");
-              const colorInputValue = hasValidValue ? normalizeColor(field.value) : DEFAULT_TEXT_COLOR;
-              const hexValue = hasValidValue ? normalizeColor(field.value) : DEFAULT_TEXT_COLOR;
+              const colorInputValue = hasValidValue ? normalizeColor(field.value || "") : DEFAULT_TEXT_COLOR;
+              const hexValue = hasValidValue ? normalizeColor(field.value || "") : DEFAULT_TEXT_COLOR;
 
               return (
                 <Box
@@ -288,7 +310,7 @@ export default function CategoryFormDrawer({
                       inputRef={field.ref}
                       placeholder="#111827"
                       error={Boolean(errors.color)}
-                      inputProps={{ maxLength: 7 }}
+                      slotProps={{ htmlInput: { maxLength: 7 } }}
                       size="small"
                       fullWidth
                       sx={{

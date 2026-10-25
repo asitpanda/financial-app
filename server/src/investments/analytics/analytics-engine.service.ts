@@ -90,7 +90,7 @@ export class AnalyticsEngineService {
       .filter((event) => event.eventType === 'CONTRIBUTION' || event.eventType === 'OPENING_BALANCE' || (accountingTreatment === 'INSURANCE_SAVINGS' && event.eventType === 'PREMIUM'))
       .reduce((sum, event) => sum + Number(event.amount ?? 0), 0);
     const principalOut = confirmedEvents
-      .filter((event) => event.eventType === 'WITHDRAWAL_PRINCIPAL')
+      .filter((event) => event.eventType === 'WITHDRAWAL_PRINCIPAL' || event.eventType === 'BENEFIT_RECEIPT')
       .reduce((sum, event) => sum + Number(event.amount ?? 0), 0);
     const incomeCredits = confirmedEvents
       .filter((event) => event.eventType === 'INCOME_CREDIT' || event.eventType === 'OPENING_INCOME_CREDIT')

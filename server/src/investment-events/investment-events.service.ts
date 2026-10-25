@@ -14,7 +14,7 @@ export class InvestmentEventsService {
 
   async create(createInvestmentEventDto: CreateInvestmentEventDto, userId?: number) {
     if (userId !== undefined) {
-      await this.assertOwnedInvestment(createInvestmentEventDto.investmentId, userId);
+      await this.assertOpenInvestment(createInvestmentEventDto.investmentId, userId);
     }
 
     this.assertIncomeCreditIsInvestmentOnly(createInvestmentEventDto);
@@ -50,8 +50,9 @@ export class InvestmentEventsService {
     if (!existingEvent) return null;
 
     if (userId !== undefined) {
+      await this.assertOpenInvestment(existingEvent.investmentId, userId);
       if (updateInvestmentEventDto.investmentId !== undefined) {
-        await this.assertOwnedInvestment(updateInvestmentEventDto.investmentId, userId);
+        await this.assertOpenInvestment(updateInvestmentEventDto.investmentId, userId);
       }
     }
 
@@ -69,6 +70,7 @@ export class InvestmentEventsService {
     if (userId !== undefined) {
       const existingEvent = await this.findOne(id, userId);
       if (!existingEvent) return;
+      await this.assertOpenInvestment(existingEvent.investmentId, userId);
     }
 
     return this.repository.delete(id);
@@ -80,6 +82,14 @@ export class InvestmentEventsService {
       throw new NotFoundException(`Investment ${investmentId} not found`);
     }
 
+    return investment;
+  }
+
+  private async assertOpenInvestment(investmentId: string | number, userId: number) {
+    const investment = await this.assertOwnedInvestment(String(investmentId), userId);
+    if (String(investment.status || '').trim().toLowerCase() === 'closed') {
+      throw new BadRequestException('Closed investments cannot be modified.');
+    }
     return investment;
   }
 

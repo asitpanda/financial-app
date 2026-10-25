@@ -3,6 +3,7 @@ import type { InvestmentRecord } from '../investment.types';
 import type { CreateInvestmentDto } from '../dto/create-investment.dto';
 import type { UpdateInvestmentDto } from '../dto/update-investment.dto';
 import { IInvestmentDataSourcePort } from './investment.datasource.port';
+import type { InvestmentListQuery } from '../investment.types';
 
 @Injectable()
 export class InvestmentRepository {
@@ -17,6 +18,14 @@ export class InvestmentRepository {
 
   async findAll(userId: number): Promise<InvestmentRecord[]> {
     return this.dataSource.findAll(userId);
+  }
+
+  async findPage(userId: number, query: InvestmentListQuery) {
+    return this.dataSource.findPage(userId, query);
+  }
+
+  async findAllForPortfolio(userId: number): Promise<InvestmentRecord[]> {
+    return this.dataSource.findAllForPortfolio(userId);
   }
 
   async findOne(id: number, userId: number): Promise<InvestmentRecord | null> {

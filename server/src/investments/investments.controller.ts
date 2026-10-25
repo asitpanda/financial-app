@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { InvestmentsService } from './investments.service';
 import { CreateInvestmentDto } from './dto/create-investment.dto';
@@ -6,6 +6,8 @@ import { InvestmentDetailResponseDto } from './dto/investment-detail-response.dt
 import { InvestmentMetadataResponseDto } from './dto/investment-metadata-response.dto';
 import { InvestmentPerformanceResponseDto } from './dto/investment-performance-response.dto';
 import { UpdateInvestmentDto } from './dto/update-investment.dto';
+import { InvestmentListQueryDto } from './dto/investment-list-query.dto';
+import { InvestmentSummaryPageResponseDto } from './dto/investment-summary-response.dto';
 import { CurrentUserId } from '../auth/current-user-id.decorator';
 
 @ApiTags('investments')
@@ -21,9 +23,10 @@ export class InvestmentsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all investments' })
-  findAll(@CurrentUserId() userId: number) {
-    return this.investmentsService.findAll(userId);
+  @ApiOperation({ summary: 'Get paginated investment summary rows' })
+  @ApiOkResponse({ type: InvestmentSummaryPageResponseDto })
+  findAll(@CurrentUserId() userId: number, @Query() query: InvestmentListQueryDto) {
+    return this.investmentsService.findPage(userId, query);
   }
 
   @Get('dashboard')

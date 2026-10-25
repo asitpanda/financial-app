@@ -11,6 +11,7 @@ import type {
 export interface IContributionPlanDataSourcePort {
   create(data: ContributionPlanWriteInput): Promise<InvestmentContributionPlanRecord>;
   findAllByInvestment(investmentId: string): Promise<InvestmentContributionPlanRecord[]>;
+  findAllByInvestmentIds(investmentIds: number[]): Promise<InvestmentContributionPlanRecord[]>;
   findAllByUser(userId: number): Promise<InvestmentContributionPlanRecord[]>;
   findAllActiveByUser(userId: number): Promise<InvestmentContributionPlanRecord[]>;
   findOne(id: string): Promise<InvestmentContributionPlanRecord | null>;

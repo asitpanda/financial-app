@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import dayjs from 'dayjs';
 import AppButton from '../../../components/common/AppButton';
+import ConfirmDialog from '../../../components/dialogs/ConfirmDialog';
 import {
   LabelCurrencyField,
   LabeledDateField,
@@ -28,9 +29,37 @@ import {
   useSkipCurrentInvestmentContribution,
   useUpdateInvestmentEvent,
 } from '../hooks/useContributionPlans';
-import { useCreateInvestmentBenefit, useUpdateInvestmentBenefit } from '../hooks/useInvestmentBenefits';
+import {
+  useCreateInvestmentBenefit,
+  useQuickRealizeInvestmentBenefit,
+  useRealizeInvestmentBenefit,
+  useUpdateInvestmentBenefit,
+} from '../hooks/useInvestmentBenefits';
 import { useNotificationStore } from '../../../store/notificationStore';
 import { INVESTMENT_EVENT_TYPES } from '../../../types/investmentEventTypes';
+
+interface ActivityAccount {
+  id: string | number;
+  name?: string;
+  displayName?: string;
+  institutionName?: string;
+  accountNumberMasked?: string;
+  currentBalance?: number;
+  isActive?: boolean;
+}
+
+interface RecordInvestmentActivityModalProps {
+  open: boolean;
+  onClose: () => void;
+  investment: any;
+  contributionPlan?: any;
+  accounts?: ActivityAccount[];
+  initialMode?: string;
+  editingEvent?: any;
+  editingBenefit?: any;
+  realizationBenefit?: any;
+  closeMode?: boolean;
+}
 
 const modalStyle = {
   position: 'absolute',
@@ -91,10 +120,13 @@ export default function RecordInvestmentActivityModal({
   initialMode = 'contribution',
   editingEvent = null,
   editingBenefit = null,
-}) {
+  realizationBenefit = null,
+  closeMode = false,
+}: RecordInvestmentActivityModalProps) {
   const isEditing = Boolean(editingEvent?.id);
   const isEditingBenefit = Boolean(editingBenefit?.id);
-  const [mode, setMode] = useState(isEditingBenefit ? 'benefit' : isEditing ? 'income_credit' : initialMode);
+  const isRealizingBenefit = Boolean(realizationBenefit?.id);
+  const [mode, setMode] = useState(isEditingBenefit || isRealizingBenefit || closeMode ? 'benefit' : isEditing ? 'income_credit' : initialMode);
   const [date, setDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [amount, setAmount] = useState('');
   const [benefitType, setBenefitType] = useState('MATURITY');
@@ -102,12 +134,15 @@ export default function RecordInvestmentActivityModal({
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
   const [action, setAction] = useState(null);
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
   const recordContribution = useRecordInvestmentContribution();
   const recordWithdrawal = useRecordInvestmentWithdrawal();
   const recordIncomeCredit = useRecordInvestmentIncomeCredit();
   const updateInvestmentEvent = useUpdateInvestmentEvent();
   const createInvestmentBenefit = useCreateInvestmentBenefit();
   const updateInvestmentBenefit = useUpdateInvestmentBenefit();
+  const realizeInvestmentBenefit = useRealizeInvestmentBenefit();
+  const quickRealizeInvestmentBenefit = useQuickRealizeInvestmentBenefit();
   const skipContribution = useSkipCurrentInvestmentContribution();
   const pushNotification = useNotificationStore((state) => state.pushNotification);
   const pending = Boolean(action);
@@ -139,6 +174,34 @@ export default function RecordInvestmentActivityModal({
 
   useEffect(() => {
     if (!open) return;
+    if (isRealizingBenefit) {
+      setMode('benefit');
+      setDate(realizationBenefit?.benefitDate ? dayjs(realizationBenefit.benefitDate).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'));
+      setAmount(realizationBenefit?.amount != null ? String(realizationBenefit.amount) : String(currentValue));
+      setBenefitType(realizationBenefit?.benefitType || 'SURRENDER');
+      setDestinationAccountId(
+        realizationBenefit?.destinationAccountId != null
+          ? String(realizationBenefit.destinationAccountId)
+          : resolvedAccountId,
+      );
+      setNotes(realizationBenefit?.notes || '');
+      setError('');
+      setAction(null);
+      setConfirmationOpen(false);
+      return;
+    }
+    if (closeMode) {
+      setMode('benefit');
+      setDate(dayjs().format('YYYY-MM-DD'));
+      setAmount(String(currentValue));
+      setBenefitType('SURRENDER');
+      setDestinationAccountId(resolvedAccountId);
+      setNotes('');
+      setError('');
+      setAction(null);
+      setConfirmationOpen(false);
+      return;
+    }
     if (isEditingBenefit) {
       setMode('benefit');
       setDate(editingBenefit?.benefitDate ? dayjs(editingBenefit.benefitDate).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'));
@@ -152,6 +215,7 @@ export default function RecordInvestmentActivityModal({
       setNotes(editingBenefit?.notes || '');
       setError('');
       setAction(null);
+      setConfirmationOpen(false);
       return;
     }
     if (isEditing) {
@@ -161,6 +225,7 @@ export default function RecordInvestmentActivityModal({
       setNotes(editingEvent?.notes || '');
       setError('');
       setAction(null);
+      setConfirmationOpen(false);
       return;
     }
     setMode(initialMode);
@@ -171,7 +236,8 @@ export default function RecordInvestmentActivityModal({
     setNotes('');
     setError('');
     setAction(null);
-  }, [open, investment?.id, contributionPlan?.id, contributionPlan?.amount, initialMode, isEditing, editingEvent, isEditingBenefit, editingBenefit]);
+    setConfirmationOpen(false);
+  }, [open, investment?.id, contributionPlan?.id, contributionPlan?.amount, initialMode, isEditing, editingEvent, isEditingBenefit, editingBenefit, isRealizingBenefit, realizationBenefit, closeMode, currentValue, resolvedAccountId]);
 
   const handleModeChange = (_event, nextMode) => {
     if (!nextMode || pending || isEditing) return;
@@ -192,10 +258,70 @@ export default function RecordInvestmentActivityModal({
       return;
     }
 
+    if ((isRealizingBenefit || closeMode) && !destinationAccountId) {
+      setError('Select a destination account before realizing this benefit.');
+      return;
+    }
+
+    if (isRealizingBenefit || closeMode) {
+      setConfirmationOpen(true);
+      return;
+    }
+
+    await performSubmit(numericAmount);
+  };
+
+  const performSubmit = async (numericAmount) => {
+
     setAction('record');
     setError('');
     try {
-      if (isEditingBenefit) {
+      if (isRealizingBenefit) {
+        const destinationId = Number(destinationAccountId);
+        await realizeInvestmentBenefit.mutateAsync({
+          investmentId: String(investment.id),
+          benefitId: realizationBenefit.id,
+          payload: {
+            benefitAmount: numericAmount,
+            benefitDate: date,
+            destinationAccountId: destinationId,
+            notes: notes || undefined,
+            components: [
+              {
+                eventType: INVESTMENT_EVENT_TYPES.BENEFIT_RECEIPT,
+                amount: numericAmount,
+                eventDate: date,
+                notes: notes || undefined,
+                transaction: {
+                  type: 'INVESTMENT',
+                  destinationAccountId: destinationId,
+                },
+              },
+            ],
+            closesInvestment: closeMode || benefitType === 'SURRENDER',
+          },
+        });
+      } else if (closeMode) {
+        const destinationId = Number(destinationAccountId);
+        await quickRealizeInvestmentBenefit.mutateAsync({
+          investmentId: String(investment.id),
+          payload: {
+            benefitType: 'SURRENDER',
+            amount: numericAmount,
+            benefitDate: date,
+            benefitNotes: notes || undefined,
+            destinationAccountId: destinationId,
+            eventType: INVESTMENT_EVENT_TYPES.BENEFIT_RECEIPT,
+            eventDate: date,
+            notes: notes || undefined,
+            transaction: {
+              type: 'INVESTMENT',
+              destinationAccountId: destinationId,
+            },
+            closesInvestment: true,
+          },
+        });
+      } else if (isEditingBenefit) {
         await updateInvestmentBenefit.mutateAsync({
           investmentId: String(investment.id),
           benefitId: editingBenefit.id,
@@ -204,9 +330,7 @@ export default function RecordInvestmentActivityModal({
             amount: numericAmount,
             benefitDate: date,
             notes: notes || undefined,
-            destinationAccountId: destinationAccountId && destinationAccountId !== resolvedAccountId
-              ? Number(destinationAccountId)
-              : null,
+            destinationAccountId: destinationAccountId ? Number(destinationAccountId) : null,
           },
         });
       } else if (isEditing) {
@@ -243,9 +367,7 @@ export default function RecordInvestmentActivityModal({
             amount: numericAmount,
             benefitDate: date,
             notes: notes || undefined,
-            destinationAccountId: destinationAccountId && destinationAccountId !== resolvedAccountId
-              ? Number(destinationAccountId)
-              : null,
+            destinationAccountId: destinationAccountId ? Number(destinationAccountId) : null,
           },
         });
       } else {
@@ -263,13 +385,19 @@ export default function RecordInvestmentActivityModal({
         });
       }
 
-      pushNotification({ type: 'success', message: isEditingBenefit ? 'Investment benefit updated successfully' : isEditing ? 'Income credit updated successfully' : `${modeConfig.label} recorded successfully` });
+      pushNotification({ type: 'success', message: isRealizingBenefit || closeMode ? 'Investment benefit realized and investment closed successfully' : isEditingBenefit ? 'Investment benefit updated successfully' : isEditing ? 'Income credit updated successfully' : `${modeConfig.label} recorded successfully` });
       onClose();
     } catch (requestError) {
       setError(requestError?.response?.data?.message || requestError?.message || `Failed to record ${modeConfig.label.toLowerCase()}`);
     } finally {
       setAction(null);
     }
+  };
+
+  const confirmSubmit = async () => {
+    setConfirmationOpen(false);
+    setAction('record');
+    await performSubmit(Number(amount));
   };
 
   const skipCurrentContribution = async () => {
@@ -293,11 +421,13 @@ export default function RecordInvestmentActivityModal({
   };
 
   const showAccount = !isEditing && !isEditingBenefit && (mode === 'contribution' || mode === 'withdrawal');
+  const showBenefitDestination = mode === 'benefit';
   const accountLabelText = mode === 'contribution' ? 'Funding account' : 'Receiving account';
   const showSkip = !isEditing && !isEditingBenefit && mode === 'contribution' && Boolean(contributionPlan?.id && contributionPlan?.nextDueDate);
 
   return (
-    <Modal open={open} onClose={pending ? undefined : onClose} aria-labelledby="record-investment-activity-modal">
+    <>
+      <Modal open={open} onClose={pending ? undefined : onClose} aria-labelledby="record-investment-activity-modal">
       <Box sx={modalStyle}>
         <Box
           sx={{
@@ -310,7 +440,7 @@ export default function RecordInvestmentActivityModal({
         >
           <Box sx={{ minWidth: 0 }}>
             <Typography id="record-investment-activity-modal" variant="h6" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>
-              {isEditingBenefit ? 'Edit Investment Benefit' : isEditing ? 'Edit Income Credit' : 'Record Investment Activity'}
+              {isRealizingBenefit ? 'Realize Investment Benefit' : closeMode ? 'Close Investment' : isEditingBenefit ? 'Edit Investment Benefit' : isEditing ? 'Edit Income Credit' : 'Record Investment Activity'}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               {investment?.name}
@@ -336,7 +466,7 @@ export default function RecordInvestmentActivityModal({
           </Box>
         </Box>
 
-        {!isEditing && !isEditingBenefit ? (
+        {!isEditing && !isEditingBenefit && !isRealizingBenefit && !closeMode ? (
           <ToggleButtonGroup
             exclusive
             fullWidth
@@ -372,14 +502,19 @@ export default function RecordInvestmentActivityModal({
         ) : null}
 
         <Stack spacing={1} sx={{ mt: 2.25 }}>
-          <Alert severity={mode === 'income_credit' || mode === 'benefit' ? 'info' : 'warning'}>{modeConfig.helperText}</Alert>
+          <Alert severity={mode === 'income_credit' || mode === 'benefit' ? 'info' : 'warning'}>
+            {isRealizingBenefit || closeMode
+              ? 'Review the final settlement amount, date, and destination account before closing this investment.'
+              : modeConfig.helperText}
+          </Alert>
 
-          {mode === 'benefit' ? (
+          {showBenefitDestination ? (
             <LabeledSelectField
               labelText="Benefit type"
               value={benefitType}
               onChange={(event) => setBenefitType(event.target.value)}
               options={INVESTMENT_BENEFIT_OPTIONS}
+              disabled={isRealizingBenefit || closeMode}
             />
           ) : null}
 
@@ -390,7 +525,7 @@ export default function RecordInvestmentActivityModal({
               onChange={(event) => setDestinationAccountId(event.target.value)}
               options={destinationAccountOptions}
               errorMessage={!destinationAccountId ? 'No destination account available' : ''}
-              helperText={destinationAccountId === resolvedAccountId ? 'Defaults to the investment contribution account.' : 'Used when this benefit is realized.'}
+              helperText={destinationAccountId === resolvedAccountId ? 'Selected linked account.' : 'Used when this benefit is realized.'}
             />
           ) : null}
 
@@ -470,11 +605,24 @@ export default function RecordInvestmentActivityModal({
               sx={{ whiteSpace: 'nowrap' }}
             >
               {action === 'record' ? <CircularProgress size={18} sx={{ mr: 0.75 }} /> : null}
-              {isEditingBenefit || isEditing ? 'Save Changes' : modeConfig.submitLabel}
+              {isRealizingBenefit || closeMode ? 'Save and Realize' : isEditingBenefit || isEditing ? 'Save Changes' : modeConfig.submitLabel}
             </AppButton>
           </Box>
         </Box>
       </Box>
     </Modal>
+    <ConfirmDialog
+      open={confirmationOpen}
+      title={closeMode ? 'Confirm Investment Closure' : 'Confirm Benefit Realization'}
+      description={`Cash received: ${formatCurrency(Number(amount))}
+    Destination account: ${destinationAccountOptions.find((option) => option.value === String(destinationAccountId))?.label || destinationAccountId}
+    Settlement date: ${date}${closeMode || benefitType === 'SURRENDER' ? '\n\nThe investment will be closed and any active contribution plan will be paused.' : ''}`}
+      confirmLabel={closeMode ? 'Confirm and Close' : 'Confirm and Realize'}
+      confirmColor="success"
+      loading={pending}
+      onCancel={() => setConfirmationOpen(false)}
+      onConfirm={confirmSubmit}
+      />
+    </>
   );
 }

@@ -78,6 +78,15 @@ export class InvestmentDetailResponseDto {
   currentValue?: number;
 
   @ApiPropertyOptional()
+  realizedAmount?: number;
+
+  @ApiPropertyOptional()
+  realizedProfitLoss?: number;
+
+  @ApiPropertyOptional()
+  realizedProfitLossPercentage?: number;
+
+  @ApiPropertyOptional()
   startDate?: string | null;
 
   @ApiProperty()

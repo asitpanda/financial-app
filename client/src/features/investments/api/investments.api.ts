@@ -4,13 +4,22 @@ import type {
   InvestmentDashboardWidgetResponse,
   Investment,
   InvestmentDetailShell,
+  InvestmentListParams,
   InvestmentMetadataResponse,
   InvestmentPerformancePayload,
+  InvestmentSummaryPage,
   UpdateInvestmentDto,
 } from '../types/investment.types';
 
-export const getInvestments = async (): Promise<Investment[]> => {
-  const response = await apiClient.get('/investments');
+export const getInvestments = async (
+  params: InvestmentListParams = { page: 1, limit: 25 },
+): Promise<InvestmentSummaryPage> => {
+  const requestParams = Object.fromEntries(
+    Object.entries(params)
+      .filter(([, value]) => value !== undefined && value !== null)
+      .map(([key, value]) => [key, key === 'ids' && Array.isArray(value) ? value.join(',') : value]),
+  );
+  const response = await apiClient.get('/investments', { params: requestParams });
   return response.data;
 };
 

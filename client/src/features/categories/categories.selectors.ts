@@ -141,7 +141,7 @@ export const getCategoryStatsByName = (
 
     const numericAmount = Number(transaction.amount || 0);
     const signedAmount =
-      transaction.type === "expense" ? -numericAmount : numericAmount;
+      transaction.type === "EXPENSE" ? -numericAmount : numericAmount;
     const activityDate = transaction.date || transaction.createdAt || null;
 
     acc.set(transactionCategory, {

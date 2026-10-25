@@ -33,7 +33,7 @@ import {
 import { getProfitLossHexColor } from "../../../colors";
 import type { Investment } from "../types/investment.types";
 import type { InvestmentAssetTaxonomyNode } from "../types/investmentAssetTaxonomy.types";
-import type { GridColDef } from "@mui/x-data-grid";
+import type { GridColDef, GridSortModel } from "@mui/x-data-grid";
 import type {
   InvestmentAllocationSegment,
   InvestmentCategoryPerformanceRow,
@@ -43,6 +43,7 @@ import type {
   InvestmentSeriesPoint,
   InvestmentValueSourceSummary,
 } from "../investments.selectors";
+import type { InvestmentSummaryPagination } from "../types/investment.types";
 
 interface InvestmentDashboardViewProps {
   investments: Investment[];
@@ -84,6 +85,12 @@ interface InvestmentDashboardViewProps {
     contributionPlan: NonNullable<Investment["activeContributionPlan"]>,
   ) => void;
   formatCurrency: (value: number) => string;
+  pagination: InvestmentSummaryPagination;
+  onPageChange: (page: number, pageSize: number) => void;
+  focusedAssetIds?: Array<string | number> | null;
+  onFocusedAssetIdsChange?: (ids: Array<string | number> | null) => void;
+  sortModel?: GridSortModel;
+  onSortModelChange?: (model: GridSortModel) => void;
 }
 
 export default function InvestmentsDashboardView({
@@ -123,9 +130,14 @@ export default function InvestmentsDashboardView({
   onCreateInvestment,
   onRecordContribution,
   formatCurrency,
+  pagination,
+  onPageChange,
+  focusedAssetIds = null,
+  onFocusedAssetIdsChange = () => undefined,
+  sortModel = [],
+  onSortModelChange,
 }: InvestmentDashboardViewProps) {
   const focusedSectionRef = useRef<HTMLDivElement | null>(null);
-  const [focusedAssetIds, setFocusedAssetIds] = useState<Array<string | number> | null>(null);
   const [focusedAssetTitle, setFocusedAssetTitle] = useState("All Assets");
   const [focusedAssetDescription, setFocusedAssetDescription] = useState(
     "Click the dashboard widgets above to focus a matching slice of the portfolio.",
@@ -171,32 +183,7 @@ export default function InvestmentsDashboardView({
     return investments.filter((item) => focusSet.has(item.id));
   }, [focusedAssetIds, investments]);
 
-  const focusedFilteredInvestments = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    return focusedInvestments.filter((investment) => {
-      const matchesSearch =
-        !query ||
-        [investment.name, investment.type, investment.institution, investment.referenceNumber]
-          .filter(Boolean)
-          .some((value) => String(value).toLowerCase().includes(query));
-
-      const matchesStatus =
-        statusFilter === "all" || investment.status === statusFilter;
-      const investmentAssetType = String(
-        investment.assetType || investment.type || "OTHER",
-      );
-      const matchesCategory =
-        categoryFilter === "all" || investmentAssetType === categoryFilter;
-
-      const matchesTreatment =
-        !treatmentFilter ||
-        treatmentFilter === "all" ||
-        (investment.accountingTreatment || "INVESTMENT") === treatmentFilter;
-
-      return matchesSearch && matchesStatus && matchesCategory && matchesTreatment;
-    });
-  }, [focusedInvestments, search, statusFilter, categoryFilter, treatmentFilter]);
+  const focusedFilteredInvestments = focusedInvestments;
 
   useEffect(() => {
     if (!focusedAssetIds || !focusedSectionRef.current) {
@@ -209,7 +196,14 @@ export default function InvestmentsDashboardView({
     });
   }, [focusedAssetIds, focusedAssetTitle]);
 
-  if (investments.length === 0) {
+    if (
+      investments.length === 0 &&
+      !search.trim() &&
+      statusFilter === "all" &&
+      categoryFilter === "all" &&
+      treatmentFilter === "all" &&
+      !focusedAssetIds
+    ) {
     return (
       <Stack spacing={2}>
         <SectionCard
@@ -235,13 +229,13 @@ export default function InvestmentsDashboardView({
     title: string,
     description: string,
   ) => {
-    setFocusedAssetIds(investmentIds);
+    onFocusedAssetIdsChange(investmentIds);
     setFocusedAssetTitle(title);
     setFocusedAssetDescription(description);
   };
 
   const clearFocusedAssets = () => {
-    setFocusedAssetIds(null);
+    onFocusedAssetIdsChange(null);
     setFocusedAssetTitle("All Assets");
     setFocusedAssetDescription(
       "Click the dashboard widgets above to focus a matching slice of the portfolio.",
@@ -908,7 +902,7 @@ export default function InvestmentsDashboardView({
           title={focusedAssetIds ? focusedAssetTitle : "Investment Assets"}
           subtitle={
             focusedAssetIds
-              ? `${focusedAssetDescription} Showing ${focusedFilteredInvestments.length} of ${focusedInvestments.length} focused asset${focusedInvestments.length === 1 ? "" : "s"}.`
+              ? `${focusedAssetDescription} Showing ${pagination.total} matching focused asset${pagination.total === 1 ? "" : "s"}.`
               : "Primary CRUD workspace for all holdings, contribution schedules, maturity dates, attached notes, and widget-driven drill-down."
           }
           action={
@@ -918,6 +912,10 @@ export default function InvestmentsDashboardView({
               </AppButton>
             ) : null
           }
+          pagination={pagination}
+          onPageChange={onPageChange}
+          sortModel={sortModel}
+          onSortModelChange={onSortModelChange}
         />
       </Box>
     </Stack>

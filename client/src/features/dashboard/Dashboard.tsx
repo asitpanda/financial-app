@@ -282,7 +282,7 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
 
   const handleInvestmentsUpdated = async () => {
     const nextInvestments = await getInvestments();
-    setInvestments(Array.isArray(nextInvestments) ? nextInvestments : []);
+    setInvestments(Array.isArray(nextInvestments?.data) ? nextInvestments.data : []);
     // Bypasses the investments mutation hooks, so the Investments screen's cache needs a manual refresh
     queryClient.invalidateQueries({ queryKey: ["investments"] });
   };

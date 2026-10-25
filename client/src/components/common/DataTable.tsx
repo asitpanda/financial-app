@@ -22,8 +22,8 @@ export default function DataTable(props: DataTableProps) {
         pageSizeOptions={[10, 25, 50, 100]}
         sx={{
           height: '100%',
-          borderColor: '#e5e7eb',
-          '& .MuiDataGrid-columnHeaders': { backgroundColor: '#f9fafb' },
+          borderColor: 'divider',
+          '& .MuiDataGrid-columnHeaders': { backgroundColor: 'action.hover' },
           '& .MuiDataGrid-cell': {
             display: 'flex',
             alignItems: 'center',

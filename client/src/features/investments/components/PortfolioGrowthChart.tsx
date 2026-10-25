@@ -1,5 +1,5 @@
+import { Box, Stack, Typography, useTheme } from "@mui/material";
 import { useState } from "react";
-import { Box, Stack, Typography } from "@mui/material";
 import AppButton from "../../../components/common/AppButton";
 import type { InvestmentPortfolioGrowthPoint } from "../investments.selectors";
 import {
@@ -44,6 +44,7 @@ export default function PortfolioGrowthChart({
   data,
   formatValue,
 }: PortfolioGrowthChartProps) {
+  const theme = useTheme();
   const [timeframe, setTimeframe] = useState<(typeof TIMEFRAME_OPTIONS)[number]["value"]>("1y");
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
@@ -214,7 +215,7 @@ export default function PortfolioGrowthChart({
                   y1={y}
                   x2={chartWidth - padding.right}
                   y2={y}
-                  stroke="#e5e7eb"
+                  stroke={theme.palette.divider}
                   strokeDasharray="3,3"
                 />
                 <text
@@ -222,7 +223,7 @@ export default function PortfolioGrowthChart({
                   y={y}
                   textAnchor="end"
                   dominantBaseline="middle"
-                  style={{ fontSize: 11, fill: "#6b7280" }}
+                  style={{ fontSize: 11, fill: theme.palette.text.secondary }}
                 >
                   {formatValue(value)}
                 </text>
@@ -235,7 +236,7 @@ export default function PortfolioGrowthChart({
             y1={baselineY}
             x2={chartWidth - padding.right}
             y2={baselineY}
-            stroke="#cbd5e1"
+            stroke={theme.palette.action.disabled}
             strokeWidth="1"
           />
 
@@ -274,7 +275,7 @@ export default function PortfolioGrowthChart({
               x={point.x}
               y={chartHeight - padding.bottom + 20}
               textAnchor="middle"
-              style={{ fontSize: 11, fill: "#6b7280" }}
+              style={{ fontSize: 11, fill: theme.palette.text.secondary }}
             >
               {point.index === 0 ||
               point.index === points.length - 1 ||
@@ -293,7 +294,7 @@ export default function PortfolioGrowthChart({
                 y1={padding.top}
                 x2={activePoint.x}
                 y2={chartHeight - padding.bottom}
-                stroke="#94a3b8"
+                stroke={theme.palette.action.disabled}
                 strokeDasharray="4,4"
               />
 

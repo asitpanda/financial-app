@@ -1,4 +1,4 @@
-import React from 'react';
+import type { ReactNode } from 'react';
 import { Box, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import Button from './AppButton';
@@ -8,7 +8,7 @@ interface EmptyStateProps {
   description?: string;
   text?: string;
   subText?: string;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
   actionLabel?: string;
   onAction?: () => void;
   linkLabel?: string;
@@ -20,7 +20,6 @@ export default function EmptyState({
   description,
   text,
   subText,
-  icon,
   actionLabel,
   onAction,
   linkLabel,

@@ -8,7 +8,7 @@ interface ViewportTableHeightOptions {
 }
 
 export function useViewportTableHeight(
-  ref: RefObject<HTMLElement>,
+  ref: RefObject<HTMLElement | null>,
   options: ViewportTableHeightOptions = {}
 ) {
   const {

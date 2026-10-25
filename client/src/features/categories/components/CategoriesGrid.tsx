@@ -1,7 +1,12 @@
-import React from "react";
-import AppButton from "./common/AppButton";
+import AppButton from "../../../components/common/AppButton";
+import type { CategoryRecord } from "../categories.types";
 
-export default function CategoryGrid({ categories = [], onDelete }) {
+interface CategoriesGridProps {
+  categories?: CategoryRecord[];
+  onDelete?: (categoryId: string) => void;
+}
+
+export default function CategoryGrid({ categories = [], onDelete }: CategoriesGridProps) {
   return (
     <section className="mt-6 bg-white p-4 rounded shadow">
       <h2 className="text-gray-700 mb-4">Spending Categories</h2>
@@ -11,7 +16,7 @@ export default function CategoryGrid({ categories = [], onDelete }) {
             <span className="font-medium">{c.name}</span>
             <AppButton
               variant="text"
-              onClick={() => onDelete?.(c._id)}
+              onClick={() => onDelete?.(c._id || c.id)}
               sx={{ minWidth: 0, p: 0, textTransform: "none", color: "error.main", '&:hover': { backgroundColor: 'transparent', textDecoration: 'underline' } }}
             >
               Delete

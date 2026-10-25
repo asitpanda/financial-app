@@ -177,6 +177,17 @@ export class ContributionPlanPrismaRepository
     return plans.map(mapPlanOutput);
   }
 
+  async findAllByInvestmentIds(investmentIds: number[]): Promise<InvestmentContributionPlanRecord[]> {
+    if (investmentIds.length === 0) return [];
+
+    const plans = await this.prisma.investmentContributionPlan.findMany({
+      where: { investmentId: { in: investmentIds } },
+      orderBy: [{ investmentId: 'asc' }, { updatedAt: 'desc' }, { id: 'desc' }],
+    });
+
+    return plans.map(mapPlanOutput);
+  }
+
   async findAllByUser(userId: number): Promise<InvestmentContributionPlanRecord[]> {
     const plans = await this.prisma.investmentContributionPlan.findMany({
       where: {

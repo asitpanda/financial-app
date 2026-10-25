@@ -1,6 +1,7 @@
 // @ts-nocheck
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Box, Typography } from "@mui/material";
+import type { GridSortModel } from "@mui/x-data-grid";
 import dayjs from "dayjs";
 import InvestmentAssetTaxonomyFormDrawer from "./components/InvestmentAssetTaxonomyFormDrawer";
 import InvestmentFormDrawer from "./components/InvestmentFormDrawer";
@@ -44,6 +45,7 @@ import {
   getInvestmentTimeSeriesData,
 } from "./investments.selectors";
 import type { InvestmentDrawerData } from "./types/investment.types";
+import type { InvestmentSummaryPagination } from "./types/investment.types";
 import {
   useConfirmRecurringInvestmentContributionPlan,
   useUpdateInvestmentContributionPlan,
@@ -176,10 +178,15 @@ export const buildRecurringConfirmPayload = (
 });
 
 export default function Investments() {
+  const [investmentPage, setInvestmentPage] = useState(1);
+  const [investmentPageSize, setInvestmentPageSize] = useState(25);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [treatmentFilter, setTreatmentFilter] = useState("all");
+  const [focusedAssetIds, setFocusedAssetIds] = useState<Array<string | number> | null>(null);
+  const [sortModel, setSortModel] = useState<GridSortModel>([]);
   const [uiError, setUiError] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [assetTaxonomyDrawerOpen, setAssetTaxonomyDrawerOpen] = useState(false);
@@ -204,11 +211,28 @@ export default function Investments() {
     useConfirmRecurringInvestmentContributionPlan();
   const saveTaxonomyMutation = useSaveInvestmentAssetTaxonomy();
   const removeTaxonomyMutation = useRemoveInvestmentAssetTaxonomy();
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
+
+  const investmentListParams = {
+    page: investmentPage,
+    limit: investmentPageSize,
+    search: debouncedSearch.trim() || undefined,
+    status: statusFilter === "all" ? undefined : statusFilter,
+    assetType: categoryFilter === "all" ? undefined : categoryFilter,
+    accountingTreatment: treatmentFilter === "all" ? undefined : treatmentFilter,
+    ids: focusedAssetIds ?? undefined,
+    sortBy: sortModel[0]?.field,
+    sortDirection: sortModel[0]?.sort ?? undefined,
+  };
   const {
     investments: rawInvestments,
+    pagination: investmentPagination,
     loading: investmentsLoading,
     error: pageDataError,
-  } = useInvestmentSummaryPageData();
+  } = useInvestmentSummaryPageData(investmentListParams);
   const {
     taxonomyNodes,
     accounts,
@@ -337,11 +361,8 @@ export default function Investments() {
     Boolean(search.trim()) ||
     statusFilter !== "all" ||
     categoryFilter !== "all" ||
-    treatmentFilter !== "all";
-  const isFirstInvestmentSetup =
-    summaryInvestments.length === 0 && !hasInvestmentFilters;
-
-
+    treatmentFilter !== "all" ||
+    Boolean(focusedAssetIds);
   const assetTypeLabelMap = useMemo(() => {
     const map = {};
     (Array.isArray(assetTypeConfigs) ? assetTypeConfigs : []).forEach((config) => {
@@ -369,6 +390,11 @@ export default function Investments() {
     [assetTypeConfigs],
   );
   const dashboardWidgets = dashboardAnalyticsQuery.data?.widgets;
+  const dashboardInvestments = (dashboardWidgets?.assets ?? []).map(
+    (investment) => normalizeInvestmentForUi(investment, taxonomyNodes),
+  );
+  const isFirstInvestmentSetup =
+    investmentPagination.total === 0 && !hasInvestmentFilters;
   const portfolioPoints = (dashboardWidgets?.portfolioGrowth.order ?? []).map(
     (key) => dashboardWidgets?.portfolioGrowth.byKey[key],
   ).filter(Boolean);
@@ -383,7 +409,7 @@ export default function Investments() {
     ...row,
     label: assetCategoryLabelMap[row.key] || row.label || row.key,
   }));
-  const holdingRows = getInvestmentHoldingPerformanceRows(summaryInvestments, 12);
+  const holdingRows = getInvestmentHoldingPerformanceRows(dashboardInvestments, 12);
   const categoryBreakdown = categoryPerformanceRows.map((row) => ({ key: row.key, label: row.label, value: row.invested, investmentIds: row.investmentIds, assetType: row.assetType }));
   const categorySubBreakdown = categoryPerformanceSubRows.map((row) => ({ key: row.key, label: row.label, value: row.invested, investmentIds: row.investmentIds, assetCategory: row.key }));
   const holdingContributionRows = categoryPerformanceRows.map((row) => ({ key: row.key, label: row.label, value: row.invested, investmentIds: row.investmentIds }));
@@ -391,7 +417,7 @@ export default function Investments() {
   const currentValueSubBreakdown = categoryPerformanceSubRows.map((row) => ({ key: row.key, label: row.label, value: row.currentValue, investmentIds: row.investmentIds, assetCategory: row.key }));
   const holdingCurrentValueRows = categoryPerformanceRows.map((row) => ({ key: row.key, label: row.label, value: row.currentValue, investmentIds: row.investmentIds }));
   const breakdownPoints = getInvestmentTimeSeriesData(
-    summaryInvestments,
+    dashboardInvestments,
     selectedYearForDrill,
   );
   const breakdownByLabel = Object.fromEntries(
@@ -423,7 +449,7 @@ export default function Investments() {
   }));
   const dashboardKpiWidgets = dashboardWidgets?.kpis;
   const dashboardKpis = {
-    totalInvestments: summaryInvestments.length,
+    totalInvestments: dashboardInvestments.length,
     totalContributions: Number(dashboardKpiWidgets?.totalContributions.value ?? 0),
     totalInvested: Number(dashboardKpiWidgets?.totalContributions.investments ?? 0),
     totalCurrentValue: Number(dashboardKpiWidgets?.currentPortfolioValue.investments ?? 0),
@@ -469,6 +495,7 @@ export default function Investments() {
   );
 
   const openEditDrawer = (investment) => {
+    if (String(investment?.status || "").toLowerCase() === "closed") return;
     setDrawerMode("edit");
     setSelectedInvestmentId(investment.id);
     setDrawerOpen(true);
@@ -481,12 +508,14 @@ export default function Investments() {
   };
 
   const openRecordInvestmentActivity = (investment, contributionPlan = null, mode = "contribution") => {
+    if (String(investment?.status || "").toLowerCase() === "closed") return;
     setSelectedInvestmentActivity({ investment, contributionPlan, editingEvent: null });
     setRecordActivityMode(mode);
     setRecordActivityModalOpen(true);
   };
 
   const openEditInvestmentActivity = (investment, item, activityType = "income_credit") => {
+    if (String(investment?.status || "").toLowerCase() === "closed") return;
     setSelectedInvestmentActivity({
       investment,
       contributionPlan: null,
@@ -519,9 +548,46 @@ export default function Investments() {
 
   const handleResetFilters = () => {
     setSearch("");
+    setDebouncedSearch("");
     setStatusFilter("all");
     setCategoryFilter("all");
     setTreatmentFilter("all");
+    setInvestmentPage(1);
+  };
+
+  const handleSearchChange = (value) => {
+    setSearch(value);
+    setInvestmentPage(1);
+  };
+
+  const handleStatusFilterChange = (value) => {
+    setStatusFilter(value);
+    setInvestmentPage(1);
+  };
+
+  const handleCategoryFilterChange = (value) => {
+    setCategoryFilter(value);
+    setInvestmentPage(1);
+  };
+
+  const handleTreatmentFilterChange = (value) => {
+    setTreatmentFilter(value);
+    setInvestmentPage(1);
+  };
+
+  const handleFocusedAssetIdsChange = (ids) => {
+    setFocusedAssetIds(ids);
+    setInvestmentPage(1);
+  };
+
+  const handleSortModelChange = (model) => {
+    setSortModel(model);
+    setInvestmentPage(1);
+  };
+
+  const handlePageChange = (page, pageSize) => {
+    setInvestmentPage(page);
+    setInvestmentPageSize(pageSize);
   };
 
   const handleSaveInvestment = async (formValues) => {
@@ -798,18 +864,24 @@ export default function Investments() {
       taxonomyNodes={taxonomyNodes}
       columns={columns}
       search={search}
-      onSearchChange={setSearch}
+      onSearchChange={handleSearchChange}
       statusFilter={statusFilter}
-      onStatusFilterChange={setStatusFilter}
+      onStatusFilterChange={handleStatusFilterChange}
       categoryFilter={categoryFilter}
-      onCategoryFilterChange={setCategoryFilter}
+      onCategoryFilterChange={handleCategoryFilterChange}
       treatmentFilter={treatmentFilter}
-      onTreatmentFilterChange={setTreatmentFilter}
+      onTreatmentFilterChange={handleTreatmentFilterChange}
       categoryOptions={assetTypeOptions}
       onResetFilters={handleResetFilters}
       onCreateInvestment={openCreateDrawer}
       onRecordContribution={openRecordContributionModal}
       formatCurrency={formatInvestmentCurrency}
+        pagination={investmentPagination}
+        onPageChange={handlePageChange}
+        focusedAssetIds={focusedAssetIds}
+        onFocusedAssetIdsChange={handleFocusedAssetIdsChange}
+        sortModel={sortModel}
+        onSortModelChange={handleSortModelChange}
     />
   );
 

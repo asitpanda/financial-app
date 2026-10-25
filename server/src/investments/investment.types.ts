@@ -1,8 +1,29 @@
 import { InvestmentEventType } from '@prisma/client';
 import type { CreateInvestmentDto } from './dto/create-investment.dto';
 import type { InvestmentActiveContributionPlanResponseDto } from './dto/investment-detail-response.dto';
+import type { ListQuery } from '../common/listing/listing.types';
 
 export type AccountingTreatment = 'INVESTMENT' | 'INSURANCE_SAVINGS' | 'PROTECTION_EXPENSE';
+export type InvestmentListSortField =
+  | 'name'
+  | 'currentValue'
+  | 'totalInvested'
+  | 'maturityDate'
+  | 'startDate'
+  | 'createdAt'
+  | 'lastValuationAt'
+  | 'assetType'
+  | 'assetCategory';
+
+export interface InvestmentListQuery extends ListQuery {
+  search?: string;
+  status?: string;
+  assetType?: string;
+  accountingTreatment?: AccountingTreatment;
+  ids?: number[];
+  sortBy?: InvestmentListSortField;
+  sortDirection?: 'asc' | 'desc';
+}
 
 export type InvestmentRecord = {
   id: number;
@@ -47,6 +68,7 @@ export const resolveAccountingTreatment = (input: {
 
 export type ActivePlanLike = {
   id: string | number;
+  investmentId: string | number;
   amount: number;
   cadenceUnit: string;
   cadenceInterval: number;
@@ -82,6 +104,8 @@ export type EventLike = {
 export type SummaryInvestment = InvestmentLike & {
   activeContributionPlan?: InvestmentActiveContributionPlanResponseDto | null;
   categoryKey?: string;
+  gainLossAmount?: number;
+  gainLossPercentage?: number | null;
 };
 
 export type ResolvedAnalyticsRecord = {

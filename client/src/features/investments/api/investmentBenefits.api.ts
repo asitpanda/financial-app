@@ -76,6 +76,10 @@ export type BenefitRealizationComponent = {
 
 export type RealizeInvestmentBenefitPayload = {
   components: BenefitRealizationComponent[];
+  benefitAmount?: number;
+  benefitDate?: string;
+  destinationAccountId?: number | null;
+  notes?: string;
   closesInvestment?: boolean;
 };
 
@@ -83,6 +87,7 @@ export type QuickRealizeInvestmentBenefitPayload = BenefitRealizationComponent &
   benefitType: InvestmentBenefit['benefitType'];
   benefitDate?: string;
   benefitNotes?: string;
+  destinationAccountId?: number | null;
   closesInvestment?: boolean;
 };
 

@@ -1,4 +1,5 @@
 import type { InvestmentEventType } from '../../../types/investmentEventTypes';
+import type { ListParams, Page, PaginationMeta } from '../../../api/listing.types';
 
 export type InvestmentStatus = "active" | "matured" | "closed";
 export type InvestmentContributionMode = "ONE_TIME" | "RECURRING";
@@ -136,6 +137,8 @@ export interface InvestmentBase {
 	institution?: string;
 	totalInvested: number;
 	currentValue?: number;
+	gainLossAmount?: number | null;
+	gainLossPercentage?: number | null;
 	startDate?: string | null;
 	status: InvestmentStatus;
 	accountingTreatment?: AccountingTreatment | null;
@@ -153,8 +156,20 @@ export interface InvestmentBase {
 	updatedAt?: string;
 }
 
+export type InvestmentSummaryPagination = PaginationMeta;
+
+export type InvestmentSummaryPage = Page<Investment>;
+
+export interface InvestmentListParams extends ListParams {
+	page: number;
+	limit: number;
+	assetType?: string;
+	accountingTreatment?: AccountingTreatment;
+}
+
 export interface InvestmentSummary extends InvestmentBase {
 	activeContributionPlan?: InvestmentContributionPlan | null;
+	valuationSnapshots?: InvestmentValuationSnapshot[];
 }
 
 export interface InvestmentLatestSnapshot {
@@ -170,6 +185,9 @@ export interface InvestmentDetailShell extends InvestmentSummary {
 	eventCount?: number;
 	snapshotCount?: number;
 	latestSnapshot?: InvestmentLatestSnapshot | null;
+	realizedAmount?: number;
+	realizedProfitLoss?: number;
+	realizedProfitLossPercentage?: number;
 }
 
 export interface InvestmentPerformancePayload {
@@ -310,6 +328,7 @@ export interface InvestmentDashboardWidgetResponse {
 		capitalDeployment: { order: string[]; byKey: Record<string, InvestmentDashboardPoint> };
 		sourceOfValue: InvestmentDashboardSummaryPayload['valueSourceSummary'];
 		assetTypePerformance: { rows: InvestmentDashboardCategoryPerformanceRow[] };
+		assets: InvestmentSummary[];
 		insurancePosition: { cover: number; premiumsPaid: number };
 		allocationMix: { rows: InvestmentDashboardCategoryPerformanceRow[] };
 		upcomingMaturities: InvestmentSummary[];

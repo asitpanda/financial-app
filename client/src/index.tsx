@@ -6,7 +6,6 @@ import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
 import "./index.css";
 import App from "./App";
-import reportWebVitals from "./reportWebVitals";
 import { queryClient } from "./api/queryClient";
 import { useThemeStore } from "./store/themeStore";
 import { createAppTheme } from "./theme/createAppTheme";
@@ -38,5 +37,3 @@ root.render(
     <RootProviders />
   </React.StrictMode>,
 );
-
-reportWebVitals();

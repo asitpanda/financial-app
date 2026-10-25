@@ -1,4 +1,3 @@
-import React from "react";
 import { SectionCard } from "../../../components/common";
 import type { DashboardMonthlySummary } from "../dashboard.types";
 import { getProfitLossHexColor } from "../../../colors";

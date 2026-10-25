@@ -15,6 +15,7 @@ import {
   Select,
   IconButton,
   Typography,
+  useTheme,
 } from "@mui/material";
 import { useHeaderAction } from "../../hooks/useHeaderAction";
 import { useViewportTableHeight } from "../../hooks/useViewportTableHeight";
@@ -64,6 +65,7 @@ const getInitialDateFilter = () => ({
 });
 
 export default function Goals() {
+  const theme = useTheme();
   const goalTableRef = useRef(null);
   const [uiError, setUiError] = useState("");
   const pushNotification = useNotificationStore(
@@ -542,7 +544,7 @@ export default function Goals() {
                       cy="80"
                       r="54"
                       fill="none"
-                      stroke="#e5e7eb"
+                      stroke={theme.palette.divider}
                       strokeWidth="18"
                     />
                     {goalProgressChart.segments.map((segment) =>
@@ -568,12 +570,12 @@ export default function Goals() {
                         </circle>
                       ) : null,
                     )}
-                    <circle cx="80" cy="80" r="33" fill="#ffffff" />
+                    <circle cx="80" cy="80" r="33" fill={theme.palette.background.paper} />
                     <text
                       x="80"
                       y="74"
                       textAnchor="middle"
-                      fill="#6b7280"
+                      fill={theme.palette.text.secondary}
                       fontSize="10"
                     >
                       Goals
@@ -582,7 +584,7 @@ export default function Goals() {
                       x="80"
                       y="92"
                       textAnchor="middle"
-                      fill="#111827"
+                      fill={theme.palette.text.primary}
                       fontSize="18"
                       fontWeight="700"
                     >

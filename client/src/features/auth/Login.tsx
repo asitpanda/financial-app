@@ -64,7 +64,7 @@ export default function Login() {
         justifyContent: "center",
         alignItems: "center",
         minHeight: "100vh",
-        bgcolor: "#f5f5f5",
+        bgcolor: "background.default",
         padding: 2,
       }}
     >

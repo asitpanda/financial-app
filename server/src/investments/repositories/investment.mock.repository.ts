@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import type { InvestmentRecord } from '../investment.types';
+import type { InvestmentListQuery, InvestmentRecord } from '../investment.types';
 import { CreateInvestmentDto } from '../dto/create-investment.dto';
 import { UpdateInvestmentDto } from '../dto/update-investment.dto';
 import { IInvestmentDataSourcePort } from './investment.datasource.port';
+import { getListOffset } from '../../common/listing/listing.utils';
 import { mockInvestmentsData } from '../../mockdata';
 
 let mockInvestments = [...mockInvestmentsData];
@@ -110,6 +111,48 @@ export class InvestmentMockRepository implements IInvestmentDataSourcePort {
 
   async findAll(userId: number): Promise<InvestmentRecord[]> {
     return mockInvestments.filter((investment) => investment.userId === userId);
+  }
+
+  async findPage(userId: number, query: InvestmentListQuery) {
+    const search = query.search?.trim().toLowerCase();
+    const ownedInvestments = mockInvestments.filter((investment) => {
+      const matchesIds = !query.ids?.length || query.ids.includes(investment.id);
+      const matchesStatus = !query.status || investment.status === query.status;
+      const matchesAssetType = !query.assetType || investment.assetType === query.assetType;
+      const matchesTreatment =
+        !query.accountingTreatment || investment.accountingTreatment === query.accountingTreatment;
+      const matchesSearch =
+        !search ||
+        [investment.name, investment.assetType, investment.institutionName, investment.referenceNumber]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(search));
+
+      return investment.userId === userId && matchesIds && matchesStatus && matchesAssetType && matchesTreatment && matchesSearch;
+    });
+    const sortField = query.sortBy ?? 'createdAt';
+    const sortDirection = query.sortDirection === 'asc' ? 1 : -1;
+    ownedInvestments.sort((left, right) => {
+      const leftValue = left[sortField as keyof InvestmentRecord];
+      const rightValue = right[sortField as keyof InvestmentRecord];
+      if (leftValue == null) return rightValue == null ? 0 : 1;
+      if (rightValue == null) return -1;
+      const comparison = leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
+      return comparison === 0 ? left.id - right.id : comparison * sortDirection;
+    });
+    const start = getListOffset(query);
+
+    return {
+      items: ownedInvestments.slice(start, start + query.limit),
+      total: ownedInvestments.length,
+    };
+  }
+
+  async findAllForPortfolio(userId: number): Promise<InvestmentRecord[]> {
+    return mockInvestments.filter(
+      (investment) =>
+        investment.userId === userId &&
+        String(investment.status || '').toLowerCase() !== 'closed',
+    );
   }
 
   async findOne(id: number, userId: number): Promise<InvestmentRecord | null> {

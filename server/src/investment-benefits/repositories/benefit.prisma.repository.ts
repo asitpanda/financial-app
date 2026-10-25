@@ -152,6 +152,14 @@ export class BenefitPrismaRepository implements IBenefitDataSourcePort {
 
       const events = [] as InvestmentEventRecord[];
       const investmentAccountId = benefit.investment.accountId;
+      const finalAmount = data.benefitAmount ?? benefit.amount.toNumber();
+      const finalBenefitDate = data.benefitDate
+        ? parseRequiredDateInput(data.benefitDate, 'benefitDate')
+        : benefit.benefitDate;
+      const finalDestinationAccountId =
+        data.destinationAccountId !== undefined
+          ? data.destinationAccountId
+          : benefit.destinationAccountId;
       for (const component of data.components) {
         let linkedTransactionId: number | null = null;
         if (component.transaction) {
@@ -162,11 +170,11 @@ export class BenefitPrismaRepository implements IBenefitDataSourcePort {
               type: transaction.type ?? TransactionType.INVESTMENT,
               amount: component.amount,
               sourceAccountId: transaction.sourceAccountId ?? null,
-              destinationAccountId: transaction.destinationAccountId ?? benefit.destinationAccountId ?? investmentAccountId ?? null,
+              destinationAccountId: transaction.destinationAccountId ?? finalDestinationAccountId ?? investmentAccountId ?? null,
               categoryId: transaction.categoryId ?? null,
               goalId: transaction.goalId ?? null,
               notes: transaction.notes ?? component.notes ?? null,
-              date: component.eventDate ? new Date(component.eventDate) : new Date(),
+              date: component.eventDate ? new Date(component.eventDate) : finalBenefitDate,
             },
           });
           linkedTransactionId = createdTransaction.id;
@@ -183,7 +191,7 @@ export class BenefitPrismaRepository implements IBenefitDataSourcePort {
             status: InvestmentEventStatus.CONFIRMED,
             eventSource: InvestmentEventSource.MANUAL,
             sequenceNumber: null,
-            eventDate: component.eventDate ? new Date(component.eventDate) : new Date(),
+            eventDate: component.eventDate ? new Date(component.eventDate) : finalBenefitDate,
             amount: new Prisma.Decimal(component.amount),
             units: null,
             pricePerUnit: null,
@@ -197,12 +205,27 @@ export class BenefitPrismaRepository implements IBenefitDataSourcePort {
 
       const updatedBenefit = await tx.investmentBenefit.update({
         where: { id: benefit.id },
-        data: { status: InvestmentBenefitStatus.RECEIVED },
+        data: {
+          amount: new Prisma.Decimal(finalAmount),
+          benefitDate: finalBenefitDate,
+          destinationAccountId: finalDestinationAccountId,
+          notes: data.notes ?? undefined,
+          status: InvestmentBenefitStatus.RECEIVED,
+        },
       });
       if (data.closesInvestment) {
         await tx.investment.update({
           where: { id: benefit.investmentId },
-          data: { status: benefit.benefitType === InvestmentBenefitType.MATURITY ? 'matured' : 'closed' },
+          data: {
+            status: 'closed',
+            currentValue: 0,
+            currentValueSource: 'manual',
+            lastValuationAt: finalBenefitDate,
+          },
+        });
+        await tx.investmentContributionPlan.updateMany({
+          where: { investmentId: benefit.investmentId, status: 'active' },
+          data: { status: 'paused' },
         });
       }
       return { benefit: mapBenefit(updatedBenefit), events };
@@ -219,6 +242,7 @@ export class BenefitPrismaRepository implements IBenefitDataSourcePort {
           benefitType: data.benefitType,
           amount: new Prisma.Decimal(data.amount),
           benefitDate: data.benefitDate ? parseRequiredDateInput(data.benefitDate, 'benefitDate') : new Date(),
+          destinationAccountId: data.destinationAccountId ?? null,
           notes: data.benefitNotes,
           status: InvestmentBenefitStatus.EXPECTED,
         },
@@ -269,7 +293,12 @@ export class BenefitPrismaRepository implements IBenefitDataSourcePort {
     if (data.closesInvestment) {
       await tx.investment.update({
         where: { id: benefit.investmentId },
-        data: { status: benefit.benefitType === InvestmentBenefitType.MATURITY ? 'matured' : 'closed' },
+        data: {
+          status: 'closed',
+          currentValue: 0,
+          currentValueSource: 'manual',
+          lastValuationAt: data.eventDate ? new Date(data.eventDate) : new Date(),
+        },
       });
     }
     return { benefit: mapBenefit(updatedBenefit), events: [mapEvent(event)] };

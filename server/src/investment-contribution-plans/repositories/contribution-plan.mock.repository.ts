@@ -91,6 +91,11 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
     return mockInvestmentContributionPlans.filter((plan) => plan.investmentId === Number(investmentId));
   }
 
+  async findAllByInvestmentIds(investmentIds: number[]): Promise<InvestmentContributionPlanRecord[]> {
+    const ids = new Set(investmentIds);
+    return mockInvestmentContributionPlans.filter((plan) => ids.has(plan.investmentId));
+  }
+
   async findAllByUser(userId: number): Promise<InvestmentContributionPlanRecord[]> {
     const ownedInvestmentIds = new Set(
       mockInvestmentsData

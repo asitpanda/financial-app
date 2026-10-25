@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { ValuationSnapshotRecord } from './valuation-snapshot.types';
 import { CreateValuationSnapshotDto } from './dto/create-valuation-snapshot.dto';
 import { UpdateValuationSnapshotDto } from './dto/update-valuation-snapshot.dto';
@@ -83,7 +83,7 @@ export class ValuationSnapshotsService {
 
   async create(createValuationSnapshotDto: CreateValuationSnapshotDto, userId?: number) {
     const resolvedUserId = userId !== undefined
-      ? Number((await this.assertOwnedInvestment(createValuationSnapshotDto.investmentId, userId)).userId)
+      ? Number((await this.assertOpenInvestment(createValuationSnapshotDto.investmentId, userId)).userId)
       : await this.resolveInvestmentUserId(createValuationSnapshotDto.investmentId);
     const snapshot = await this.repository.create({
       ...createValuationSnapshotDto,
@@ -125,8 +125,12 @@ export class ValuationSnapshotsService {
       return null;
     }
 
+    if (userId !== undefined) {
+      await this.assertOpenInvestment(existingSnapshot.investmentId, userId);
+    }
+
     if (userId !== undefined && updateValuationSnapshotDto.investmentId !== undefined) {
-      await this.assertOwnedInvestment(updateValuationSnapshotDto.investmentId, userId);
+      await this.assertOpenInvestment(updateValuationSnapshotDto.investmentId, userId);
     }
 
     const snapshot = await this.repository.update(id, updateValuationSnapshotDto);
@@ -160,6 +164,10 @@ export class ValuationSnapshotsService {
       return;
     }
 
+    if (userId !== undefined) {
+      await this.assertOpenInvestment(existingSnapshot.investmentId, userId);
+    }
+
     await this.repository.delete(id);
 
     if (existingSnapshot?.investmentId != null) {
@@ -171,5 +179,13 @@ export class ValuationSnapshotsService {
         resolvedUserId,
       );
     }
+  }
+
+  private async assertOpenInvestment(investmentId: string | number, userId: number) {
+    const investment = await this.assertOwnedInvestment(investmentId, userId);
+    if (String(investment.status || '').trim().toLowerCase() === 'closed') {
+      throw new BadRequestException('Closed investments cannot be modified.');
+    }
+    return investment;
   }
 }

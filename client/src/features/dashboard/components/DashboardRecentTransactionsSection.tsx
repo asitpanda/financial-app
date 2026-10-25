@@ -1,4 +1,3 @@
-import React from "react";
 import Icon from "@mdi/react";
 import { SectionCard } from "../../../components/common";
 import { getIconPathByKey } from "../../../constants/categoryIcons";
@@ -61,18 +60,16 @@ export default function DashboardRecentTransactionsSection({
       <div className="divide-y divide-slate-200/80">
         {recentTransactions.map((transaction) => {
           const amount = Number(transaction.amount) || 0;
-          const isExpense = transaction.type === "expense";
+             const isExpense = transaction.type === "EXPENSE";
+             const transactionType = isExpense ? "expense" : "income";
           const matchedCategory = categoryLookup.get(
             String(transaction.category || transaction.categoryId || "")
               .trim()
               .toLowerCase(),
           );
-          const iconKey =
-            matchedCategory?.icon ||
-            DEFAULT_TX_ICON_BY_TYPE[transaction.type || "expense"] ||
-            "cash";
+             const iconKey = matchedCategory?.icon || DEFAULT_TX_ICON_BY_TYPE[transactionType] || "cash";
           const iconPath =
-            getIconPathByKey(iconKey) || getIconPathByKey("cash");
+            getIconPathByKey(iconKey) || getIconPathByKey("cash") || "";
           const iconContainerStyle = matchedCategory?.color
             ? { backgroundColor: matchedCategory.color, color: "#ffffff" }
             : undefined;
@@ -91,10 +88,10 @@ export default function DashboardRecentTransactionsSection({
                 </div>
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-slate-900">
-                    {transaction.title || transaction.category || "Transaction"}
+                       {transaction.categoryLabelSnapshot || transaction.category || "Transaction"}
                   </div>
                   <div className="text-xs text-slate-500">
-                    {transaction.type === "expense" ? "Expense" : "Income"}
+                       {isExpense ? "Expense" : "Income"}
                   </div>
                 </div>
               </div>

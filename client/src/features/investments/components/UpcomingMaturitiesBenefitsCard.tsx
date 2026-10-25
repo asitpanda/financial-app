@@ -22,10 +22,6 @@ import {
 import AppButton from "../../../components/common/AppButton";
 import { SectionCard } from "../../../components/common";
 import {
-  formatInvestmentDate,
-  getInvestmentTypeLabel,
-} from "../../../utils/investmentHelpers";
-import {
   getUpcomingMaturitiesAndBenefits,
   type InvestmentUpcomingBenefitItem,
 } from "../investments.selectors";

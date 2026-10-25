@@ -189,8 +189,7 @@ export const getDashboardInvestmentSummary = (
   const upcomingContributions = periodActionInvestments
     .filter((investment) => {
       const dueDate = investment.activeContributionPlan?.nextDueDate;
-      const planStatus = String(investment.activeContributionPlan?.status || '').toLowerCase();
-      if (!dueDate || planStatus !== 'active') return false;
+      if (!dueDate || investment.activeContributionPlan?.isActive !== true) return false;
       const due = new Date(dueDate);
       return due >= periodStart && due <= periodEnd;
     })
@@ -205,7 +204,7 @@ export const getDashboardInvestmentSummary = (
       if (!investment.activeContributionPlan?.nextDueDate) return false;
       if (
         !investment.activeContributionPlan?.nextDueDate ||
-        String(investment.activeContributionPlan?.status || '').toLowerCase() !== 'active'
+        investment.activeContributionPlan?.isActive !== true
       ) {
         return false;
       }

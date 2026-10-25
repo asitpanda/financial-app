@@ -31,6 +31,8 @@ import { InvestmentRepository } from './repositories/investment.repository';
 import { AssetTaxonomyRepository } from '../investment-asset-taxonomy/repositories/asset-taxonomy.repository';
 import { PrismaService } from '../database/prisma.service';
 import { AnalyticsEngineService } from './analytics/analytics-engine.service';
+import { buildPage } from '../common/listing/listing.utils';
+import type { InvestmentListQuery } from './investment.types';
 
 @Injectable()
 export class InvestmentsService {
@@ -875,7 +877,7 @@ export class InvestmentsService {
   }
 
   private async getSummaryInvestments(userId: number): Promise<SummaryInvestment[]> {
-    const investments = await this.findAll(userId);
+    const investments = await this.repository.findAllForPortfolio(userId);
     return investments.map((investment) => this.mapInvestmentSummaryItem(investment));
   }
 
@@ -1148,6 +1150,14 @@ export class InvestmentsService {
     investment: T,
     events: EventLike[] = [],
   ): T {
+    if (String(investment?.status || '').trim().toLowerCase() === 'closed') {
+      return {
+        ...investment,
+        currentValue: 0,
+        currentValueSource: investment.currentValueSource ?? 'manual',
+      };
+    }
+
     const storedCurrentValue = Number(investment?.currentValue ?? Number.NaN);
     const derivedValuation = this.analyticsEngine.deriveEventValuation(events, investment?.accountingTreatment);
     const hasStoredCurrentValue = Number.isFinite(storedCurrentValue);
@@ -1392,6 +1402,11 @@ export class InvestmentsService {
     eventCount: number,
     snapshotCount: number,
     latestSnapshot: SnapshotLike | null,
+    realizedMetrics?: {
+      realizedAmount: number;
+      realizedProfitLoss: number;
+      realizedProfitLossPercentage: number;
+    },
   ): InvestmentDetailResponseDto {
     return {
       id: investment.id,
@@ -1403,6 +1418,9 @@ export class InvestmentsService {
       institutionName: investment.institutionName ?? null,
       totalInvested: Number(investment.totalInvested || 0),
       currentValue: investment.currentValue ?? undefined,
+      realizedAmount: realizedMetrics?.realizedAmount,
+      realizedProfitLoss: realizedMetrics?.realizedProfitLoss,
+      realizedProfitLossPercentage: realizedMetrics?.realizedProfitLossPercentage,
       startDate: this.toOptionalDateString(investment.startDate),
       status: investment.status,
       maturityDate: this.toOptionalDateString(investment.maturityDate),
@@ -1419,6 +1437,27 @@ export class InvestmentsService {
       latestSnapshot: this.mapLatestSnapshot(latestSnapshot),
       createdAt: this.toOptionalDateString(investment.createdAt) ?? undefined,
       updatedAt: this.toOptionalDateString(investment.updatedAt) ?? undefined,
+    };
+  }
+
+  private buildRealizedInvestmentMetrics(
+    investment: InvestmentLike,
+    events: EventLike[] = [],
+  ) {
+    const confirmedEvents = events.filter(
+      (event) => this.normalizeEventStatus(event?.status) === 'CONFIRMED',
+    );
+    const investedPrincipal = Number(investment.totalInvested || 0);
+    const realizedAmount = confirmedEvents
+      .filter((event) => event?.eventType === InvestmentEventType.BENEFIT_RECEIPT)
+      .reduce((sum, event) => sum + Number(event?.amount || 0), 0);
+    const realizedProfitLoss = realizedAmount - investedPrincipal;
+
+    return {
+      realizedAmount,
+      realizedProfitLoss,
+      realizedProfitLossPercentage:
+        investedPrincipal > 0 ? (realizedProfitLoss / investedPrincipal) * 100 : 0,
     };
   }
 
@@ -1448,9 +1487,12 @@ export class InvestmentsService {
     };
   }
 
-  async findAll(userId: number): Promise<SummaryInvestment[]> {
-    const investments = await this.repository.findAll(userId);
-    const plans = await this.contributionPlansService.findAllByUser(userId);
+  private async findAllWithInvestments(
+    investments: InvestmentLike[],
+    userId: number,
+    suppliedPlans?: ActivePlanLike[],
+  ): Promise<SummaryInvestment[]> {
+    const plans = suppliedPlans ?? (await this.contributionPlansService.findAllByUser(userId));
     const plansByInvestmentId = new Map<string, ActivePlanLike[]>();
     const requiresDerivedValuation = investments.some(
       (investment) => {
@@ -1462,12 +1504,18 @@ export class InvestmentsService {
     const eventsByInvestmentId = new Map<string, EventLike[]>();
 
     if (requiresDerivedValuation) {
-      const events = await this.investmentEventsService.findAll(userId);
-      events.forEach((event) => {
-        const investmentId = String(event.investmentId);
-        const existingEvents = eventsByInvestmentId.get(investmentId) ?? [];
-        existingEvents.push(event);
-        eventsByInvestmentId.set(investmentId, existingEvents);
+      const investmentsNeedingEvents = investments.filter((investment) => {
+        const currentValue = Number(investment?.currentValue ?? Number.NaN);
+        return !Number.isFinite(currentValue) || currentValue === 0;
+      });
+      const eventGroups = await Promise.all(
+        investmentsNeedingEvents.map(async (investment) => ({
+          investmentId: String(investment.id),
+          events: await this.investmentEventsService.findAllByInvestment(String(investment.id)),
+        })),
+      );
+      eventGroups.forEach(({ investmentId, events }) => {
+        eventsByInvestmentId.set(investmentId, events);
       });
     }
 
@@ -1484,8 +1532,16 @@ export class InvestmentsService {
         eventsByInvestmentId.get(String(investment.id)) ?? [],
       );
 
+      const gainLossAmount =
+        Number(hydratedInvestment.currentValue || 0) - Number(hydratedInvestment.totalInvested || 0);
+
       return {
         ...hydratedInvestment,
+        gainLossAmount,
+        gainLossPercentage:
+          Number(hydratedInvestment.totalInvested || 0) > 0
+            ? (gainLossAmount / Number(hydratedInvestment.totalInvested)) * 100
+            : null,
         activeContributionPlan: this.mapActiveContributionPlan(
           this.selectDisplayContributionPlan(
             plansByInvestmentId.get(String(investment.id)) ?? [],
@@ -1495,8 +1551,27 @@ export class InvestmentsService {
     });
   }
 
+  async findAll(userId: number): Promise<SummaryInvestment[]> {
+    return this.findAllWithInvestments(await this.repository.findAll(userId), userId);
+  }
+
+  async findPage(userId: number, query: InvestmentListQuery) {
+    const result = await this.repository.findPage(userId, query);
+    const investmentIds = result.items.map((investment) => investment.id);
+    const plans = await this.contributionPlansService.findAllByInvestmentIds(investmentIds);
+    const data = await this.findAllWithInvestments(result.items, userId, plans);
+
+    return buildPage({ items: data, total: result.total }, query);
+  }
+
+  private isClosedInvestment(investment: InvestmentLike) {
+    return String(investment?.status || '').trim().toLowerCase() === 'closed';
+  }
+
   private async buildDashboardUpcoming(userId: number) {
-    const investments = await this.getSummaryInvestments(userId);
+    const investments = (await this.getSummaryInvestments(userId)).filter(
+      (investment) => !this.isClosedInvestment(investment),
+    );
 
     // Includes overdue contributions and anything due within the next 60 days.
     const contributionHorizon = new Date();
@@ -1555,10 +1630,13 @@ export class InvestmentsService {
   }
 
   async getDashboardAnalytics(userId: number): Promise<unknown> {
-    const [investments, upcoming] = await Promise.all([
+    const [allInvestments, upcoming] = await Promise.all([
       this.getSummaryInvestments(userId),
       this.buildDashboardUpcoming(userId),
     ]);
+    const investments = allInvestments.filter(
+      (investment) => !this.isClosedInvestment(investment),
+    );
     const facts = await this.analyticsEngine.loadFacts(userId, investments);
     const query = {
       range: 'ALL' as const,
@@ -1660,6 +1738,9 @@ export class InvestmentsService {
         },
         sourceOfValue: summary.valueSourceSummary,
         assetTypePerformance: { rows: categoryPerformance },
+        assets: investments.map((investment) =>
+          this.normalizeDashboardInvestment(investment),
+        ),
         insurancePosition: {
           cover: summary.insuranceCover,
           premiumsPaid: insuranceSavingsPremiums + protectionPremiums,
@@ -1689,6 +1770,7 @@ export class InvestmentsService {
       investment,
       investmentEvents,
     );
+    const realizedMetrics = this.buildRealizedInvestmentMetrics(investment, investmentEvents);
 
     return this.buildDetailShellResponse(
       hydratedInvestment,
@@ -1696,6 +1778,9 @@ export class InvestmentsService {
       investmentEvents.length,
       valuationSnapshots.length,
       latestSnapshot,
+      String(investment.status || '').trim().toLowerCase() === 'closed'
+        ? realizedMetrics
+        : undefined,
     );
   }
 
@@ -1721,6 +1806,19 @@ export class InvestmentsService {
     const existingInvestment = await this.repository.findOne(id, userId);
     if (!existingInvestment) {
       return null;
+    }
+
+    if (String(existingInvestment.status || '').trim().toLowerCase() === 'closed') {
+      throw new BadRequestException('Closed investments cannot be modified.');
+    }
+
+    if (
+      updateInvestmentDto.status?.toLowerCase() === 'closed' &&
+      String(existingInvestment.status || '').toLowerCase() !== 'closed'
+    ) {
+      throw new BadRequestException(
+        'Investments must be closed through benefit realization so settlement and cash movement are recorded.',
+      );
     }
 
     await this.assertInvestmentCrudRules({
@@ -1756,6 +1854,13 @@ export class InvestmentsService {
   }
 
   async remove(id: number, userId: number) {
+    const existingInvestment = await this.repository.findOne(id, userId);
+    if (!existingInvestment) {
+      return null;
+    }
+    if (String(existingInvestment.status || '').trim().toLowerCase() === 'closed') {
+      throw new BadRequestException('Closed investments cannot be modified.');
+    }
     return this.repository.delete(id, userId);
   }
 }

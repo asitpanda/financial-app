@@ -23,7 +23,9 @@ const categoryBaseSchema = z.object({
     ),
 });
 
-export const createCategorySchema = ({ existingNames = [], currentName = "" } = {}) => {
+export const createCategorySchema = (
+  { existingNames = [], currentName = "" }: { existingNames?: string[]; currentName?: string } = {},
+) => {
   const normalizedExistingNames = existingNames
     .map((name) => name?.trim().toLowerCase())
     .filter(Boolean);

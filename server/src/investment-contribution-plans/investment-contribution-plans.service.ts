@@ -112,7 +112,7 @@ export class InvestmentContributionPlansService {
 
   async create(createDto: CreateInvestmentContributionPlanDto, userId?: number) {
     if (userId !== undefined) {
-      await this.assertOwnedInvestment(createDto.investmentId, userId);
+      await this.assertOpenInvestment(createDto.investmentId, userId);
     }
 
     this.validatePlanMutationInput(createDto);
@@ -125,6 +125,10 @@ export class InvestmentContributionPlansService {
 
   async findAllByUser(userId: number) {
     return this.repository.findAllByUser(userId);
+  }
+
+  async findAllByInvestmentIds(investmentIds: number[]) {
+    return this.repository.findAllByInvestmentIds(investmentIds);
   }
 
   async findAllActiveByUser(userId: number) {
@@ -225,7 +229,7 @@ export class InvestmentContributionPlansService {
     dto: ConfirmRecurringContributionPlanDto,
     userId: number,
   ) {
-    await this.assertOwnedInvestment(investmentId, userId);
+    await this.assertOpenInvestment(investmentId, userId);
     this.validatePlanDates(dto.anchorDate, dto.endDate);
 
     const today = this.toUtcDateOnly(new Date());
@@ -358,8 +362,9 @@ export class InvestmentContributionPlansService {
     if (!plan) return null;
 
     if (userId !== undefined) {
+      await this.assertOpenInvestment(plan.investmentId, userId);
       const investmentId = String(updateDto.investmentId ?? plan.investmentId);
-      await this.assertOwnedInvestment(investmentId, userId);
+      await this.assertOpenInvestment(investmentId, userId);
     }
 
     this.validatePlanMutationInput(updateDto, plan);
@@ -381,6 +386,7 @@ export class InvestmentContributionPlansService {
     if (userId !== undefined) {
       const plan = await this.findOne(id, userId);
       if (!plan) return;
+      await this.assertOpenInvestment(plan.investmentId, userId);
     }
 
     return this.repository.delete(id);
@@ -392,7 +398,7 @@ export class InvestmentContributionPlansService {
     userId: number,
     dto: SkipCurrentContributionDto,
   ) {
-    await this.assertOwnedInvestment(investmentId, userId);
+    await this.assertOpenInvestment(investmentId, userId);
 
     const plan = await this.repository.findOne(planId);
     if (!plan || String(plan.investmentId) !== String(investmentId)) {
@@ -478,6 +484,14 @@ export class InvestmentContributionPlansService {
       throw new NotFoundException(`Investment ${investmentId} not found`);
     }
 
+    return investment;
+  }
+
+  private async assertOpenInvestment(investmentId: string | number, userId: number) {
+    const investment = await this.assertOwnedInvestment(String(investmentId), userId);
+    if (String(investment.status || '').trim().toLowerCase() === 'closed') {
+      throw new BadRequestException('Closed investments cannot be modified.');
+    }
     return investment;
   }
 

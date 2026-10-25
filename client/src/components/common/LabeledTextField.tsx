@@ -15,9 +15,6 @@ export default function LabeledTextField({
   sx,
   ...textFieldProps
 }: LabeledTextFieldProps) {
-  const isReadOnly = Boolean(
-    textFieldProps.slotProps?.input?.readOnly ?? textFieldProps.InputProps?.readOnly,
-  );
   const helperSlotProps = {
     sx: {
       minHeight: 20,
@@ -57,6 +54,10 @@ export default function LabeledTextField({
         helperText={errorMessage || helperText}
         slotProps={{
           ...textFieldProps.slotProps,
+          htmlInput: {
+            'aria-label': labelText,
+            ...textFieldProps.slotProps?.htmlInput,
+          },
           formHelperText: {
             ...textFieldProps.slotProps?.formHelperText,
             ...helperSlotProps,
@@ -67,14 +68,14 @@ export default function LabeledTextField({
             borderRadius: '5px',
             height: 43,
             alignItems: 'center',
-            ...(isReadOnly && {
+            '&.Mui-readOnly': {
               bgcolor: 'action.hover',
               '& input, & textarea': { cursor: 'default', caretColor: 'transparent' },
               '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
                 borderColor: 'divider',
                 borderWidth: '1px',
               },
-            }),
+            },
           },
           ...sx,
         }}

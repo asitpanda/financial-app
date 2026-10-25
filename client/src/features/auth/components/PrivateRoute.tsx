@@ -1,4 +1,4 @@
-import React, { type ReactNode } from "react";
+import type { ReactNode } from "react";
 import Login from "../Login";
 import { useAuth } from "../useAuth";
 

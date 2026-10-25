@@ -68,9 +68,15 @@ export const toTransactionFormState = (
       : initialValues.source
         ? String(initialValues.source)
         : "";
+  const normalizedType =
+    initialValues.type === "INCOME" ||
+    initialValues.type === "EXPENSE" ||
+    initialValues.type === "TRANSFER"
+      ? initialValues.type
+      : "EXPENSE";
 
   return {
-    type: initialValues.type || "EXPENSE",
+    type: normalizedType,
     amount: initialValues.amount ?? 0,
     category: initialValues.category || "",
     source: normalizedSource,
@@ -78,7 +84,7 @@ export const toTransactionFormState = (
       initialValues.destinationAccountId != null
         ? String(initialValues.destinationAccountId)
         : "",
-    goalId: initialValues.goalId || "",
+    goalId: initialValues.goalId != null ? String(initialValues.goalId) : "",
     date: normalizedDate,
     notes: initialValues.notes || "",
   };

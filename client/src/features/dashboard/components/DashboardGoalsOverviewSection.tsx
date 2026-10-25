@@ -1,4 +1,3 @@
-import React from "react";
 import Icon from "@mdi/react";
 import { SectionCard } from "../../../components/common";
 import { getIconPathByKey } from "../../../constants/categoryIcons";

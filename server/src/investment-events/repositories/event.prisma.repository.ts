@@ -81,6 +81,10 @@ export class EventPrismaRepository implements IEventDataSourcePort {
     });
     if (!investmentWithMeta) return;
 
+    if (String(investmentWithMeta.status || '').toLowerCase() === 'closed') {
+      return;
+    }
+
     const accountingTreatment: 'INVESTMENT' | 'INSURANCE_SAVINGS' | 'PROTECTION_EXPENSE' =
       (investmentWithMeta as any).accountingTreatmentOverride ??
       (investmentWithMeta as any).assetCategoryRef?.accountingTreatment ??

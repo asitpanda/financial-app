@@ -124,7 +124,8 @@ export class BenefitMockRepository implements IBenefitDataSourcePort {
     if (data.closesInvestment) {
       const investmentIndex = mockInvestmentsData.findIndex((item) => item.id === Number(investmentId));
       if (investmentIndex >= 0) {
-        mockInvestmentsData[investmentIndex].status = benefit.benefitType === InvestmentBenefitType.MATURITY ? 'matured' : 'closed';
+        mockInvestmentsData[investmentIndex].status = 'closed';
+        mockInvestmentsData[investmentIndex].currentValue = 0;
       }
     }
     return { benefit: updatedBenefit, events };

@@ -12,6 +12,7 @@ import {
   Tab,
   Tabs,
   Typography,
+  useTheme,
 } from "@mui/material";
 import {
   mdiCalendarBlankOutline,
@@ -41,6 +42,7 @@ import {
 } from "../../../components/common";
 import DataTable from "../../../components/common/DataTable";
 import RecordValuationModal from "./RecordValuationModal";
+import RecordInvestmentActivityModal from "./RecordInvestmentActivityModal";
 import { useUpdateInvestment } from "../hooks/useInvestments";
 import {
   useUpdateInvestmentContributionPlan,
@@ -50,7 +52,6 @@ import { useDeleteInvestmentSnapshot } from "../hooks/useInvestmentSnapshots";
 import {
   useInvestmentBenefitsByInvestment,
   useDeleteInvestmentBenefit,
-  useRealizeInvestmentBenefit,
 } from "../hooks/useInvestmentBenefits";
 import { INVESTMENT_EVENT_TYPES } from "../../../types/investmentEventTypes";
 import { useNotificationStore } from "../../../store/notificationStore";
@@ -238,6 +239,7 @@ const tableCellCenterSx = {
 };
 
 function InvestmentPerformanceChart({ points, formatValue }) {
+  const theme = useTheme();
   const [hoveredIndex, setHoveredIndex] = React.useState(null);
 
   if (points.length === 0) {
@@ -327,7 +329,7 @@ function InvestmentPerformanceChart({ points, formatValue }) {
           y1={padding.top}
           x2={padding.left}
           y2={chartHeight - padding.bottom}
-          stroke="#d1d5db"
+          stroke={theme.palette.action.disabled}
           strokeWidth="1"
         />
         <line
@@ -335,7 +337,7 @@ function InvestmentPerformanceChart({ points, formatValue }) {
           y1={chartHeight - padding.bottom}
           x2={chartWidth - padding.right}
           y2={chartHeight - padding.bottom}
-          stroke="#d1d5db"
+          stroke={theme.palette.action.disabled}
           strokeWidth="1"
         />
 
@@ -350,7 +352,7 @@ function InvestmentPerformanceChart({ points, formatValue }) {
                 y1={y}
                 x2={chartWidth - padding.right}
                 y2={y}
-                stroke="#e5e7eb"
+                stroke={theme.palette.divider}
                 strokeWidth="1"
                 strokeDasharray="2,2"
               />
@@ -572,6 +574,7 @@ export function InvestmentViewDrawer({
   onRecordActivity,
   onEditActivity,
 }) {
+  const theme = useTheme();
   const [activeTab, setActiveTab] = React.useState("overview");
   const [contributionFilter, setContributionFilter] = React.useState("all");
   const [contributionStatusFilter, setContributionStatusFilter] =
@@ -594,8 +597,9 @@ export function InvestmentViewDrawer({
   const [pendingPlanStatus, setPendingPlanStatus] = React.useState(null);
   const [planActionError, setPlanActionError] = React.useState("");
   const [deleteBenefitTarget, setDeleteBenefitTarget] = React.useState(null);
-  const [realizeBenefitTarget, setRealizeBenefitTarget] = React.useState(null);
+  const [activityModalState, setActivityModalState] = React.useState(null);
   const [benefitActionLoading, setBenefitActionLoading] = React.useState(false);
+  const isClosed = String(investment?.status || "").toLowerCase() === "closed";
   const pushNotification = useNotificationStore(
     (state) => state.pushNotification,
   );
@@ -608,7 +612,6 @@ export function InvestmentViewDrawer({
     Boolean(open && investment?.id),
   );
   const deleteBenefitMutation = useDeleteInvestmentBenefit();
-  const realizeBenefitMutation = useRealizeInvestmentBenefit();
 
   React.useEffect(() => {
     if (!open) return;
@@ -625,11 +628,13 @@ export function InvestmentViewDrawer({
   }, [open, investment?.id]);
 
   const handleOpenCreateSnapshot = () => {
+    if (isClosed) return;
     setSelectedSnapshot(null);
     setRecordValuationOpen(true);
   };
 
   const handleOpenEditSnapshot = (snapshot) => {
+    if (isClosed) return;
     setSelectedSnapshot(snapshot);
     setRecordValuationOpen(true);
   };
@@ -645,18 +650,21 @@ export function InvestmentViewDrawer({
         Close
       </AppButton>
       {investment ? (
-        <AppButton
-          variant="contained"
-          onClick={() => onEdit?.(investment)}
-          sx={{ minWidth: 160 }}
-        >
-          Edit Investment
-        </AppButton>
+        !isClosed ? (
+          <AppButton
+            variant="contained"
+            onClick={() => onEdit?.(investment)}
+            sx={{ minWidth: 160 }}
+          >
+            Edit Investment
+          </AppButton>
+        ) : null
       ) : null}
     </Box>
   );
 
   const handlePlanUpdate = async (payload, successMessage) => {
+    if (isClosed) return;
     const planId = investment?.activeContributionPlan?.id;
     if (!investment?.id || !planId) return;
 
@@ -689,6 +697,12 @@ export function InvestmentViewDrawer({
 
   const handleInvestmentStatusChange = async (newStatus) => {
     if (!investment?.id || newStatus === investment.status) return;
+
+    if (newStatus === "closed") {
+      setPendingInvestmentStatus(null);
+      setActivityModalState({ closeMode: true });
+      return;
+    }
 
     setInvestmentStatusLoading(true);
     try {
@@ -838,9 +852,15 @@ export function InvestmentViewDrawer({
     investment?.currentValue ?? investment?.totalInvested ?? 0,
   );
   const effectiveTotalInvested = Number(investment?.totalInvested ?? 0);
-  const totalReturnValue = effectiveCurrentValue - effectiveTotalInvested;
+  const isClosedInvestment =
+    String(investment?.status || '').trim().toLowerCase() === 'closed';
+  const totalReturnValue = isClosedInvestment && investment?.realizedProfitLoss != null
+    ? Number(investment.realizedProfitLoss)
+    : effectiveCurrentValue - effectiveTotalInvested;
   const totalReturnPercentage =
-    effectiveTotalInvested > 0
+    isClosedInvestment && investment?.realizedProfitLossPercentage != null
+      ? Number(investment.realizedProfitLossPercentage)
+      : effectiveTotalInvested > 0
       ? (totalReturnValue / effectiveTotalInvested) * 100
       : 0;
   const totalReturnColor = getProfitLossMuiColor(totalReturnValue, "gain");
@@ -1123,6 +1143,7 @@ export function InvestmentViewDrawer({
           INVESTMENT_EVENT_TYPES.OPENING_INCOME_CREDIT,
         ];
         const isEditable =
+          !isClosed &&
           !row.linkedTransactionId &&
           editableEventTypes.includes(row.event?.eventType);
 
@@ -1244,23 +1265,31 @@ export function InvestmentViewDrawer({
       headerAlign: "right",
       minWidth: 116,
       renderCell: ({ row }) => (
-        <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
-          <IconButton
-            size="small"
-            onClick={() => handleOpenEditSnapshot(row.snapshot)}
-            aria-label={`Edit valuation on ${formatInvestmentDate(row.snapshotDate)}`}
-          >
-            <Icon path={mdiPencilOutline} size={0.8} />
-          </IconButton>
-          <IconButton
-            size="small"
-            color="error"
-            onClick={() => setDeleteSnapshotTarget(row.snapshot)}
-            aria-label={`Delete valuation on ${formatInvestmentDate(row.snapshotDate)}`}
-          >
-            <Icon path={mdiDeleteOutline} size={0.8} />
-          </IconButton>
-        </Box>
+        isClosed ? (
+          <Box sx={tableCellCenterSx}>
+            <Typography variant="caption" color="text.secondary">
+              —
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+            <IconButton
+              size="small"
+              onClick={() => handleOpenEditSnapshot(row.snapshot)}
+              aria-label={`Edit valuation on ${formatInvestmentDate(row.snapshotDate)}`}
+            >
+              <Icon path={mdiPencilOutline} size={0.8} />
+            </IconButton>
+            <IconButton
+              size="small"
+              color="error"
+              onClick={() => setDeleteSnapshotTarget(row.snapshot)}
+              aria-label={`Delete valuation on ${formatInvestmentDate(row.snapshotDate)}`}
+            >
+              <Icon path={mdiDeleteOutline} size={0.8} />
+            </IconButton>
+          </Box>
+        )
       ),
     },
   ];
@@ -1346,8 +1375,15 @@ export function InvestmentViewDrawer({
                 value={
                   pendingInvestmentStatus || investment?.status || "active"
                 }
-                onChange={(e) => setPendingInvestmentStatus(e.target.value)}
-                disabled={investmentStatusLoading}
+                onChange={(e) => {
+                  const nextStatus = e.target.value;
+                  if (nextStatus === "closed") {
+                    handleInvestmentStatusChange(nextStatus);
+                    return;
+                  }
+                  setPendingInvestmentStatus(nextStatus);
+                }}
+                disabled={investmentStatusLoading || isClosed}
                 aria-label="Investment Status"
                 sx={{
                   height: 32,
@@ -1388,8 +1424,8 @@ export function InvestmentViewDrawer({
                   },
                 }}
               >
-                <MenuItem value="active">Active</MenuItem>
-                <MenuItem value="matured">Matured</MenuItem>
+                {!isClosed ? <MenuItem value="active">Active</MenuItem> : null}
+                {!isClosed ? <MenuItem value="matured">Matured</MenuItem> : null}
                 <MenuItem value="closed">Closed</MenuItem>
               </Select>
             </Box>
@@ -1940,7 +1976,7 @@ export function InvestmentViewDrawer({
                     size="small"
                     value={pendingPlanStatus || planStatusNormalized}
                     onChange={(e) => setPendingPlanStatus(e.target.value)}
-                    disabled={planActionLoading}
+                    disabled={planActionLoading || isClosed}
                     aria-label="Recurring Plan Status"
                     sx={{
                       height: 32,
@@ -1987,7 +2023,7 @@ export function InvestmentViewDrawer({
                     <MenuItem value="cancelled">Cancelled</MenuItem>
                   </Select>
                 ) : null}
-                {onRecordActivity ? (
+                {!isClosed && onRecordActivity ? (
                   <AppButton
                     size="small"
                     variant="outlined"
@@ -2305,20 +2341,22 @@ export function InvestmentViewDrawer({
             </Typography>
           }
           action={
-            <AppButton
-              size="small"
-              variant="outlined"
-              onClick={handleOpenCreateSnapshot}
-              sx={{ minWidth: 138 }}
-            >
-              <Box
-                component="span"
-                sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}
+            !isClosed ? (
+              <AppButton
+                size="small"
+                variant="outlined"
+                onClick={handleOpenCreateSnapshot}
+                sx={{ minWidth: 138 }}
               >
-                <Icon path={mdiPlus} size={0.85} />
-                Record Valuation
-              </Box>
-            </AppButton>
+                <Box
+                  component="span"
+                  sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}
+                >
+                  <Icon path={mdiPlus} size={0.85} />
+                  Record Valuation
+                </Box>
+              </AppButton>
+            ) : null
           }
           contentSx={{ pt: 0 }}
         >
@@ -2511,54 +2549,7 @@ export function InvestmentViewDrawer({
 
   const handleRealizeBenefit = (benefit) => {
     if (!benefit || !investment?.id) return;
-    setRealizeBenefitTarget(benefit);
-  };
-
-  const handleConfirmBenefitRealization = async () => {
-    if (!realizeBenefitTarget || !investment?.id) return;
-
-    const destinationAccountId =
-      realizeBenefitTarget.destinationAccountId ?? investment.accountId ?? null;
-    setBenefitActionLoading(true);
-    try {
-      await realizeBenefitMutation.mutateAsync({
-        investmentId: investment.id,
-        benefitId: realizeBenefitTarget.id,
-        payload: {
-          components: [
-            {
-              eventType: INVESTMENT_EVENT_TYPES.BENEFIT_RECEIPT,
-              amount: Number(realizeBenefitTarget.amount),
-              eventDate: realizeBenefitTarget.benefitDate,
-              notes: realizeBenefitTarget.notes || undefined,
-              transaction: {
-                type: "INVESTMENT",
-                destinationAccountId:
-                  destinationAccountId == null
-                    ? undefined
-                    : Number(destinationAccountId),
-              },
-            },
-          ],
-          closesInvestment: false,
-        },
-      });
-      pushNotification({
-        type: "success",
-        message: "Investment benefit realized successfully",
-      });
-      setRealizeBenefitTarget(null);
-    } catch (error) {
-      pushNotification({
-        type: "error",
-        message: getRuntimeErrorMessage(
-          error,
-          "Failed to realize investment benefit",
-        ),
-      });
-    } finally {
-      setBenefitActionLoading(false);
-    }
+    setActivityModalState({ realizationBenefit: benefit });
   };
 
   const renderBenefitsTab = () => {
@@ -2614,7 +2605,7 @@ export function InvestmentViewDrawer({
           title="Investment Benefits"
           helperText="Expected contractual payouts, interest, and other benefits"
           action={
-            onRecordActivity ? (
+            !isClosed && onRecordActivity ? (
               <AppButton
                 size="small"
                 variant="outlined"
@@ -2812,7 +2803,7 @@ export function InvestmentViewDrawer({
                           minWidth: 140,
                         }}
                       >
-                        {onEditActivity ? (
+                        {!isClosed && onEditActivity ? (
                           <AppButton
                             size="small"
                             variant="outlined"
@@ -2828,27 +2819,31 @@ export function InvestmentViewDrawer({
                             <Icon path={mdiPencilOutline} size={0.8} />
                           </AppButton>
                         ) : null}
-                        <AppButton
-                          size="small"
-                          variant="outlined"
-                          color="error"
-                          onClick={() => setDeleteBenefitTarget(benefit)}
-                          disabled={benefitActionLoading}
-                          sx={{ minWidth: 80 }}
-                        >
-                          <Icon path={mdiDeleteOutline} size={0.8} />
-                        </AppButton>
-                        <AppButton
-                          size="small"
-                          variant="contained"
-                          onClick={() =>
-                            handleRealizeBenefit(benefit.rawBenefit)
-                          }
-                          disabled={benefitActionLoading}
-                          sx={{ minWidth: 100 }}
-                        >
-                          Realize
-                        </AppButton>
+                        {!isClosed ? (
+                          <>
+                            <AppButton
+                              size="small"
+                              variant="outlined"
+                              color="error"
+                              onClick={() => setDeleteBenefitTarget(benefit)}
+                              disabled={benefitActionLoading}
+                              sx={{ minWidth: 80 }}
+                            >
+                              <Icon path={mdiDeleteOutline} size={0.8} />
+                            </AppButton>
+                            <AppButton
+                              size="small"
+                              variant="contained"
+                              onClick={() =>
+                                handleRealizeBenefit(benefit.rawBenefit)
+                              }
+                              disabled={benefitActionLoading}
+                              sx={{ minWidth: 100 }}
+                            >
+                              Realize
+                            </AppButton>
+                          </>
+                        ) : null}
                       </Box>
                     ) : (
                       <Box
@@ -3210,6 +3205,15 @@ export function InvestmentViewDrawer({
         onConfirm={handleConfirmInvestmentStatusChange}
       />
 
+      <RecordInvestmentActivityModal
+        open={Boolean(activityModalState)}
+        onClose={() => setActivityModalState(null)}
+        investment={investment}
+        accounts={accounts}
+        closeMode={Boolean(activityModalState?.closeMode)}
+        realizationBenefit={activityModalState?.realizationBenefit || null}
+      />
+
       <ConfirmDialog
         open={Boolean(pendingPlanStatus)}
         title="Confirm Plan Status Change"
@@ -3238,20 +3242,6 @@ export function InvestmentViewDrawer({
         loading={benefitActionLoading}
         onCancel={() => setDeleteBenefitTarget(null)}
         onConfirm={handleDeleteBenefit}
-      />
-      <ConfirmDialog
-        open={Boolean(realizeBenefitTarget)}
-        title="Realize Investment Benefit"
-        description={
-          realizeBenefitTarget
-            ? `Record ${formatInvestmentCurrency(realizeBenefitTarget.amount)} as received into ${benefitDestinationLabel}.`
-            : ""
-        }
-        confirmLabel="Realize Benefit"
-        confirmColor="success"
-        loading={benefitActionLoading}
-        onCancel={() => setRealizeBenefitTarget(null)}
-        onConfirm={handleConfirmBenefitRealization}
       />
     </AppDrawer>
   );

@@ -13,6 +13,7 @@ import type {
   InvestmentDashboardWidgetResponse,
   InvestmentAssetTypeConfig,
   InvestmentMetadataResponse,
+  InvestmentListParams,
   UpdateInvestmentDto,
 } from '../types/investment.types';
 import type { InvestmentAssetTaxonomyNode } from '../types/investmentAssetTaxonomy.types';
@@ -36,7 +37,7 @@ const getMetadataQueryOptions = {
 } as const;
 
 const invalidateInvestmentSummaryQueries = (queryClient: ReturnType<typeof useQueryClient>) => {
-  queryClient.invalidateQueries({ queryKey: ['investments'], exact: true });
+  queryClient.invalidateQueries({ queryKey: ['investments'] });
   queryClient.invalidateQueries({ queryKey: ['investments', 'dashboard'], exact: true });
   queryClient.invalidateQueries({ queryKey: ['investments', 'reference-data'], exact: true });
   queryClient.invalidateQueries({ queryKey: ['dashboard'] });
@@ -50,10 +51,10 @@ const invalidateInvestmentDetailQuery = (
   queryClient.invalidateQueries({ queryKey: ['investment', id] });
 };
 
-export const useInvestmentSummaryData = () => {
+export const useInvestmentSummaryData = (params: InvestmentListParams = { page: 1, limit: 25 }) => {
   return useQuery({
-    queryKey: ['investments'],
-    queryFn: () => investmentApi.getAll(),
+    queryKey: ['investments', params],
+    queryFn: () => investmentApi.getAll(params),
   });
 };
 
@@ -238,10 +239,12 @@ export const useRemoveInvestment = () => {
   });
 };
 
-export const useInvestmentSummaryPageData = () => {
+export const useInvestmentSummaryPageData = (
+  params: InvestmentListParams = { page: 1, limit: 25 },
+) => {
   const pushNotification = useNotificationStore((state) => state.pushNotification);
 
-  const query = useInvestmentSummaryData();
+  const query = useInvestmentSummaryData(params);
 
   useEffect(() => {
     if (!query.error) return;
@@ -249,7 +252,14 @@ export const useInvestmentSummaryPageData = () => {
   }, [query.error, pushNotification]);
 
   return {
-    investments: Array.isArray(query.data) ? query.data : [],
+    investments: Array.isArray(query.data?.data) ? query.data.data : [],
+    pagination: query.data?.pagination ?? {
+      page: params.page,
+      limit: params.limit,
+      total: 0,
+      totalPages: 0,
+      hasNextPage: false,
+    },
     loading: query.isLoading,
     error: query.error,
     reload: query.refetch,

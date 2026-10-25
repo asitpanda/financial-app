@@ -1,4 +1,3 @@
-import React from "react";
 import { SectionCard } from "../../../components/common";
 import type { CategoryRecord } from "../../categories/categories.types";
 import type { GoalRecord } from "../../goals/goal.types";
@@ -16,10 +15,6 @@ interface DashboardQuickActionsSectionProps {
 }
 
 export default function DashboardQuickActionsSection({
-  categories,
-  goals,
-  transactions,
-  investments,
   onAddTransaction,
   onAddGoal,
   onAddCategory,

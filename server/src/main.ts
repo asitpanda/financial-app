@@ -70,6 +70,13 @@ async function bootstrap() {
   const { dbProvider } = validateRuntimeConfig();
   const app = await NestFactory.create(AppModule);
   const isJsonLogFormat = String(process.env.LOG_FORMAT || '').toLowerCase() === 'json';
+  const useTerminalColors =
+    !isJsonLogFormat &&
+    process.env.NO_COLOR === undefined &&
+    process.env.TERM_PROGRAM === 'vscode' &&
+    Boolean(process.stdout.isTTY);
+  const colorFailedRequest = (message: string) =>
+    useTerminalColors ? `\x1b[31m${message}\x1b[0m` : message;
 
   app.use((req: RequestWithContext, res: Response, next: NextFunction) => {
     const startedAt = Date.now();
@@ -118,9 +125,8 @@ async function bootstrap() {
           }),
         );
       } else {
-        console.log(
-          `[HTTP] <- ${requestId} ${req.method} ${req.originalUrl} status=${res.statusCode} duration=${durationMs}ms userId=${userId}`,
-        );
+        const message = `[HTTP] <- ${requestId} ${req.method} ${req.originalUrl} status=${res.statusCode} duration=${durationMs}ms userId=${userId}`;
+        console.log(res.statusCode >= 400 ? colorFailedRequest(message) : message);
       }
     });
 
@@ -139,9 +145,8 @@ async function bootstrap() {
             }),
           );
         } else {
-          console.log(
-            `[HTTP] xx ${requestId} ${req.method} ${req.originalUrl} connection_closed duration=${durationMs}ms`,
-          );
+          const message = `[HTTP] xx ${requestId} ${req.method} ${req.originalUrl} connection_closed duration=${durationMs}ms`;
+          console.log(colorFailedRequest(message));
         }
       }
     });

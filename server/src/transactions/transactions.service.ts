@@ -48,6 +48,8 @@ export class TransactionsService {
       return null;
     }
 
+    await this.assertOpenLinkedInvestment(existingTransaction, userId);
+
     const mergedTransaction = {
       ...existingTransaction,
       ...updateTransactionDto,
@@ -58,6 +60,11 @@ export class TransactionsService {
   }
 
   async remove(id: number, userId: number) {
+    const existingTransaction = await this.repository.findOne(id, userId);
+    if (!existingTransaction) {
+      return null;
+    }
+    await this.assertOpenLinkedInvestment(existingTransaction, userId);
     return this.repository.delete(id, userId);
   }
 
@@ -70,7 +77,7 @@ export class TransactionsService {
   }
 
   async recordContribution(recordContributionDto: RecordContributionDto, userId: number) {
-    const investment = await this.ensureOwnedInvestment(recordContributionDto.investmentId, userId);
+    const investment = await this.assertOpenInvestment(recordContributionDto.investmentId, userId);
     if (investment.accountId == null) {
       throw new BadRequestException(
         'Investment must have a linked funding account before recording a contribution.',
@@ -136,7 +143,7 @@ export class TransactionsService {
   }
 
   async recordWithdrawal(recordWithdrawalDto: RecordWithdrawalDto, userId: number) {
-    const investment = await this.ensureOwnedInvestment(recordWithdrawalDto.investmentId, userId);
+    const investment = await this.assertOpenInvestment(recordWithdrawalDto.investmentId, userId);
     const amount = Number(recordWithdrawalDto.amount);
     const totalInvested = Number(investment.totalInvested || 0);
 
@@ -233,6 +240,22 @@ export class TransactionsService {
     }
 
     return investment;
+  }
+
+  private async assertOpenInvestment(investmentId: string, userId: number) {
+    const investment = await this.ensureOwnedInvestment(investmentId, userId);
+    if (String(investment.status || '').trim().toLowerCase() === 'closed') {
+      throw new BadRequestException('Closed investments cannot be modified.');
+    }
+    return investment;
+  }
+
+  private async assertOpenLinkedInvestment(
+    transaction: { investment?: { id: number } | null },
+    userId: number,
+  ) {
+    if (transaction.investment?.id == null) return;
+    await this.assertOpenInvestment(String(transaction.investment.id), userId);
   }
 
   private async validateExpenseSourceBalance(

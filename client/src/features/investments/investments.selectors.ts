@@ -7,6 +7,10 @@ import {
 import type { AccountingTreatment, Investment } from './types/investment.types';
 import type { InvestmentAssetTaxonomyNode } from './types/investmentAssetTaxonomy.types';
 
+export type {
+  InvestmentDashboardPortfolioGrowthPoint as InvestmentPortfolioGrowthPoint,
+} from './types/investment.types';
+
 type InvestmentId = Investment['id'];
 
 export interface InvestmentDashboardKpis {
@@ -54,16 +58,6 @@ export interface InvestmentSeriesPoint {
   return: number;
   investedBreakdown: Record<string, number>;
   returnBreakdown: Record<string, number>;
-}
-
-export interface InvestmentPortfolioGrowthPoint {
-  label: string;
-  investedToDate: number;
-  currentValueToDate: number;
-  returnToDate: number;
-  snapshotBackedValue: number;
-  estimatedValue: number;
-  investedOnlyValue: number;
 }
 
 export interface InvestmentValueSourceSummary {
@@ -234,6 +228,9 @@ const getAccountingTreatment = (investment: Investment): AccountingTreatment =>
 const isPortfolioInvestment = (investment: Investment) =>
   getAccountingTreatment(investment) === 'INVESTMENT';
 
+const isClosedInvestment = (investment: Investment) =>
+  String(investment.status || '').trim().toLowerCase() === 'closed';
+
 const getInvestmentCurrentValueAtDate = (
   investment: Investment,
   pointDate = dayjs(),
@@ -321,7 +318,7 @@ const getResolvedInvestmentRecord = (
 };
 
 const getResolvedInvestmentRecords = (investments: Investment[]) =>
-  investments.map(getResolvedInvestmentRecord);
+  investments.filter((investment) => !isClosedInvestment(investment)).map(getResolvedInvestmentRecord);
 
 const isWithinDays = (value: string | null | undefined, days: number) => {
   if (!value) return false;
@@ -410,7 +407,7 @@ export const getInvestmentDashboardKpis = (
   const insuranceCover = insuranceCoverProtection + insuranceCoverSavings;
 
   return {
-    totalInvestments: investments.length,
+    totalInvestments: records.length,
     totalContributions,
     totalInvested,
     totalCurrentValue,
@@ -425,13 +422,6 @@ export const getInvestmentDashboardKpis = (
     insuranceSavingsContribution,
     protectionExpenseTotal,
   };
-};
-
-export const getInvestmentCategoryBreakdown = (
-  investments: Investment[],
-  taxonomyNodes: InvestmentAssetTaxonomyNode[],
-): InvestmentAllocationSegment[] => {
-  return getInvestmentContributionAllocation(investments, taxonomyNodes);
 };
 
 // Contribution allocation (INVESTMENT + INSURANCE_SAVINGS)
@@ -468,196 +458,6 @@ export const getInvestmentContributionAllocation = (
 };
 
 // Current Value allocation (INVESTMENT + INSURANCE_SAVINGS with meaningful currentValue > 0)
-export const getInvestmentCurrentValueAllocation = (
-  investments: Investment[],
-  taxonomyNodes: InvestmentAssetTaxonomyNode[],
-): InvestmentAllocationSegment[] => {
-  const records = getResolvedInvestmentRecords(investments).filter(
-    (item) =>
-      getAccountingTreatment(item.investment) !== 'PROTECTION_EXPENSE' &&
-      item.currentValue > 0,
-  );
-  const categoryLabelLookup = getCategoryLabelLookup(taxonomyNodes, investments);
-  const totals = records.reduce<
-    Record<string, { value: number; investmentIds: InvestmentId[] }>
-  >((acc, item) => {
-    const category = item.category;
-    if (!acc[category]) {
-      acc[category] = { value: 0, investmentIds: [] };
-    }
-
-    acc[category].value += item.currentValue;
-    acc[category].investmentIds.push(item.id);
-    return acc;
-  }, {});
-
-  return Object.entries(totals)
-    .map(([key, summary]) => ({
-      key,
-      label: categoryLabelLookup[key] || 'Other',
-      value: summary.value,
-      investmentIds: summary.investmentIds,
-    }))
-    .filter((item) => item.value > 0)
-    .sort((left, right) => right.value - left.value);
-};
-
-export const getInvestmentContributionSubAllocation = (
-  investments: Investment[],
-  taxonomyNodes: InvestmentAssetTaxonomyNode[],
-): InvestmentAllocationSegment[] => {
-  const records = getResolvedInvestmentRecords(investments).filter(
-    (item) => getAccountingTreatment(item.investment) !== 'PROTECTION_EXPENSE',
-  );
-  const categoryLabelLookup = getCategoryLabelLookup(taxonomyNodes, investments);
-  const groups: Record<
-    string,
-    { key: string; assetType: string; value: number; investmentIds: InvestmentId[] }
-  > = {};
-
-  records.forEach((item) => {
-    const typeKey = String(
-      item.investment.assetType || item.investment.type || item.category || 'OTHER',
-    ).trim().toUpperCase();
-    const catKey = String(item.investment.assetCategory || '').trim().toUpperCase();
-    if (!catKey || catKey === typeKey) return;
-    const compositeKey = `${typeKey}::${catKey}`;
-
-    if (!groups[compositeKey]) {
-      groups[compositeKey] = {
-        key: catKey,
-        assetType: typeKey,
-        value: 0,
-        investmentIds: [],
-      };
-    }
-    groups[compositeKey].value += item.investedAmount;
-    groups[compositeKey].investmentIds.push(item.id);
-  });
-
-  return Object.values(groups)
-    .map((group) => ({
-      key: group.key,
-      label: categoryLabelLookup[group.key] || group.key,
-      value: group.value,
-      investmentIds: group.investmentIds,
-      assetType: group.assetType,
-    }))
-    .filter((item) => item.value > 0)
-    .sort((a, b) => b.value - a.value);
-};
-
-export const getInvestmentCurrentValueSubAllocation = (
-  investments: Investment[],
-  taxonomyNodes: InvestmentAssetTaxonomyNode[],
-): InvestmentAllocationSegment[] => {
-  const records = getResolvedInvestmentRecords(investments).filter(
-    (item) =>
-      getAccountingTreatment(item.investment) !== 'PROTECTION_EXPENSE' &&
-      item.currentValue > 0,
-  );
-  const categoryLabelLookup = getCategoryLabelLookup(taxonomyNodes, investments);
-  const groups: Record<
-    string,
-    { key: string; assetType: string; value: number; investmentIds: InvestmentId[] }
-  > = {};
-
-  records.forEach((item) => {
-    const typeKey = String(
-      item.investment.assetType || item.investment.type || item.category || 'OTHER',
-    ).trim().toUpperCase();
-    const catKey = String(item.investment.assetCategory || '').trim().toUpperCase();
-    if (!catKey || catKey === typeKey) return;
-    const compositeKey = `${typeKey}::${catKey}`;
-
-    if (!groups[compositeKey]) {
-      groups[compositeKey] = {
-        key: catKey,
-        assetType: typeKey,
-        value: 0,
-        investmentIds: [],
-      };
-    }
-    groups[compositeKey].value += item.currentValue;
-    groups[compositeKey].investmentIds.push(item.id);
-  });
-
-  return Object.values(groups)
-    .map((group) => ({
-      key: group.key,
-      label: categoryLabelLookup[group.key] || group.key,
-      value: group.value,
-      investmentIds: group.investmentIds,
-      assetType: group.assetType,
-    }))
-    .filter((item) => item.value > 0)
-    .sort((a, b) => b.value - a.value);
-};
-
-export const getInvestmentContributionHoldingAllocation = (
-  investments: Investment[],
-): InvestmentAllocationSegment[] => {
-  const records = getResolvedInvestmentRecords(investments).filter(
-    (item) => getAccountingTreatment(item.investment) !== 'PROTECTION_EXPENSE',
-  );
-
-  return records.map((record) => {
-    const assetTypeKey = String(
-      record.investment.assetType || record.investment.type || record.investment.category || 'OTHER',
-    ).trim().toUpperCase();
-    const rawCat = String(record.investment.assetCategory || '').trim().toUpperCase();
-
-    return {
-      key: String(record.id),
-      label: record.investment.name || String(record.id),
-      value: record.investedAmount,
-      investmentIds: [record.id],
-      assetType: assetTypeKey,
-      assetCategory: rawCat || undefined,
-    };
-  });
-};
-
-export const getInvestmentCurrentValueHoldingAllocation = (
-  investments: Investment[],
-): InvestmentAllocationSegment[] => {
-  const records = getResolvedInvestmentRecords(investments).filter(
-    (item) =>
-      getAccountingTreatment(item.investment) !== 'PROTECTION_EXPENSE' &&
-      item.currentValue > 0,
-  );
-
-  return records.map((record) => {
-    const assetTypeKey = String(
-      record.investment.assetType || record.investment.type || record.investment.category || 'OTHER',
-    ).trim().toUpperCase();
-    const rawCat = String(record.investment.assetCategory || '').trim().toUpperCase();
-
-    return {
-      key: String(record.id),
-      label: record.investment.name || String(record.id),
-      value: record.currentValue,
-      investmentIds: [record.id],
-      assetType: assetTypeKey,
-      assetCategory: rawCat || undefined,
-    };
-  });
-};
-
-export const getInvestmentCategoryLabelMap = (
-  taxonomyNodes: InvestmentAssetTaxonomyNode[],
-): Record<string, string> => {
-  const map: Record<string, string> = {};
-
-  getInvestmentCategoryOptions(taxonomyNodes as never[])
-    .filter((option) => option.value !== 'all')
-    .forEach((option) => {
-      map[option.value] = option.label;
-    });
-
-  return map;
-};
-
 export const getFilteredInvestments = (
   investments: Investment[],
   { search, statusFilter, categoryFilter, treatmentFilter }: InvestmentFilterInput,
@@ -685,51 +485,6 @@ export const getNormalizedInvestments = (
   investments: Investment[],
   taxonomyNodes: InvestmentAssetTaxonomyNode[],
 ) => investments.map((item) => normalizeInvestmentForUi(item, taxonomyNodes as never[]));
-
-export const getTopInvestmentCurrentValueItems = (
-  investments: Investment[],
-) => {
-  const records = getResolvedInvestmentRecords(investments).filter(
-    (item) =>
-      item.investment.status === 'active' &&
-      getAccountingTreatment(item.investment) !== 'PROTECTION_EXPENSE' &&
-      item.currentValue > 0,
-  );
-
-  return [...records]
-    .sort(
-      (left, right) => right.currentValue - left.currentValue,
-    )
-    .map((item) => item.investment);
-};
-
-export const getUpcomingMaturityItems = (
-  investments: Investment[],
-  limit = 5,
-) => {
-  return [...investments]
-    .filter(
-      (item) =>
-        item.status === 'active' &&
-        item.maturityDate &&
-        getAccountingTreatment(item) !== 'PROTECTION_EXPENSE',
-    )
-    .sort(
-      (left, right) =>
-        dayjs(left.maturityDate).valueOf() - dayjs(right.maturityDate).valueOf(),
-    )
-    .slice(0, limit);
-};
-
-export const getRecentInvestments = (
-  investments: Investment[],
-) => {
-  return [...investments].sort(
-    (left, right) =>
-      dayjs(right.createdAt || right.startDate).valueOf() -
-      dayjs(left.createdAt || left.startDate).valueOf(),
-  );
-};
 
 export const getInvestmentContributionViewItems = (
   investments: Investment[],
@@ -894,6 +649,17 @@ export const getInvestmentValueSourceSummary = (
         summary.staleValuationIds.push(item.id);
       }
 
+      if (getAccountingTreatment(item.investment) === 'INSURANCE_SAVINGS') {
+        if (item.currentValue > 0) {
+          summary.insuranceSavingsWithValueCount += 1;
+          summary.insuranceSavingsWithValueValue += item.currentValue;
+          summary.insuranceSavingsWithValueIds.push(item.id);
+        } else {
+          summary.insuranceSavingsWithoutValueCount += 1;
+          summary.insuranceSavingsWithoutValueIds.push(item.id);
+        }
+      }
+
       return summary;
     },
     {
@@ -905,9 +671,14 @@ export const getInvestmentValueSourceSummary = (
       investedOnlyCount: 0,
       staleValuationCount: 0,
       staleValuationValue: 0,
+      insuranceSavingsWithValueCount: 0,
+      insuranceSavingsWithValueValue: 0,
+      insuranceSavingsWithoutValueCount: 0,
       snapshotBackedIds: [],
       estimatedIds: [],
       investedOnlyIds: [],
+      insuranceSavingsWithValueIds: [],
+      insuranceSavingsWithoutValueIds: [],
       staleValuationIds: [],
     },
   );
@@ -1064,74 +835,6 @@ export const getInvestmentMaturityLadderData = (
     count,
     investmentIds,
   }));
-};
-
-export const getInvestmentPortfolioGrowthData = (
-  investments: Investment[],
-): InvestmentPortfolioGrowthPoint[] => {
-  const datedInvestments = getResolvedInvestmentRecords(investments).filter((item) =>
-    isPortfolioInvestment(item.investment) && item.timelineStartDate.isValid(),
-  );
-
-  if (datedInvestments.length === 0) {
-    return [];
-  }
-
-  const earliestStart = datedInvestments.reduce<dayjs.Dayjs>(
-    (earliest, entry) =>
-      entry.timelineStartDate.isBefore(earliest) ? entry.timelineStartDate : earliest,
-    datedInvestments[0].timelineStartDate,
-  );
-  const today = dayjs();
-  const currentMonth = today.startOf('month');
-  const monthCount = currentMonth.diff(earliestStart, 'month');
-
-  return Array.from({ length: monthCount + 1 }, (_, monthOffset) => {
-    const monthStart = earliestStart.add(monthOffset, 'month');
-    const pointDate = monthStart.endOf('month').isAfter(today)
-      ? today
-      : monthStart.endOf('month');
-
-    const point = datedInvestments.reduce<InvestmentPortfolioGrowthPoint>(
-      (acc, entry) => {
-        if (entry.timelineStartDate.isAfter(pointDate)) {
-          return acc;
-        }
-
-        const investedValue = entry.investedAmount;
-        const resolvedValue = resolveInvestmentValueAtDate(
-          entry.investment,
-          pointDate,
-        );
-
-        acc.investedToDate += investedValue;
-        acc.currentValueToDate += resolvedValue.value;
-
-        if (resolvedValue.source === 'snapshot') {
-          acc.snapshotBackedValue += resolvedValue.value;
-        } else if (resolvedValue.source === 'estimated') {
-          acc.estimatedValue += resolvedValue.value;
-        } else {
-          acc.investedOnlyValue += resolvedValue.value;
-        }
-
-        return acc;
-      },
-      {
-        label: monthStart.format('MMM YYYY'),
-        investedToDate: 0,
-        currentValueToDate: 0,
-        returnToDate: 0,
-        snapshotBackedValue: 0,
-        estimatedValue: 0,
-        investedOnlyValue: 0,
-      },
-    );
-
-    point.returnToDate = point.currentValueToDate - point.investedToDate;
-
-    return point;
-  });
 };
 
 export const getInvestmentYearlyTimeSeriesData = (
@@ -1604,7 +1307,7 @@ export const getInsurancePositionData = (
   // Calculate coverage segments for visual composition progress bar
   const coverageSegments: InsuranceCategoryCoverageSegment[] = categoryRows
     .filter((row) => row.insuranceCover > 0)
-    .map((row, idx) => {
+    .map((row) => {
       const percentage = totalCover > 0 ? (row.insuranceCover / totalCover) * 100 : 0;
       const cleanKey = String(row.key || '').toUpperCase();
       const color =

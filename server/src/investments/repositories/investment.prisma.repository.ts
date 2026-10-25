@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import type { InvestmentRecord } from '../investment.types';
+import type { InvestmentListQuery, InvestmentRecord } from '../investment.types';
 import { resolveAccountingTreatment } from '../investment.types';
 import { CreateInvestmentDto } from '../dto/create-investment.dto';
 import { UpdateInvestmentDto } from '../dto/update-investment.dto';
 import { IInvestmentDataSourcePort } from './investment.datasource.port';
 import { parseOptionalDateInput } from '../../common/utils/date-input';
+import { getListOffset } from '../../common/listing/listing.utils';
 
 const normalizeNullableNumber = (value?: string | number | null) =>
   value === undefined || value === null || value === '' ? null : Number(value);
@@ -218,6 +219,106 @@ export class InvestmentPrismaRepository implements IInvestmentDataSourcePort {
 
     const investments = await prismaClient.investment.findMany({
       where: { userId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        assetTypeRef: true,
+        assetCategoryRef: true,
+      },
+    });
+
+    return investments.map(mapInvestmentOutput);
+  }
+
+  async findPage(userId: number, query: InvestmentListQuery) {
+    await this.repairNullMetaIdsIfNeeded();
+    const prismaClient = this.prisma as any;
+    const where: Record<string, unknown> = { userId };
+    const search = query.search?.trim();
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { institutionName: { contains: search, mode: 'insensitive' } },
+        { referenceNumber: { contains: search, mode: 'insensitive' } },
+        { assetTypeRef: { is: { code: { contains: search, mode: 'insensitive' } } } },
+        { assetTypeRef: { is: { label: { contains: search, mode: 'insensitive' } } } },
+      ];
+    }
+    if (query.ids?.length) where.id = { in: query.ids };
+    if (query.status) where.status = query.status;
+    if (query.assetType) where.assetTypeRef = { is: { code: query.assetType } };
+
+    if (query.accountingTreatment) {
+      const treatment = query.accountingTreatment;
+      where.AND = [
+        {
+          OR: [
+            { accountingTreatmentOverride: treatment },
+            {
+              AND: [
+                { accountingTreatmentOverride: null },
+                { assetCategoryRef: { is: { accountingTreatment: treatment } } },
+              ],
+            },
+            {
+              AND: [
+                { accountingTreatmentOverride: null },
+                { assetCategoryRef: { is: { accountingTreatment: null } } },
+                { assetTypeRef: { is: { accountingTreatment: treatment } } },
+              ],
+            },
+            ...(treatment === 'INVESTMENT'
+              ? [
+                  {
+                    AND: [
+                      { accountingTreatmentOverride: null },
+                      { assetCategoryRef: { is: { accountingTreatment: null } } },
+                      { assetTypeRef: { is: { accountingTreatment: null } } },
+                    ],
+                  },
+                ]
+              : []),
+          ],
+        },
+      ];
+    }
+
+    const sortDirection = query.sortDirection ?? 'desc';
+    const sortBy = query.sortBy ?? 'createdAt';
+    const orderBy = sortBy === 'assetType'
+      ? { assetTypeRef: { code: sortDirection } }
+      : sortBy === 'assetCategory'
+        ? { assetCategoryRef: { code: sortDirection } }
+        : { [sortBy]: sortDirection };
+    const skip = getListOffset(query);
+
+    const [investments, total] = await Promise.all([
+      prismaClient.investment.findMany({
+        where,
+        orderBy: [orderBy, { id: 'asc' }],
+        skip,
+        take: query.limit,
+        include: {
+          assetTypeRef: true,
+          assetCategoryRef: true,
+        },
+      }),
+      prismaClient.investment.count({ where }),
+    ]);
+
+    return { items: investments.map(mapInvestmentOutput), total };
+  }
+
+  async findAllForPortfolio(userId: number): Promise<InvestmentRecord[]> {
+    await this.repairNullMetaIdsIfNeeded();
+    const prismaClient = this.prisma as any;
+
+    const investments = await prismaClient.investment.findMany({
+      where: {
+        userId,
+        NOT: {
+          status: { equals: 'closed', mode: 'insensitive' },
+        },
+      },
       orderBy: { createdAt: 'desc' },
       include: {
         assetTypeRef: true,

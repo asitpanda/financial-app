@@ -15,6 +15,7 @@ import {
   MenuItem,
   Select,
   Typography,
+  useTheme,
 } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -108,6 +109,7 @@ const formatCurrency = (value: number | string | null | undefined) => {
 };
 
 export default function Categories() {
+  const theme = useTheme();
   const categoryTableRef = useRef<HTMLDivElement | null>(null);
   const [uiError, setUiError] = useState("");
   const pushNotification = useNotificationStore(
@@ -663,7 +665,7 @@ export default function Categories() {
                       cy="80"
                       r="54"
                       fill="none"
-                      stroke="#e5e7eb"
+                      stroke={theme.palette.divider}
                       strokeWidth="18"
                     />
                     {categoryDistributionChart.segments.map((segment) =>
@@ -692,12 +694,12 @@ export default function Categories() {
                         </circle>
                       ) : null,
                     )}
-                    <circle cx="80" cy="80" r="33" fill="#ffffff" />
+                    <circle cx="80" cy="80" r="33" fill={theme.palette.background.paper} />
                     <text
                       x="80"
                       y="74"
                       textAnchor="middle"
-                      fill="#6b7280"
+                      fill={theme.palette.text.secondary}
                       fontSize="10"
                     >
                       Active
@@ -706,7 +708,7 @@ export default function Categories() {
                       x="80"
                       y="92"
                       textAnchor="middle"
-                      fill="#111827"
+                      fill={theme.palette.text.primary}
                       fontSize="18"
                       fontWeight="700"
                     >

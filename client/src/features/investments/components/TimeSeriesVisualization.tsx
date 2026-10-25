@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Box, Stack, Typography } from "@mui/material";
+import { Box, Stack, Typography, useTheme } from "@mui/material";
 import AppButton from "../../../components/common/AppButton";
 import type { InvestmentSeriesPoint } from "../investments.selectors";
 import {
@@ -35,6 +35,7 @@ export default function TimeSeriesVisualization({
   formatValue,
   categoryLabelMap,
 }: TimeSeriesVisualizationProps) {
+  const theme = useTheme();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
@@ -100,7 +101,7 @@ export default function TimeSeriesVisualization({
         y1={y}
         x2={chartWidth - padding.right}
         y2={y}
-        stroke="#e5e7eb"
+        stroke={theme.palette.divider}
         strokeWidth="1"
         strokeDasharray="2,2"
       />,
@@ -177,7 +178,7 @@ export default function TimeSeriesVisualization({
               y1={padding.top}
               x2={padding.left}
               y2={chartHeight - padding.bottom}
-              stroke="#d1d5db"
+              stroke={theme.palette.action.disabled}
               strokeWidth="1"
             />
             <line
@@ -185,7 +186,7 @@ export default function TimeSeriesVisualization({
               y1={chartHeight - padding.bottom}
               x2={chartWidth - padding.right}
               y2={chartHeight - padding.bottom}
-              stroke="#d1d5db"
+              stroke={theme.palette.action.disabled}
               strokeWidth="1"
             />
             {gridLines}

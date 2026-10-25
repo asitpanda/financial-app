@@ -1,4 +1,3 @@
-import React from 'react';
 import { Chip } from '@mui/material';
 
 type StatusTone = 'success' | 'error' | 'warning' | 'info' | 'default';

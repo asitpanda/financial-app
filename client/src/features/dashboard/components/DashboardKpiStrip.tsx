@@ -1,4 +1,3 @@
-import React from "react";
 import { KpiCard } from "../../../components/common";
 import type { DashboardInvestmentSummary } from "../dashboard.types";
 import {

@@ -57,6 +57,7 @@ enum AccountingTreatment {
 
 enum InvestmentBenefitType {
   MATURITY
+  SURRENDER
   COUPON
   INTEREST
   PRINCIPAL_REDEMPTION

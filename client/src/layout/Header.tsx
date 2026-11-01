@@ -14,7 +14,9 @@ import type { Screen } from "../store/appStore";
 import { getScreenConfig } from "../routing/screenRegistry";
 import { useAuth } from "../features/auth/useAuth";
 import { useHeaderActionStore } from "../store/headerActionStore";
-import { useThemeStore } from "../store/themeStore";
+import { usePreferencesStore } from "../store/preferencesStore";
+import { useSavePreferences } from "../features/settings/usePreferences";
+import { useNotificationStore } from "../store/notificationStore";
 
 interface HeaderProps {
   activeScreen: Screen;
@@ -26,8 +28,11 @@ export default function Header({ activeScreen }: HeaderProps) {
     (state) => state.actions[activeScreen],
   );
   const user = useAuth((state) => state.user);
-  const mode = useThemeStore((state) => state.mode);
-  const setMode = useThemeStore((state) => state.setMode);
+  const mode = usePreferencesStore((state) => state.preferences?.themeMode ?? "light");
+  const sessionId = usePreferencesStore((state) => state.sessionId);
+  const isSaving = usePreferencesStore((state) => state.isSaving);
+  const savePreferences = useSavePreferences();
+  const pushNotification = useNotificationStore((state) => state.pushNotification);
   return (
     <Paper
       variant="outlined"
@@ -90,7 +95,14 @@ export default function Header({ activeScreen }: HeaderProps) {
 
           <AppButton
             variant="text"
-            onClick={() => setMode(mode === "dark" ? "light" : "dark")}
+            onClick={() => savePreferences.mutate({ themeMode: mode === "dark" ? "light" : "dark" }, {
+              onError: () => {
+                if (usePreferencesStore.getState().sessionId !== sessionId) return;
+                pushNotification({ type: "error", message: "Unable to save theme. Your previous theme is unchanged." });
+              },
+            })}
+            disabled={isSaving}
+            aria-busy={isSaving}
             aria-label="Toggle theme mode"
             title={
               mode === "dark" ? "Switch to light mode" : "Switch to dark mode"

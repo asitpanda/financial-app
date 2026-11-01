@@ -7,14 +7,14 @@ interface DashboardTopCategoriesSectionProps {
   onViewAll: () => void;
 }
 
-const formatCurrency = (value: number) =>
-  `₹${Number(value || 0).toLocaleString("en-IN")}`;
+import { useCurrencyFormatter } from "../../../utils/currency";
 
 export default function DashboardTopCategoriesSection({
   items,
   onViewAll,
 }: DashboardTopCategoriesSectionProps) {
   const theme = useTheme();
+  const formatCurrency = useCurrencyFormatter();
 
   return (
     <SectionCard
@@ -29,7 +29,8 @@ export default function DashboardTopCategoriesSection({
           View All
         </button>
       }
-      className="h-full shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+      className="h-full"
+      sx={{ boxShadow: 1 }}
       empty={items.length === 0}
       emptyState={{
         title: "No spending data for this period",
@@ -46,7 +47,7 @@ export default function DashboardTopCategoriesSection({
             <div className="truncate text-sm font-medium" style={{ color: theme.palette.text.primary }}>
               {item.name}
             </div>
-            <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-2.5 overflow-hidden rounded-full" style={{ backgroundColor: theme.palette.action.selected }}>
               <div
                 className="h-full rounded-full"
                 style={{
@@ -59,7 +60,7 @@ export default function DashboardTopCategoriesSection({
               <div className="font-semibold" style={{ color: theme.palette.text.primary }}>
                 {formatCurrency(item.value)}
               </div>
-              <div className="text-xs text-slate-400">
+              <div className="text-xs" style={{ color: theme.palette.text.secondary }}>
                 {(item.percentage * 100).toFixed(1)}%
               </div>
             </div>

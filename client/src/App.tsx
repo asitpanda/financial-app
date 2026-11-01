@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
-import { CircularProgress, Box } from "@mui/material";
+import { Alert, Button, CircularProgress, Box } from "@mui/material";
 import PrivateRoute from "./features/auth/components/PrivateRoute";
+import IdleTimeoutGuard from "./features/auth/components/IdleTimeoutGuard";
 import AppRouter from "./routing/AppRouter";
 import { authApi } from "./features/auth/auth.api";
 import { useAuth } from "./features/auth/useAuth";
+import { usePreferencesStore } from "./store/preferencesStore";
 import { navigateTo } from "./services/navigation";
 import { NotificationCenter } from "./components/common";
 import type { TransactionRecord } from "./features/transactions/transaction.types";
@@ -20,32 +22,43 @@ type DashboardTransactionNavigationPayload = ScreenRenderContext["onOpenTransact
   : never;
 
 export default function App() {
-  const { token, user, isAuthenticated, loading, setLoading, setUser, logout } =
+  const { token, isAuthenticated, loading, setLoading, setUser } =
     useAuth();
+  const preferencesReady = usePreferencesStore((state) => state.preferences !== null);
+  const [bootstrapError, setBootstrapError] = useState(false);
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const [transactionsPrefetch, setTransactionsPrefetch] = useState<TransactionRecord[]>([]);
   const [transactionsPrefillFilter, setTransactionsPrefillFilter] = useState<
     TransactionsPrefillFilter | null
   >(null);
 
-  // Check for existing token on mount
   useEffect(() => {
+    if (!token || preferencesReady) return;
+    const controller = new AbortController();
+    const sessionId = usePreferencesStore.getState().sessionId;
     const initAuth = async () => {
-      if (token && !user) {
-        setLoading(true);
-        try {
-          const user = await authApi.getMe();
-          setUser(user);
-        } catch (error) {
-          console.warn("Token validation failed during bootstrap:", error);
-          logout();
-        } finally {
+      setLoading(true);
+      setBootstrapError(false);
+      try {
+        const { preferences, ...user } = await authApi.getMe(controller.signal);
+        if (controller.signal.aborted || useAuth.getState().token !== token ||
+            usePreferencesStore.getState().sessionId !== sessionId) return;
+        if (!preferences) throw new Error("User preferences are unavailable");
+        setUser(user);
+        setLoading(false);
+        usePreferencesStore.getState().setPreferences(sessionId, preferences);
+      } catch {
+        if (!controller.signal.aborted && useAuth.getState().token === token &&
+            usePreferencesStore.getState().sessionId === sessionId) {
+          setBootstrapError(true);
           setLoading(false);
         }
       }
     };
 
-    initAuth();
-  }, [token, user, setLoading, setUser, logout]);
+    void initAuth();
+    return () => controller.abort();
+  }, [token, preferencesReady, bootstrapAttempt, setLoading, setUser]);
 
   useEffect(() => {
     if (isAuthenticated) return;
@@ -53,8 +66,17 @@ export default function App() {
     setTransactionsPrefillFilter(null);
   }, [isAuthenticated]);
 
-  // Show loading spinner while validating token
-  if (loading) {
+  if (token && !preferencesReady && bootstrapError) {
+    return (
+      <Box sx={{ maxWidth: 480, mx: "auto", p: 3 }}>
+        <Alert severity="error">Unable to load your preferences.</Alert>
+        <Button onClick={() => setBootstrapAttempt((attempt) => attempt + 1)}>Retry</Button>
+        <Button onClick={() => useAuth.getState().logout()}>Sign out</Button>
+      </Box>
+    );
+  }
+
+  if (loading || (token && !preferencesReady)) {
     return (
       <Box
         sx={{
@@ -88,6 +110,7 @@ export default function App() {
           }}
         />
         <NotificationCenter />
+        <IdleTimeoutGuard />
       </div>
     </PrivateRoute>
   );

@@ -3,7 +3,9 @@ import { ButtonBase } from "@mui/material";
 import { SectionCard } from "../../../components/common";
 import { getIconPathByKey } from "../../../constants/categoryIcons";
 import type { GoalRecord } from "../../goals/goal.types";
-import { useTheme } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
+import { useCurrencyFormatter } from "../../../utils/currency";
+import { useDateFormatter } from "../../../utils/date";
 
 interface DashboardGoalsOverviewSectionProps {
   goals: GoalRecord[];
@@ -14,46 +16,7 @@ interface DashboardGoalsOverviewSectionProps {
   onEditGoal: (goal: GoalRecord) => void;
 }
 
-const formatCurrency = (value: number) =>
-  `₹${Number(value || 0).toLocaleString("en-IN")}`;
-const formatDeadline = (value?: string | null) => {
-  if (!value) return "No target date";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "No target date";
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(date);
-};
-
-const GOAL_STYLE_TOKENS = [
-  {
-    iconBg: "bg-emerald-100",
-    iconText: "text-emerald-600",
-    bar: "from-emerald-500 to-emerald-400",
-  },
-  {
-    iconBg: "bg-violet-100",
-    iconText: "text-violet-600",
-    bar: "from-violet-500 to-violet-400",
-  },
-  {
-    iconBg: "bg-amber-100",
-    iconText: "text-amber-600",
-    bar: "from-amber-500 to-amber-400",
-  },
-  {
-    iconBg: "bg-rose-100",
-    iconText: "text-rose-600",
-    bar: "from-rose-500 to-rose-400",
-  },
-  {
-    iconBg: "bg-sky-100",
-    iconText: "text-sky-600",
-    bar: "from-sky-500 to-sky-400",
-  },
-];
+const GOAL_COLOR_KEYS = ["success", "secondary", "warning", "error", "info"] as const;
 const DEFAULT_GOAL_ICON = "gift";
 
 const getGoalId = (goal: GoalRecord) => goal?._id || goal?.id;
@@ -67,6 +30,8 @@ export default function DashboardGoalsOverviewSection({
   onEditGoal,
 }: DashboardGoalsOverviewSectionProps) {
   const appTheme = useTheme();
+  const formatCurrency = useCurrencyFormatter();
+  const formatDeadline = useDateFormatter("No target date");
 
   return (
     <SectionCard
@@ -81,7 +46,8 @@ export default function DashboardGoalsOverviewSection({
           View All
         </button>
       }
-      className="h-full xl:col-span-2 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+      className="h-full xl:col-span-2"
+      sx={{ boxShadow: 1 }}
       empty={goals.length === 0}
       emptyState={{
         title: "No goals yet",
@@ -100,7 +66,7 @@ export default function DashboardGoalsOverviewSection({
             target > 0
               ? Math.min(100, Math.round((current / target) * 100))
               : 0;
-          const theme = GOAL_STYLE_TOKENS[index % GOAL_STYLE_TOKENS.length];
+          const goalColor = appTheme.palette[GOAL_COLOR_KEYS[index % GOAL_COLOR_KEYS.length]].main;
           const iconPath = getIconPathByKey(goal.icon || DEFAULT_GOAL_ICON);
 
           return (
@@ -131,7 +97,8 @@ export default function DashboardGoalsOverviewSection({
               <div className="flex items-center justify-between gap-4">
                 <div className="flex min-w-0 items-center gap-3">
                   <div
-                    className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-lg font-semibold ${theme.iconBg} ${theme.iconText}`}
+                    className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-lg font-semibold"
+                    style={{ backgroundColor: alpha(goalColor, 0.12), color: goalColor }}
                   >
                     {iconPath ? (
                       <Icon path={iconPath} size={0.95} color="currentColor" />
@@ -155,8 +122,8 @@ export default function DashboardGoalsOverviewSection({
                   </div>
                   <div className="h-2.5 w-full overflow-hidden rounded-full" style={{ backgroundColor: appTheme.palette.divider }}>
                     <div
-                      className={`h-full rounded-full bg-gradient-to-r ${theme.bar}`}
-                      style={{ width: `${progress}%` }}
+                      className="h-full rounded-full"
+                      style={{ width: `${progress}%`, backgroundColor: goalColor }}
                     />
                   </div>
                 </div>
@@ -184,7 +151,7 @@ export default function DashboardGoalsOverviewSection({
               backgroundColor: appTheme.palette.action.hover,
             }}
           >
-            <span className="text-emerald-600">
+            <span style={{ color: appTheme.palette.success.main }}>
               {activeGoalsCount} Active Goals
             </span>
             <span style={{ color: appTheme.palette.text.secondary }}>Of {goals.length}</span>

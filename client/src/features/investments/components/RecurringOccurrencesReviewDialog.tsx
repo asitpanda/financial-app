@@ -17,6 +17,7 @@ import {
   Typography,
 } from "@mui/material";
 import AppButton from "../../../components/common/AppButton";
+import { useDateFormatter } from "../../../utils/date";
 
 export default function RecurringOccurrencesReviewDialog({
   open,
@@ -30,6 +31,7 @@ export default function RecurringOccurrencesReviewDialog({
   onConfirm,
   confirmLabel = "Confirm",
 }) {
+  const formatDate = useDateFormatter();
   const reviewItems = Array.isArray(items) ? items : [];
   const selectedItems = reviewItems.filter((item) => item.selected !== false);
   const selectedCount = selectedItems.length;
@@ -203,7 +205,7 @@ export default function RecurringOccurrencesReviewDialog({
                 <TableBody>
                   {selectedItems.map((item, index) => (
                     <TableRow key={`${item.dueDate}-${item.sequenceNumber || index}`}>
-                      <TableCell>{item.dueDate || "-"}</TableCell>
+                      <TableCell>{formatDate(item.dueDate)}</TableCell>
                       <TableCell>{Number(item.amount || 0).toFixed(2)}</TableCell>
                       <TableCell>{item.status || "PENDING"}</TableCell>
                       <TableCell>{item.eventType || INVESTMENT_EVENT_TYPES.CONTRIBUTION}</TableCell>

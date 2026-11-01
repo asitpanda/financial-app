@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
-import type { TransactionRecord } from "./transaction.types";
+import type { TransactionListRow, TransactionRecord } from "./transaction.types";
+import { formatDate as formatPreferenceDate } from "../../utils/date";
 
 interface TransactionFilterInput {
   dateRange: [Dayjs | null, Dayjs | null];
@@ -126,9 +127,10 @@ export const getTransactionInsights = (
 };
 
 export const getTransactionRows = (
-  tableTransactions: TransactionRecord[],
+  tableTransactions: Array<TransactionListRow | TransactionRecord>,
   accountNameById: Record<number, string>,
   getTransactionId: (tx: TransactionRecord) => string,
+  formatDate: (value: Date | string) => string = formatPreferenceDate,
 ): TransactionTableRow[] => {
   return tableTransactions.map((tx: TransactionRecord) => {
     const txDate = new Date(tx.date || tx.createdAt || Date.now());
@@ -139,7 +141,7 @@ export const getTransactionRows = (
       transactionId: txId,
       tx,
       date: txDate,
-      dateLabel: txDate.toLocaleDateString(),
+      dateLabel: formatDate(tx.date || tx.createdAt || txDate),
       category: tx.category || tx.categoryLabelSnapshot || "Uncategorized",
       source:
         accountNameById[Number(tx.sourceAccountId)] ||
@@ -154,6 +156,9 @@ export const getTransactionRows = (
       notes: tx.notes || "",
       investment: tx.investment?.name || "—",
       investmentEventType: tx.investmentEventType || "—",
+      debitAmount: "debitAmount" in tx ? tx.debitAmount : null,
+      creditAmount: "creditAmount" in tx ? tx.creditAmount : null,
+      balanceAfter: "balanceAfter" in tx ? tx.balanceAfter : null,
     };
   });
 };

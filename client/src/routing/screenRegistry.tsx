@@ -14,6 +14,7 @@ import Goals from "../features/goals/Goals";
 import Investments from "../features/investments/Investments";
 import Locker from "../features/locker/locker";
 import Transactions from "../features/transactions/Transactions";
+import Settings from "../features/settings/Settings";
 import type { TransactionRecord } from "../features/transactions/transaction.types";
 
 export type Screen =
@@ -118,7 +119,7 @@ export const SCREEN_CONFIGS: Record<Screen, ScreenConfig> = {
     label: "Settings",
     icon: mdiCog,
     showInSidebar: true,
-    render: () => null,
+    render: () => <Settings />,
   },
 };
 

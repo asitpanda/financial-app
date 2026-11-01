@@ -1,6 +1,6 @@
 import { Box, Stack, Typography } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 import type { InvestmentMaturityBucket } from "../investments.selectors";
-import { INVESTMENT_CHART_SERIES_COLORS } from "../../../colors";
 
 interface MaturityLadderChartProps {
   data: InvestmentMaturityBucket[];
@@ -15,6 +15,7 @@ export default function MaturityLadderChart({
   selectedLabel,
   onSelectBucket,
 }: MaturityLadderChartProps) {
+  const theme = useTheme();
   const maxAmount = Math.max(...data.map((item) => item.amount), 1);
 
   return (
@@ -29,11 +30,11 @@ export default function MaturityLadderChart({
             cursor: onSelectBucket ? "pointer" : "default",
             border:
               selectedLabel === item.label
-                ? `1px solid ${INVESTMENT_CHART_SERIES_COLORS.currentValueHex}66`
+                ? `1px solid ${alpha(theme.palette.primary.main, 0.4)}`
                 : "1px solid transparent",
             backgroundColor:
               selectedLabel === item.label
-                ? `${INVESTMENT_CHART_SERIES_COLORS.currentValueHex}0A`
+                ? theme.palette.action.selected
                 : "transparent",
           }}
         >
@@ -59,7 +60,7 @@ export default function MaturityLadderChart({
             sx={{
               height: 36,
               borderRadius: 1,
-              bgcolor: "rgba(148, 163, 184, 0.12)",
+              bgcolor: "action.hover",
               overflow: "hidden",
               position: "relative",
             }}
@@ -71,7 +72,7 @@ export default function MaturityLadderChart({
                 height: "100%",
                 bgcolor:
                   item.amount > 0
-                    ? INVESTMENT_CHART_SERIES_COLORS.currentValueHex
+                    ? alpha(theme.palette.primary.main, 0.24)
                     : "transparent",
                 opacity: item.amount > 0 ? 0.9 : 1,
               }}
@@ -84,7 +85,7 @@ export default function MaturityLadderChart({
                 left: 12,
                 transform: "translateY(-50%)",
                 fontWeight: 800,
-                color: item.amount > 0 ? "white" : "text.secondary",
+                color: item.amount > 0 ? "text.primary" : "text.secondary",
               }}
             >
               {formatValue(item.amount)}

@@ -34,6 +34,7 @@
     "start": "vite",
     "build": "vite build",
     "test": "vitest",
+    "test:coverage": "vitest run --coverage",
     "type-check": "tsc --noEmit"
   },
   "devDependencies": {

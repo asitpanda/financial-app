@@ -10,6 +10,8 @@ describe("InvestmentsAssetsView", () => {
     renderWithProviders(
       <InvestmentsAssetsView
         filteredInvestments={[]}
+        pagination={{ page: 1, limit: 20, total: 0, totalPages: 0, hasNextPage: false }}
+        onPageChange={vi.fn()}
         columns={[]}
         search=""
         onSearchChange={vi.fn()}

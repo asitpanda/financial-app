@@ -74,6 +74,7 @@ export interface DashboardPageData {
 export interface DashboardAccountOverviewRow {
   name: string;
   balance: number;
+  currency?: string;
   transactions: number;
 }
 

@@ -43,6 +43,8 @@ interface InvestmentColumnsParams {
   onEdit: (investment: Investment) => void;
   onDelete: (investment: Investment) => void;
   assetTypeConfigs?: InvestmentAssetTypeConfig[];
+  formatCurrency?: typeof formatInvestmentCurrency;
+  formatDate?: (value: string | null | undefined) => string;
 }
 
 export const getInvestmentsTableColumns = ({
@@ -50,6 +52,8 @@ export const getInvestmentsTableColumns = ({
   onEdit,
   onDelete,
   assetTypeConfigs = [],
+  formatCurrency = formatInvestmentCurrency,
+  formatDate = formatInvestmentDate,
 }: InvestmentColumnsParams): GridColDef<Investment>[] => {
   const assetTypeLabelByCode = buildAssetTypeLabelMap(assetTypeConfigs);
   const assetCategoryLabelByCode = buildAssetCategoryLabelMap(assetTypeConfigs);
@@ -97,10 +101,10 @@ export const getInvestmentsTableColumns = ({
           }}
         >
           <Typography variant="body2" sx={{ fontWeight: 700 }}>
-            {formatInvestmentCurrency(row.currentValue || 0)}
+            {formatCurrency(row.currentValue || 0, row.currency)}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {`Invested ${formatInvestmentCurrency(row.totalInvested || 0)}`}
+            {`Invested ${formatCurrency(row.totalInvested || 0, row.currency)}`}
           </Typography>
         </Box>
       ),
@@ -136,7 +140,7 @@ export const getInvestmentsTableColumns = ({
               {row.accountingTreatment === "INSURANCE_SAVINGS"
                 ? "See benefits"
                 : metrics
-                  ? formatInvestmentCurrency(metrics.returnAmount)
+                  ? formatCurrency(metrics.returnAmount, row.currency)
                   : "Not available"}
             </Typography>
             <Typography variant="caption" color="text.secondary">
@@ -181,7 +185,7 @@ export const getInvestmentsTableColumns = ({
             </Typography>
             <Typography variant="caption" color="text.secondary">
               {row.lastValuationAt
-                ? `Valued ${formatInvestmentDate(row.lastValuationAt)}`
+                ? `Valued ${formatDate(row.lastValuationAt)}`
                 : "No valuation recorded"}
             </Typography>
           </Box>
@@ -242,14 +246,14 @@ export const getInvestmentsTableColumns = ({
         >
           <Typography variant="body2" sx={{ fontWeight: 700 }}>
             {row.activeContributionPlan?.status === "active" && row.activeContributionPlan.nextDueDate
-              ? formatInvestmentDate(row.activeContributionPlan.nextDueDate)
+              ? formatDate(row.activeContributionPlan.nextDueDate)
               : row.maturityDate
-                ? `Matures ${formatInvestmentDate(row.maturityDate)}`
+                ? `Matures ${formatDate(row.maturityDate)}`
                 : "No upcoming activity"}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {row.activeContributionPlan?.status === "active"
-              ? `Amount ${formatInvestmentCurrency(row.activeContributionPlan.amount || 0)}`
+              ? `Amount ${formatCurrency(row.activeContributionPlan.amount || 0, row.currency)}`
               : row.activeContributionPlan
                 ? "Recurring plan paused"
                 : "No recurring plan"}

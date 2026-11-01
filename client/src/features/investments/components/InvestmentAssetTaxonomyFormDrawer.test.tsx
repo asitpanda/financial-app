@@ -1,10 +1,11 @@
+import type { ComponentProps, ComponentType } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders, screen, userEvent, waitFor } from "../../../test/test-utils";
-import InvestmentAssetTaxonomyFormDrawer from "./InvestmentAssetTaxonomyFormDrawer";
+import InvestmentAssetTaxonomyFormDrawerComponent from "./InvestmentAssetTaxonomyFormDrawer";
 
 const nodes = [
   {
-    id: "type-1",
+    id: "1",
     label: "Investments",
     nodeType: "type",
     level: 1,
@@ -13,15 +14,21 @@ const nodes = [
     isActive: true,
   },
   {
-    id: "category-1",
+    id: "2",
     label: "Equity",
     nodeType: "category",
     level: 2,
-    parentId: "type-1",
+    parentId: "1",
     sortOrder: 0,
     isActive: true,
   },
 ];
+
+const InvestmentAssetTaxonomyFormDrawer = InvestmentAssetTaxonomyFormDrawerComponent as ComponentType<
+  Omit<ComponentProps<typeof InvestmentAssetTaxonomyFormDrawerComponent>, "taxonomyNodes"> & {
+    taxonomyNodes?: typeof nodes;
+  }
+>;
 
 describe("InvestmentAssetTaxonomyFormDrawer", () => {
   it("creates a root node with trimmed form values", async () => {
@@ -37,6 +44,7 @@ describe("InvestmentAssetTaxonomyFormDrawer", () => {
       <InvestmentAssetTaxonomyFormDrawer
         open
         onClose={vi.fn()}
+        onDelete={vi.fn()}
         onSubmit={onSubmit}
         taxonomyNodes={[]}
       />,
@@ -68,6 +76,7 @@ describe("InvestmentAssetTaxonomyFormDrawer", () => {
       <InvestmentAssetTaxonomyFormDrawer
         open
         onClose={vi.fn()}
+        onDelete={vi.fn()}
         onSubmit={onSubmit}
         taxonomyNodes={nodes}
       />,
@@ -80,10 +89,10 @@ describe("InvestmentAssetTaxonomyFormDrawer", () => {
     await user.click(screen.getByRole("button", { name: "Update Node" }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
-      id: "category-1",
+      id: "2",
       label: "Stocks",
       level: 2,
-      parentId: NaN,
+      parentId: 1,
     })));
   });
 });

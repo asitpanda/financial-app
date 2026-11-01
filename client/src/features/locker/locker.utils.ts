@@ -1,4 +1,5 @@
 import type { LockerFieldInput } from './locker.types';
+import { formatDate as formatPreferenceDate } from '../../utils/date';
 
 export const FIELD_TYPE_OPTIONS = [
     { value: 'text', label: 'Text' },
@@ -14,7 +15,7 @@ export const emptyField = (): LockerFieldInput => ({
     masked: false,
 });
 
-export const formatDate = (value?: string) => (value ? new Date(value).toLocaleDateString() : '');
+export const formatDate = (value?: string) => formatPreferenceDate(value, undefined, '');
 
 export const getErrorMessage = (error: unknown, fallback: string) => {
     if (error && typeof error === 'object' && 'response' in error) {

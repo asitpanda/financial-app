@@ -7,12 +7,12 @@ import CssBaseline from "@mui/material/CssBaseline";
 import "./index.css";
 import App from "./App";
 import { queryClient } from "./api/queryClient";
-import { useThemeStore } from "./store/themeStore";
+import { usePreferencesStore } from "./store/preferencesStore";
 import { createAppTheme } from "./theme/createAppTheme";
 import { BrowserRouter } from "react-router-dom";
 
 function RootProviders() {
-  const mode = useThemeStore((state) => state.mode);
+  const mode = usePreferencesStore((state) => state.preferences?.themeMode ?? "light");
   const theme = React.useMemo(() => createAppTheme(mode), [mode]);
 
   return (

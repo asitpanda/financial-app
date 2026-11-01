@@ -7,6 +7,7 @@ import { resolveDbProviderFromConfig } from '../database/db-provider';
 import { RegisterDto, LoginDto } from './dto/auth.dto';
 import { mockUser, mockToken, mockCredentials, registeredUsers } from '../mockdata';
 import * as bcrypt from 'bcrypt';
+import { UserPreferencesService } from '../user-preferences/user-preferences.service';
 
 @Injectable()
 export class AuthService {
@@ -16,6 +17,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private preferences: UserPreferencesService,
   ) {
     const dbProvider = resolveDbProviderFromConfig(this.configService);
     this.isMockMode = dbProvider === 'mock';
@@ -66,6 +68,7 @@ export class AuthService {
         mobile,
         password: hashedPassword,
         name,
+        preferences: { create: {} },
       },
     });
 
@@ -79,6 +82,7 @@ export class AuthService {
         name: user.name,
       },
       token,
+      preferences: await this.preferences.get(user.id),
     };
   }
 
@@ -123,6 +127,7 @@ export class AuthService {
         name: user.name,
       },
       token,
+      preferences: await this.preferences.get(user.id),
     };
   }
 
@@ -140,6 +145,7 @@ export class AuthService {
         id: matchedUser.id,
         email: matchedUser.email,
         name: matchedUser.name,
+        preferences: await this.preferences.get(Number(matchedUser.id)),
       };
     }
 
@@ -156,7 +162,7 @@ export class AuthService {
       throw new UnauthorizedException('User no longer exists');
     }
 
-    return user;
+    return { ...user, preferences: await this.preferences.get(user.id) };
   }
 
   private generateToken(userId: number | string, email: string) {
@@ -165,7 +171,7 @@ export class AuthService {
   }
 
   // Mock mode methods
-  private mockRegister(registerDto: RegisterDto) {
+  private async mockRegister(registerDto: RegisterDto) {
     // Check if email already exists
     const existingUser = registeredUsers.find(
       (u) => u.email === registerDto.email,
@@ -225,10 +231,11 @@ export class AuthService {
     return {
       user,
       token,
+      preferences: await this.preferences.update(newUserId, {}),
     };
   }
 
-  private mockLogin(loginDto: LoginDto) {
+  private async mockLogin(loginDto: LoginDto) {
     // Find user by identifier (email, userId, or mobile)
     const user = registeredUsers.find(
       (u) =>
@@ -258,6 +265,7 @@ export class AuthService {
     return {
       user: userResponse,
       token,
+      preferences: await this.preferences.get(user.id),
     };
   }
 }

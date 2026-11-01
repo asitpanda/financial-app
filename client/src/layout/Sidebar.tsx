@@ -99,27 +99,28 @@ export default function Sidebar({ onNavigate, children, activeRoute }: SidebarPr
                   selected={selected}
                   onClick={() => onNavigate?.(key)}
                   sx={{
-                    ...(selected
-                      ? {
-                          backgroundColor: "action.selected !important",
-                          color: "primary.main !important",
-                          "& .MuiListItemText-primary": {
-                            color: "primary.main !important",
-                          },
-                          "& .MuiListItemIcon-root": {
-                            color: "primary.main !important",
-                          },
-                        }
-                      : {}),
+                    color: "text.primary",
+                    "& .MuiListItemText-primary": {
+                      fontWeight: 500,
+                    },
+                    "& .MuiListItemIcon-root": {
+                      color: "text.secondary",
+                    },
                     "&:hover": {
-                      backgroundColor: "action.hover !important",
-                      color: "primary.main !important",
+                      backgroundColor: "action.hover",
+                    },
+                    "&.Mui-selected": {
+                      backgroundColor: "primary.main",
+                      color: "primary.contrastText",
                       "& .MuiListItemText-primary": {
-                        color: "primary.main !important",
+                        fontWeight: 600,
                       },
                       "& .MuiListItemIcon-root": {
-                        color: "primary.main !important",
+                        color: "inherit",
                       },
+                    },
+                    "&.Mui-selected:hover": {
+                      backgroundColor: "primary.main",
                     },
                   }}
                 >
@@ -153,15 +154,12 @@ export default function Sidebar({ onNavigate, children, activeRoute }: SidebarPr
                 onClick={handleLogout}
                 sx={{
                   py: 1,
+                  color: "text.primary",
+                  "& .MuiListItemIcon-root": {
+                    color: "text.secondary",
+                  },
                   "&:hover": {
-                    backgroundColor: "action.hover !important",
-                    color: "primary.main !important",
-                    "& .MuiListItemText-primary": {
-                      color: "primary.main !important",
-                    },
-                    "& .MuiListItemIcon-root": {
-                      color: "primary.main !important",
-                    },
+                    backgroundColor: "action.hover",
                   },
                 }}
               >

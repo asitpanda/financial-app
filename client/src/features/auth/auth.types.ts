@@ -1,3 +1,5 @@
+import type { UserPreferences } from "../settings/preferences.types";
+
 export interface User {
   id: string;
   email: string;
@@ -7,6 +9,11 @@ export interface User {
 export interface AuthResponse {
   user: User;
   token: string;
+  preferences?: UserPreferences;
+}
+
+export interface CurrentUser extends User {
+  preferences: UserPreferences;
 }
 
 export interface LoginDto {

@@ -7,11 +7,13 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { DatabaseModule } from '../database/database.module';
 import { requireJwtSecret, resolveJwtExpiresIn } from './jwt-config.util';
+import { UserPreferencesModule } from '../user-preferences/user-preferences.module';
 
 @Module({
   imports: [
     ConfigModule,
     DatabaseModule,
+    UserPreferencesModule,
     PassportModule,
     JwtModule.registerAsync({
       useFactory: (configService: ConfigService) => ({

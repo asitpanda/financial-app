@@ -11,7 +11,7 @@ const user = { id: 'user-1', email: 'user@example.com', name: 'Test User' };
 describe('Login', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    useAuth.setState({ user: null, token: null, isAuthenticated: false, loading: false });
+    useAuth.setState({ user: null, token: null, isAuthenticated: false, loading: false, logoutReason: null });
   });
 
   it('shows validation errors when login is submitted empty', async () => {
@@ -24,6 +24,21 @@ describe('Login', () => {
     expect(await screen.findByText('Email, user ID, or mobile is required')).toBeInTheDocument();
     expect(screen.getByText('Password is required')).toBeInTheDocument();
     expect(login).not.toHaveBeenCalled();
+  });
+
+  it('explains inactivity logout and allows dismissing the message', async () => {
+    const interaction = userEvent.setup();
+    useAuth.getState().logout('idle');
+    renderWithProviders(<Login />);
+    expect(screen.getByRole('alert')).toHaveTextContent('You were signed out after 30 minutes of inactivity. Please sign in again.');
+    await interaction.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(useAuth.getState().logoutReason).toBeNull();
+  });
+
+  it('does not show an inactivity message after ordinary logout', () => {
+    renderWithProviders(<Login />);
+    expect(screen.queryByText(/signed out after/)).not.toBeInTheDocument();
   });
 
   it('submits valid credentials and stores the returned credentials', async () => {

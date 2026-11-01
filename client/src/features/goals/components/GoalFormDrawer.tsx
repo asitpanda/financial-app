@@ -11,6 +11,7 @@ import {
   Divider,
   Stack,
   Typography,
+  alpha,
 } from "@mui/material";
 import Button from "../../../components/common/AppButton";
 import dayjs from "dayjs";
@@ -32,6 +33,8 @@ import { CATEGORY_ICON_OPTIONS } from "../../../constants/categoryIcons";
 import AppDrawer from "../../../components/drawers/AppDrawer";
 import { useDrawerStore } from "../../../store/drawerStore";
 import { patchDrawer } from "../../../services/navigation";
+import { useCurrencyFormatter } from "../../../utils/currency";
+import { useDateFormatter } from "../../../utils/date";
 
 const DEFAULT_GOAL_ICON = "gift";
 
@@ -44,6 +47,8 @@ export default function GoalFormDrawer({
   submitLabel = "Add",
   submitError = "",
 }) {
+  const formatCurrency = useCurrencyFormatter();
+  const formatDate = useDateFormatter();
   const [localSubmitError, setLocalSubmitError] = React.useState("");
   const {
     register,
@@ -204,7 +209,7 @@ export default function GoalFormDrawer({
             borderTopWidth: 2,
           },
           "& .MuiStepIcon-root": {
-            color: "#808997",
+            color: "text.disabled",
             border: "2px solid",
             borderColor: "divider",
             borderRadius: "50%",
@@ -313,7 +318,7 @@ export default function GoalFormDrawer({
                 variant="body1"
                 sx={{ fontWeight: 400, textAlign: "left" }}
               >
-                ₹{Number(reviewValues.targetAmount || 0).toLocaleString()}
+                {formatCurrency(reviewValues.targetAmount)}
               </Typography>
             </Box>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
@@ -329,7 +334,7 @@ export default function GoalFormDrawer({
                 sx={{ fontWeight: 400, textAlign: "left" }}
               >
                 {reviewValues.deadline
-                  ? dayjs(reviewValues.deadline).format("DD MMM YYYY")
+                  ? formatDate(reviewValues.deadline)
                   : "Not set"}
               </Typography>
             </Box>
@@ -360,7 +365,7 @@ export default function GoalFormDrawer({
                 variant="body1"
                 sx={{ fontWeight: 400, textAlign: "left" }}
               >
-                ₹{Number(reviewValues.currentAmount || 0).toLocaleString()}
+                {formatCurrency(reviewValues.currentAmount)}
               </Typography>
             </Box>
           </Box>
@@ -375,12 +380,13 @@ export default function GoalFormDrawer({
               width: 68,
               height: 68,
               mx: "auto",
-              bgcolor: "success.50",
+              bgcolor: (theme) => alpha(theme.palette.success.main, 0.12),
+              color: "success.main",
               border: "1px solid",
-              borderColor: "success.100",
+              borderColor: (theme) => alpha(theme.palette.success.main, 0.24),
             }}
           >
-            <Icon path={selectedIconMeta.path} size={2.0} color="#16a34a" />
+            <Icon path={selectedIconMeta.path} size={2.0} />
           </Box>
         </Stack>
       ) : (

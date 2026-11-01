@@ -85,6 +85,7 @@ describe('Auth API', () => {
       expect(response.body).toEqual({
         user: { id: 3, email: 'new@example.com', name: 'New User' },
         token: expect.any(String),
+        preferences: { currencyDisplay: 'symbol' },
       });
     });
 
@@ -127,6 +128,7 @@ describe('Auth API', () => {
       expect(response.body).toEqual({
         user: { id: 1, email: 'demo@example.com', name: 'Demo User' },
         token: expect.any(String),
+        preferences: { currencyDisplay: 'symbol' },
       });
     });
 
@@ -160,6 +162,7 @@ describe('Auth API', () => {
         id: 1,
         email: 'demo@example.com',
         name: 'Demo User',
+        preferences: { currencyDisplay: 'symbol' },
       });
     });
   });

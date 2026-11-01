@@ -1530,6 +1530,21 @@ ALTER TABLE ONLY public.valuation_snapshots
     ADD CONSTRAINT "valuation_snapshots_userId_fkey" FOREIGN KEY ("userId") REFERENCES public.users(id) ON DELETE CASCADE;
 
 
+CREATE TYPE public."CurrencyDisplay" AS ENUM ('symbol', 'code');
+CREATE TYPE public."ThemeMode" AS ENUM ('light', 'dark');
+CREATE TYPE public."DateFormat" AS ENUM ('DD_MM_YYYY', 'MM_DD_YYYY', 'YYYY_MM_DD', 'DD_MMM_YYYY');
+
+CREATE TABLE public.user_preferences (
+    "userId" integer PRIMARY KEY,
+    "currencyDisplay" public."CurrencyDisplay" NOT NULL DEFAULT 'symbol',
+    "themeMode" public."ThemeMode" NOT NULL DEFAULT 'light',
+    "dateFormat" public."DateFormat" NOT NULL DEFAULT 'DD_MM_YYYY',
+    "createdAt" timestamp with time zone NOT NULL DEFAULT now(),
+    "updatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT "user_preferences_userId_fkey" FOREIGN KEY ("userId")
+        REFERENCES public.users(id) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
 -- Completed on 2026-09-20 19:41:51 IST
 
 --

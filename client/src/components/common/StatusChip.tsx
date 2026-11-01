@@ -1,24 +1,25 @@
 import { Chip } from '@mui/material';
 
-type StatusTone = 'success' | 'error' | 'warning' | 'info' | 'default';
+type StatusTone = 'success' | 'error' | 'warning' | 'info' | 'default' | 'transfer' | 'investment';
 
 interface StatusChipProps {
   label: string;
   tone?: StatusTone;
-  hexColor?: string;
 }
 
-export default function StatusChip({ label, tone = 'default', hexColor }: StatusChipProps) {
+export default function StatusChip({ label, tone = 'default' }: StatusChipProps) {
+  const movementTone = tone === 'transfer' || tone === 'investment' ? tone : undefined;
+
   return (
     <Chip
       size="small"
       label={label}
       variant="outlined"
-      color={hexColor ? undefined : tone === 'default' ? 'default' : tone}
+      color={tone === 'transfer' || tone === 'investment' ? 'default' : tone}
       sx={{
         textTransform: 'capitalize',
         fontWeight: 600,
-        ...(hexColor ? { color: hexColor, borderColor: hexColor } : {}),
+        ...(movementTone ? { color: `movement.${movementTone}`, borderColor: `movement.${movementTone}` } : {}),
       }}
     />
   );

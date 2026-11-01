@@ -24,7 +24,7 @@ import {
 } from "@mdi/js";
 import AppButton from "../../../components/common/AppButton";
 import { SectionCard } from "../../../components/common";
-import { formatInvestmentDate } from "../../../utils/investmentHelpers";
+import { useDateFormatter } from "../../../utils/date";
 import { CHART_TOOLTIP_COLORS } from "../../../colors";
 import {
   getInsurancePositionData,
@@ -73,6 +73,7 @@ export default function InsurancePositionWidget({
   sx,
   contentSx,
 }: InsurancePositionWidgetProps) {
+  const formatInvestmentDate = useDateFormatter("Not set");
   const [activeFilter, setActiveFilter] = useState<InsuranceFilterTab>("all");
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 

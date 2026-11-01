@@ -19,6 +19,7 @@ import { RecordContributionDto } from './dto/record-contribution.dto';
 import { RecordWithdrawalDto } from './dto/record-withdrawal.dto';
 import { CurrentUserId } from '../auth/current-user-id.decorator';
 import { parseRequiredDateInput } from '../common/utils/date-input';
+import { TransactionListQueryDto } from './dto/transaction-list-query.dto';
 
 @ApiTags('transactions')
 @Controller('api/transactions')
@@ -42,6 +43,12 @@ export class TransactionsController {
   @ApiOperation({ summary: 'Record an investment principal withdrawal' })
   recordWithdrawal(@Body() recordWithdrawalDto: RecordWithdrawalDto, @CurrentUserId() userId: number) {
     return this.transactionsService.recordWithdrawal(recordWithdrawalDto, userId);
+  }
+
+  @Get('list')
+  @ApiOperation({ summary: 'Get a paginated transaction activity or account statement list' })
+  findPage(@CurrentUserId() userId: number, @Query() query: TransactionListQueryDto) {
+    return this.transactionsService.findPage(userId, query);
   }
 
   @Get()

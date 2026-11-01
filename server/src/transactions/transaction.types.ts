@@ -1,5 +1,37 @@
 import type { TransactionType } from '@prisma/client';
 import type { CreateTransactionDto } from './dto/create-transaction.dto';
+import type { ListQuery, ListResult } from '../common/listing/listing.types';
+
+export interface TransactionListQuery extends ListQuery {
+  search?: string;
+  accountId?: number;
+  type?: TransactionType;
+  categoryId?: number;
+  fromDate?: string;
+  toDate?: string;
+  sortBy?: 'date' | 'amount' | 'createdAt';
+  sortDirection?: 'asc' | 'desc';
+}
+
+export type TransactionListRow = TransactionRecord & {
+  debitAmount: number | null;
+  creditAmount: number | null;
+  balanceAfter: number | null;
+};
+
+export interface TransactionPeriodSummary {
+  totalIncome: number | null;
+  totalExpense: number | null;
+  net: number | null;
+  transactionCount: number;
+  openingBalance: number | null;
+  moneyIn: number | null;
+  moneyOut: number | null;
+  closingBalance: number | null;
+  multiCurrency: boolean;
+}
+
+export type TransactionListResult = ListResult<TransactionRecord>;
 
 export type TransactionRecord = {
   id: number;

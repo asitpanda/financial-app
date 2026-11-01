@@ -1,6 +1,7 @@
 import { Box, TextField, Typography, type TextFieldProps } from '@mui/material';
 import { NumericFormat } from 'react-number-format';
 import { DEFAULT_CURRENCY_CONFIG } from '../../constants/currency';
+import { usePreferencesStore } from '../../store/preferencesStore';
 
 type LabelCurrencyFieldProps = Omit<TextFieldProps, 'value' | 'defaultValue' | 'onChange' | 'type'> & {
   labelText: string;
@@ -8,6 +9,7 @@ type LabelCurrencyFieldProps = Omit<TextFieldProps, 'value' | 'defaultValue' | '
   value?: string | number | null;
   onValueChange?: (value: string) => void;
   currencyPrefix?: string;
+  currencyCode?: string;
 };
 
 export default function LabelCurrencyField({
@@ -16,7 +18,8 @@ export default function LabelCurrencyField({
   helperText = '',
   value,
   onValueChange,
-  currencyPrefix = DEFAULT_CURRENCY_CONFIG.inputPrefix,
+  currencyPrefix,
+  currencyCode = DEFAULT_CURRENCY_CONFIG.code,
   variant = 'outlined',
   size = 'small',
   fullWidth = true,
@@ -24,6 +27,10 @@ export default function LabelCurrencyField({
   sx,
   ...textFieldProps
 }: LabelCurrencyFieldProps) {
+  const currencyDisplay = usePreferencesStore((state) => state.preferences?.currencyDisplay ?? 'symbol');
+  const currencyMarker = new Intl.NumberFormat(DEFAULT_CURRENCY_CONFIG.locale, {
+    style: 'currency', currency: currencyCode, currencyDisplay,
+  }).formatToParts(0).find((part) => part.type === 'currency')?.value ?? currencyCode;
   const helperSlotProps = {
     sx: {
       minHeight: 20,
@@ -61,7 +68,7 @@ export default function LabelCurrencyField({
         allowNegative={false}
         decimalScale={2}
         valueIsNumericString
-        prefix={`${currencyPrefix} `}
+        prefix={`${currencyPrefix ?? currencyMarker} `}
         onValueChange={(values) => {
           onValueChange?.(values.value);
         }}

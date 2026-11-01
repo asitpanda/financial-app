@@ -83,6 +83,35 @@ enum TransactionType {
   INVESTMENT
 }
 
+enum CurrencyDisplay {
+  symbol
+  code
+}
+
+enum ThemeMode {
+  light
+  dark
+}
+
+enum DateFormat {
+  DD_MM_YYYY
+  MM_DD_YYYY
+  YYYY_MM_DD
+  DD_MMM_YYYY
+}
+
+model UserPreferences {
+  userId          Int             @id
+  currencyDisplay CurrencyDisplay @default(symbol)
+  themeMode       ThemeMode       @default(light)
+  dateFormat      DateFormat      @default(DD_MM_YYYY)
+  createdAt       DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime        @default(now()) @updatedAt @db.Timestamptz(6)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   userId    String?  @unique @db.VarChar(30)
@@ -101,6 +130,7 @@ model User {
   investmentAssetTaxonomy InvestmentAssetTaxonomy[]
   valuationSnapshots ValuationSnapshot[]
   lockerEntities     LockerEntity[]
+  preferences        UserPreferences?
 
   @@map("users")
 }

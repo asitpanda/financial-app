@@ -6,16 +6,21 @@ import { authEvents } from "../../api/authEvents";
 import { authApi } from "./auth.api";
 import { AuthResponse, LoginDto, RegisterDto, User } from "./auth.types";
 import { useAppStore } from "../../store/appStore";
+import { usePreferencesStore } from "../../store/preferencesStore";
+
+type LogoutReason = "idle" | null;
 
 interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
   loading: boolean;
+  logoutReason: LogoutReason;
   setCredentials: (payload: AuthResponse) => void;
   setUser: (user: User) => void;
   setLoading: (loading: boolean) => void;
-  logout: () => void;
+  logout: (reason?: LogoutReason) => void;
+  clearLogoutReason: () => void;
 }
 
 const storedToken = sessionStorage.getItem("token");
@@ -28,26 +33,30 @@ export const useAuth = create<AuthState>((set) => ({
   user: storedUser,
   token: storedToken,
   isAuthenticated: Boolean(storedToken),
-  loading: false,
-  setCredentials: ({ user, token }) => {
+  loading: Boolean(storedToken),
+  logoutReason: null,
+  setCredentials: ({ user, token, preferences }) => {
     // Prevent stale data from a previous session from flashing for the new user.
     queryClient.clear();
+    usePreferencesStore.getState().beginSession(preferences);
     sessionStorage.setItem("token", token);
     sessionStorage.setItem("user", JSON.stringify(user));
-    set({ user, token, isAuthenticated: true });
+    set({ user, token, isAuthenticated: true, loading: false, logoutReason: null });
   },
   setUser: (user) => {
     sessionStorage.setItem("user", JSON.stringify(user));
     set({ user, isAuthenticated: true });
   },
   setLoading: (loading) => set({ loading }),
-  logout: () => {
+  clearLogoutReason: () => set({ logoutReason: null }),
+  logout: (reason = null) => {
     void queryClient.cancelQueries();
     queryClient.clear();
+    usePreferencesStore.getState().beginSession();
     sessionStorage.removeItem("token");
     sessionStorage.removeItem("user");
     useAppStore.setState({ activeScreen: "dashboard" });
-    set({ user: null, token: null, isAuthenticated: false });
+    set({ user: null, token: null, isAuthenticated: false, loading: false, logoutReason: reason });
   },
 }));
 
@@ -91,18 +100,24 @@ export const useRegister = () => {
 
 export const useGetMe = () => {
   const setUser = useAuth((state) => state.setUser);
+  const token = useAuth((state) => state.token);
+  const sessionId = usePreferencesStore((state) => state.sessionId);
 
   const query = useQuery({
-    queryKey: ["user"],
-    queryFn: authApi.getMe,
+    queryKey: ["user", sessionId],
+    queryFn: ({ signal }) => authApi.getMe(signal),
+    enabled: Boolean(token),
     retry: false,
   });
 
   useEffect(() => {
-    if (query.isSuccess && query.data) {
-      setUser(query.data);
+    if (query.isSuccess && query.data && useAuth.getState().token === token &&
+        usePreferencesStore.getState().sessionId === sessionId) {
+      const { preferences, ...user } = query.data;
+      usePreferencesStore.getState().setPreferences(sessionId, preferences);
+      setUser(user);
     }
-  }, [query.isSuccess, query.data, setUser]);
+  }, [query.isSuccess, query.data, setUser, token, sessionId]);
 
   return query;
 };

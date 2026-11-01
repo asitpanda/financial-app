@@ -1,5 +1,5 @@
 import apiClient from '../../api/client';
-import { AuthResponse, LoginDto, RegisterDto, User } from './auth.types';
+import { AuthResponse, CurrentUser, LoginDto, RegisterDto } from './auth.types';
 
 export const authApi = {
   register: async (data: RegisterDto): Promise<AuthResponse> => {
@@ -12,8 +12,11 @@ export const authApi = {
     return response.data;
   },
 
-  getMe: async (): Promise<User> => {
-    const response = await apiClient.get('/auth/me');
+  getMe: async (signal?: AbortSignal): Promise<CurrentUser> => {
+    const response = await apiClient.get('/auth/me', {
+      signal,
+      headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    });
     return response.data;
   },
 

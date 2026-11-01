@@ -11,7 +11,6 @@ import { Alert, Box, IconButton, Typography } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs, { type Dayjs } from "dayjs";
-import { getTransactionMovementHexColor } from "../../colors";
 import TransactionsAddEditDrawer from "./components/TransactionsAddEditDrawer";
 import { useHeaderAction } from "../../hooks/useHeaderAction";
 import { useViewportTableHeight } from "../../hooks/useViewportTableHeight";
@@ -43,14 +42,12 @@ import {
   openDrawer,
 } from "../../services/navigation";
 import {
-  getFilteredTransactions,
-  getSortedTransactions,
-  getTransactionInsights,
   getTransactionRows,
 } from "./transactions.selectors";
-import { GridColDef } from "@mui/x-data-grid/models";
+import type { GridColDef, GridSortModel } from "@mui/x-data-grid/models";
 import type {
   TransactionRecord,
+  TransactionListRow,
   TransactionSavePayload,
 } from "./transaction.types";
 
@@ -59,10 +56,9 @@ type DateRangeShortcut =
   | "custom"
   | "last7"
   | "last30"
+  | "lastMonth"
   | "thisMonth"
   | "thisYear";
-
-type DrilldownFilter = "all" | "linked" | "income" | "expense";
 
 interface TransactionDialogPayload {
   entity?: string;
@@ -98,6 +94,9 @@ interface TransactionTableRow {
   notes: string;
   investment: string;
   investmentEventType: string;
+  debitAmount: number | null;
+  creditAmount: number | null;
+  balanceAfter: number | null;
 }
 
 const resolveFiscalMonthYear = (fiscalYearStart: number, monthIndex: number) => {
@@ -132,22 +131,15 @@ const getGoalId = (goal: { _id?: string; id?: string }) =>
 const getTransactionId = (tx: TransactionRecord): string =>
   String(tx._id || tx.id);
 
-const formatCurrency = (value: number | string | null | undefined) =>
-  `₹${Number(value || 0).toLocaleString()}`;
-
-const matchesTransactionTableDrilldown = (
-  tx: TransactionRecord,
-  filterKey: DrilldownFilter,
-) => {
-  if (filterKey === "all") return true;
-  if (filterKey === "linked") return Boolean(tx.goalId);
-  return tx.type === filterKey.toUpperCase();
-};
+import { useCurrencyFormatter } from "../../utils/currency";
+import { useDateFormatter } from "../../utils/date";
 
 export default function Transactions({
   prefetchedTransactions = [],
   prefillFilter = null,
 }: TransactionsProps) {
+  const formatCurrency = useCurrencyFormatter();
+  const formatDate = useDateFormatter();
   const hasPrefetched =
     Array.isArray(prefetchedTransactions) && prefetchedTransactions.length > 0;
   const transactionTableRef = useRef<HTMLDivElement | null>(null);
@@ -157,17 +149,6 @@ export default function Transactions({
   );
   const saveTransactionMutation = useSaveTransaction();
   const deleteTransactionMutation = useRemoveTransaction();
-  const {
-    transactions,
-    categories,
-    goals,
-    accounts,
-    loading,
-    error: pageDataError,
-    reload,
-  } = useTransactionPageData(hasPrefetched, prefetchedTransactions);
-  const errorMessage =
-    uiError || (pageDataError ? "Failed to load transactions" : "");
 
   const drawerOpen = useDrawerStore((state) => state.open);
   const drawerType = useDrawerStore((state) => state.type);
@@ -179,13 +160,10 @@ export default function Transactions({
   const dialogPayload = useDialogStore((state) => state.payload);
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [sourceAccountFilter, setSourceAccountFilter] = useState("all");
-  const [destinationAccountFilter, setDestinationAccountFilter] =
-    useState("all");
-  const [tableDrilldownFilter, setTableDrilldownFilter] =
-    useState<DrilldownFilter>("all");
+  const [accountFilter, setAccountFilter] = useState("all");
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([
     null,
     null,
@@ -196,27 +174,39 @@ export default function Transactions({
     page: 0,
     pageSize: 25,
   });
+  const [sortModel, setSortModel] = useState<GridSortModel>([
+    { field: "date", sort: "desc" },
+  ]);
+  const resetPage = useCallback(() => {
+    setPaginationModel((previous) => ({ ...previous, page: 0 }));
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedSearch(search), 350);
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
 
   useEffect(() => {
     const initialDateFilter = getInitialDateFilter(prefillFilter);
     setDateRange(initialDateFilter.dateRange);
     setDateRangeShortcut(initialDateFilter.dateRangeShortcut);
-  }, [prefillFilter]);
+    resetPage();
+  }, [prefillFilter, resetPage]);
 
   const handleResetFilters = useCallback(() => {
     setSearch("");
     setTypeFilter("all");
     setCategoryFilter("all");
-    setSourceAccountFilter("all");
-    setDestinationAccountFilter("all");
-    setTableDrilldownFilter("all");
+    setAccountFilter("all");
+    resetPage();
 
     const initialDateFilter = getInitialDateFilter(prefillFilter);
     setDateRange(initialDateFilter.dateRange);
     setDateRangeShortcut(initialDateFilter.dateRangeShortcut);
-  }, [prefillFilter]);
+  }, [prefillFilter, resetPage]);
 
   const applyDateRangeShortcut = (shortcut: DateRangeShortcut) => {
+    resetPage();
     setDateRangeShortcut(shortcut);
 
     if (shortcut === "all") {
@@ -235,6 +225,11 @@ export default function Transactions({
       setDateRange([now.subtract(29, "day"), now]);
       return;
     }
+    if (shortcut === "lastMonth") {
+      const lastMonth = now.subtract(1, "month");
+      setDateRange([lastMonth.startOf("month"), lastMonth.endOf("month")]);
+      return;
+    }
     if (shortcut === "thisMonth") {
       setDateRange([now.startOf("month"), now.endOf("month")]);
       return;
@@ -244,16 +239,47 @@ export default function Transactions({
     }
   };
 
+  const listQuery = useMemo(() => ({
+    page: paginationModel.page + 1,
+    limit: paginationModel.pageSize,
+    search: debouncedSearch.trim() || undefined,
+    accountId: accountFilter === "all" ? undefined : Number(accountFilter),
+    type: typeFilter === "all" ? undefined : typeFilter as TransactionRecord["type"],
+    categoryId: categoryFilter === "all" ? undefined : Number(categoryFilter),
+    fromDate: dateRange[0]?.startOf("day").toISOString(),
+    toDate: dateRange[1]?.endOf("day").toISOString(),
+    sortBy: sortModel[0]?.field as "date" | "amount" | "createdAt" | undefined,
+    sortDirection: sortModel[0]?.sort ?? undefined,
+  }), [
+    paginationModel,
+    debouncedSearch,
+    accountFilter,
+    typeFilter,
+    categoryFilter,
+    dateRange,
+    sortModel,
+  ]);
+
+  const {
+    transactions,
+    pagination,
+    summary: transactionSummary,
+    categories,
+    goals,
+    accounts,
+    loading,
+    error: pageDataError,
+    reload,
+  } = useTransactionPageData(hasPrefetched, prefetchedTransactions, listQuery);
+  const errorMessage =
+    uiError || (pageDataError ? "Failed to load transactions" : "");
+
   const categoryOptions = useMemo(
     () => [
-      ...new Set(
-        categories
-          .filter(
-            (category) =>
-              category?.type === "income" || category?.type === "expense",
-          )
-          .map((category) => category.name),
-      ),
+      { value: "all", label: "All Categories" },
+      ...categories
+        .filter((category) => category?.type === "income" || category?.type === "expense")
+        .map((category) => ({ value: String(category.id), label: category.name })),
     ],
     [categories],
   );
@@ -265,15 +291,6 @@ export default function Transactions({
     }, {});
   }, [goals]);
 
-  const goalOptions = useMemo(
-    () =>
-      goals.map((goal) => ({
-        id: getGoalId(goal),
-        name: goal.name || "Untitled Goal",
-      })),
-    [goals],
-  );
-
   const accountNameById = useMemo(() => {
     return accounts.reduce((acc: Record<number, string>, account) => {
       acc[Number(account.id)] =
@@ -281,6 +298,22 @@ export default function Transactions({
       return acc;
     }, {});
   }, [accounts]);
+
+  const accountCurrencyById = useMemo(() => {
+    return accounts.reduce((acc: Record<number, string>, account) => {
+      acc[Number(account.id)] = account.currency;
+      return acc;
+    }, {});
+  }, [accounts]);
+
+  const selectedAccount = accounts.find(
+    (account) => String(account.id) === accountFilter,
+  );
+  const summaryCurrency = selectedAccount?.currency || accounts[0]?.currency;
+  const formatSummaryValue = (value: number | null) =>
+    value === null
+      ? "Multiple currencies"
+      : formatCurrency(value, summaryCurrency);
 
   const accountOptions = useMemo(
     () => [
@@ -297,78 +330,14 @@ export default function Transactions({
     [accounts],
   );
 
-  const sortedTransactions = useMemo(() => {
-    return getSortedTransactions(transactions);
-  }, [transactions]);
-
-  const filteredTransactions = useMemo(() => {
-    return getFilteredTransactions(sortedTransactions, {
-      dateRange,
-      typeFilter,
-      categoryFilter,
-      sourceAccountFilter,
-      destinationAccountFilter,
-      search,
-      goalNameById,
-      accountNameById,
-    });
-  }, [
-    sortedTransactions,
-    typeFilter,
-    categoryFilter,
-    sourceAccountFilter,
-    destinationAccountFilter,
-    search,
-    dateRange,
-    goalNameById,
-    accountNameById,
-  ]);
-
-  const transactionInsights = useMemo(() => {
-    return getTransactionInsights(filteredTransactions);
-  }, [filteredTransactions]);
-
-  const focusTransactionTable = useCallback(() => {
-    requestAnimationFrame(() => {
-      transactionTableRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    });
-  }, []);
-
-  const handleTransactionTableDrilldown = useCallback(
-    (filterKey: DrilldownFilter = "all") => {
-      setTableDrilldownFilter(filterKey);
-      focusTransactionTable();
-    },
-    [focusTransactionTable],
-  );
-
-  useEffect(() => {
-    setPaginationModel((prev) => ({ ...prev, page: 0 }));
-  }, [
-    search,
-    typeFilter,
-    categoryFilter,
-    sourceAccountFilter,
-    destinationAccountFilter,
-    tableDrilldownFilter,
-    dateRange,
-  ]);
-
-  const tableTransactions = useMemo(
-    () =>
-      filteredTransactions.filter((tx) =>
-        matchesTransactionTableDrilldown(tx, tableDrilldownFilter),
-      ),
-    [filteredTransactions, tableDrilldownFilter],
-  );
-
   const rows = useMemo(
-    () =>
-      getTransactionRows(tableTransactions, accountNameById, getTransactionId),
-    [tableTransactions, accountNameById],
+    () => getTransactionRows(
+      transactions as TransactionListRow[],
+      accountNameById,
+      getTransactionId,
+      formatDate,
+    ),
+    [transactions, accountNameById, formatDate],
   ) as TransactionTableRow[];
   const tableHeight = useViewportTableHeight(transactionTableRef, {
     bottomOffset: 50,
@@ -383,7 +352,6 @@ export default function Transactions({
       transactions.find((tx) => getTransactionId(tx) === drawerEntityId) || null
     );
   }, [transactions, drawerType, drawerEntityId]);
-
   const selectedTransactionGoalName = selectedTransaction?.goalId
     ? goalNameById[selectedTransaction.goalId] || "Linked goal removed"
     : "No linked goal";
@@ -395,6 +363,7 @@ export default function Transactions({
 
   const isTransactionViewDrawerOpen =
     drawerOpen && drawerType === "transaction" && drawerMode === "view";
+  const isStatementView = accountFilter !== "all";
 
   const createTransactionInitialValues = useMemo(() => {
     if (
@@ -535,9 +504,25 @@ export default function Transactions({
         flex: 0.9,
         minWidth: 120,
         valueGetter: (_value, row) => (row as TransactionTableRow).date,
-        valueFormatter: (value) => new Date(String(value)).toLocaleDateString(),
+        valueFormatter: (_value, row) => (row as TransactionTableRow).dateLabel,
       },
-      { field: "category", headerName: "Category", flex: 1.2, minWidth: 150 },
+      {
+        field: "category",
+        headerName: isStatementView ? "Description" : "Category",
+        flex: 1.2,
+        minWidth: 150,
+        renderCell: (params) => {
+          const row = params.row as TransactionTableRow;
+          return isStatementView ? (
+            <Box sx={{ display: "grid", alignContent: "center", minWidth: 0, height: "100%" }}>
+              <Typography variant="body2" noWrap>{row.notes || row.category}</Typography>
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {row.category}{row.investment !== "—" ? ` | ${row.investment}` : ""}
+              </Typography>
+            </Box>
+          ) : <Typography variant="body2" noWrap>{row.category}</Typography>;
+        },
+      },
       {
         field: "source",
         headerName: "Source account",
@@ -559,8 +544,7 @@ export default function Transactions({
           <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
             <StatusChip
               label={String(params.value)}
-              tone={params.value === "EXPENSE" ? "error" : "success"}
-              hexColor={params.value === "TRANSFER" || params.value === "INVESTMENT" ? getTransactionMovementHexColor(params.value as "TRANSFER" | "INVESTMENT") : undefined}
+              tone={params.value === "TRANSFER" ? "transfer" : params.value === "INVESTMENT" ? "investment" : params.value === "EXPENSE" ? "error" : "success"}
             />
           </Box>
         ),
@@ -591,7 +575,7 @@ export default function Transactions({
           const movementIcon =
             row.type === "INVESTMENT" ? mdiTrendingUp : mdiSwapHorizontal;
           const color = isMovement
-            ? getTransactionMovementHexColor(row.type as "TRANSFER" | "INVESTMENT")
+            ? row.type === "TRANSFER" ? "movement.transfer" : "movement.investment"
             : isExpense
               ? "error.main"
               : "success.main";
@@ -604,10 +588,11 @@ export default function Transactions({
                 gap: 0.5,
                 width: "100%",
                 height: "100%",
+                color,
               }}
             >
               {isMovement ? (
-                <Icon path={movementIcon} size={0.7} color={color} />
+                <Icon path={movementIcon} size={0.7} />
               ) : null}
               <Typography
                 variant="body2"
@@ -617,11 +602,59 @@ export default function Transactions({
                   lineHeight: 1.2,
                 }}
               >
-                {isMovement ? "" : isExpense ? "-" : "+"} {formatCurrency(params.value as number)}
+                {isMovement ? "" : isExpense ? "-" : "+"} {formatCurrency(
+                  params.value as number,
+                  accountCurrencyById[Number(row.tx.sourceAccountId ?? row.tx.destinationAccountId)] || summaryCurrency,
+                )}
               </Typography>
             </Box>
           );
         },
+      },
+      {
+        field: "debitAmount",
+        headerName: "Debit",
+        type: "number",
+        flex: 0.9,
+        minWidth: 130,
+        sortable: false,
+        renderCell: (params) => {
+          const amount = Number(params.value || 0);
+          return (
+            <Typography variant="body2" sx={{ width: "100%", textAlign: "right", color: "error.main", fontWeight: 600 }}>
+              {amount ? formatCurrency(amount, selectedAccount?.currency) : "—"}
+            </Typography>
+          );
+        },
+      },
+      {
+        field: "creditAmount",
+        headerName: "Credit",
+        type: "number",
+        flex: 0.9,
+        minWidth: 130,
+        sortable: false,
+        renderCell: (params) => {
+          const amount = Number(params.value || 0);
+          return (
+            <Typography variant="body2" sx={{ width: "100%", textAlign: "right", color: "success.main", fontWeight: 600 }}>
+              {amount ? formatCurrency(amount, selectedAccount?.currency) : "—"}
+            </Typography>
+          );
+        },
+      },
+      {
+        field: "balanceAfter",
+        headerName: "Balance After",
+        type: "number",
+        flex: 1,
+        minWidth: 150,
+        sortable: false,
+        renderCell: (params) => (
+          <Typography variant="body2" sx={{ width: "100%", textAlign: "right", fontWeight: 700 }}>
+            {params.value == null ? "—" : formatCurrency(Number(params.value), selectedAccount?.currency)}
+          </Typography>
+        ),
       },
       {
         field: "actions",
@@ -681,7 +714,16 @@ export default function Transactions({
         },
       },
     ],
-    [openEditDrawer, openViewDrawer],
+    [
+      openEditDrawer,
+      openViewDrawer,
+      formatCurrency,
+      formatDate,
+      isStatementView,
+      accountCurrencyById,
+      summaryCurrency,
+      selectedAccount?.currency,
+    ],
   );
 
   const handleOpenAdd = useCallback(() => {
@@ -709,14 +751,12 @@ export default function Transactions({
     Boolean(search.trim()) ||
     typeFilter !== "all" ||
     categoryFilter !== "all" ||
-    sourceAccountFilter !== "all" ||
-    destinationAccountFilter !== "all" ||
-    tableDrilldownFilter !== "all" ||
+    accountFilter !== "all" ||
     dateRangeShortcut !== "all" ||
     Boolean(dateRange[0]) ||
     Boolean(dateRange[1]);
   const isFirstTransactionSetup =
-    sortedTransactions.length === 0 && !hasTransactionFilters;
+    (pagination?.total ?? 0) === 0 && !hasTransactionFilters;
   const transactionTableEmptyState = isFirstTransactionSetup
     ? {
         title: "No transactions yet",
@@ -781,99 +821,29 @@ export default function Transactions({
               display: "grid",
               gridTemplateColumns: {
                 xs: "1fr",
-                md: "repeat(2, minmax(0, 1fr))",
-                xl: "repeat(4, minmax(0, 1fr))",
+                sm: "repeat(2, minmax(0, 1fr))",
+                lg: dateRangeShortcut === "custom"
+                  ? "repeat(4, minmax(0, 1fr))"
+                  : "minmax(240px, 0.8fr) minmax(240px, 1fr)",
               },
+              alignItems: "end",
               gap: 1.5,
               mb: 1.5,
             }}
           >
-            <KpiCard
-              title="Income"
-              value={formatCurrency(transactionInsights.totalIncome)}
-              delta={`${filteredTransactions.length} transactions in view`}
-              deltaTone="positive"
-              onClick={() => handleTransactionTableDrilldown("income")}
-            />
-            <KpiCard
-              title="Expenses"
-              value={formatCurrency(transactionInsights.totalExpense)}
-              delta={`${categoryOptions.length} categories available`}
-              deltaTone={
-                transactionInsights.totalExpense > 0 ? "negative" : "neutral"
-              }
-              onClick={() => handleTransactionTableDrilldown("expense")}
-            />
-            <KpiCard
-              title="Net Cash Flow"
-              value={formatCurrency(transactionInsights.net)}
-              delta={
-                transactionInsights.net >= 0
-                  ? "Positive balance"
-                  : "Negative balance"
-              }
-              deltaTone={transactionInsights.net >= 0 ? "positive" : "negative"}
-              onClick={() => handleTransactionTableDrilldown("all")}
-            />
-            <KpiCard
-              title="Transactions"
-              value={transactionInsights.transactionCount}
-              delta={`${goalOptions.length} goals available`}
-              deltaTone="neutral"
-              onClick={() => handleTransactionTableDrilldown("all")}
-            />
-          </Box>
-        )}
-
-        {!loading && !isFirstTransactionSetup && (
-          <FilterBar onReset={handleResetFilters}>
-            <SearchBar
-              className="self-center"
-              value={search}
-              onChange={setSearch}
-              placeholder="Search category/type/bank/goal/notes"
-            />
-
             <LabeledSelectField
-              labelText="All Categories"
-              value={categoryFilter}
-              onChange={(e) =>
-                setCategoryFilter((e.target as HTMLInputElement).value)
-              }
-              options={categoryOptions.map((name) => ({
-                value: name,
-                label: name,
-              }))}
-              size="small"
-              fullWidth
-            />
-
-            <LabeledSelectField
-              labelText="Source Account"
-              value={sourceAccountFilter}
-              onChange={(e) =>
-                setSourceAccountFilter((e.target as HTMLInputElement).value)
-              }
+              labelText="Account"
+              value={accountFilter}
+              onChange={(e) => {
+                setAccountFilter((e.target as HTMLInputElement).value);
+                resetPage();
+              }}
               options={accountOptions}
               size="small"
               fullWidth
             />
-
             <LabeledSelectField
-              labelText="Destination Account"
-              value={destinationAccountFilter}
-              onChange={(e) =>
-                setDestinationAccountFilter(
-                  (e.target as HTMLInputElement).value,
-                )
-              }
-              options={accountOptions}
-              size="small"
-              fullWidth
-            />
-
-            <LabeledSelectField
-              labelText="Date Range"
+              labelText="Period"
               value={dateRangeShortcut}
               onChange={(e) =>
                 applyDateRangeShortcut(
@@ -884,6 +854,7 @@ export default function Transactions({
                 { value: "all", label: "All Time" },
                 { value: "last7", label: "Last 7 Days" },
                 { value: "last30", label: "Last 30 Days" },
+                { value: "lastMonth", label: "Last Month" },
                 { value: "thisMonth", label: "This Month" },
                 { value: "thisYear", label: "This Year" },
                 { value: "custom", label: "Custom Range" },
@@ -891,28 +862,123 @@ export default function Transactions({
               size="small"
               fullWidth
             />
+            {dateRangeShortcut === "custom" ? (
+              <>
+                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <LabeledDateField
+                    labelText="From"
+                    value={dateRange[0]}
+                    onChange={(value) => {
+                      setDateRange([value, dateRange[1]]);
+                      resetPage();
+                    }}
+                  />
+                </LocalizationProvider>
+                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <LabeledDateField
+                    labelText="To"
+                    value={dateRange[1]}
+                    onChange={(value) => {
+                      setDateRange([dateRange[0], value]);
+                      resetPage();
+                    }}
+                  />
+                </LocalizationProvider>
+              </>
+            ) : null}
+          </Box>
+        )}
 
-            <LocalizationProvider dateAdapter={AdapterDayjs}>
-              <LabeledDateField
-                labelText="From"
-                value={dateRange[0]}
-                onChange={(value) => {
-                  setDateRange([value, dateRange[1]]);
-                  setDateRangeShortcut("custom");
-                }}
-              />
-            </LocalizationProvider>
+        {!loading && !isFirstTransactionSetup && (
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: {
+                xs: "1fr",
+                md: "repeat(2, minmax(0, 1fr))",
+                xl: "repeat(4, minmax(0, 1fr))",
+              },
+              gap: 1.5,
+              mb: 1.5,
+            }}
+          >
+            <KpiCard
+              title={selectedAccount ? "Opening Balance" : "Income"}
+              value={selectedAccount
+                ? formatSummaryValue(transactionSummary.openingBalance)
+                : formatSummaryValue(transactionSummary.totalIncome)}
+              delta={selectedAccount ? "At start of period" : transactionSummary.multiCurrency ? "Select an account for a single-currency total" : "Income transactions"}
+              deltaTone="positive"
+            />
+            <KpiCard
+              title={selectedAccount ? "Money In" : "Expenses"}
+              value={selectedAccount
+                ? formatSummaryValue(transactionSummary.moneyIn)
+                : formatSummaryValue(transactionSummary.totalExpense)}
+              delta={selectedAccount ? "Credits to this account" : transactionSummary.multiCurrency ? "Select an account for a single-currency total" : "Expense transactions"}
+              deltaTone="negative"
+            />
+            <KpiCard
+              title={selectedAccount ? "Money Out" : "Net Cash Flow"}
+              value={selectedAccount
+                ? formatSummaryValue(transactionSummary.moneyOut)
+                : formatSummaryValue(transactionSummary.net)}
+              delta={selectedAccount ? "Debits from this account" : transactionSummary.multiCurrency ? "Not combined across currencies" : "Income less expenses"}
+              deltaTone={selectedAccount ? "negative" : transactionSummary.net !== null && transactionSummary.net >= 0 ? "positive" : "negative"}
+            />
+            <KpiCard
+              title={selectedAccount ? "Closing Balance" : "Transactions"}
+              value={selectedAccount
+                ? formatSummaryValue(transactionSummary.closingBalance)
+                : transactionSummary.transactionCount}
+              delta={selectedAccount ? "At end of period" : "In selected period"}
+              deltaTone="neutral"
+            />
+          </Box>
+        )}
 
-            <LocalizationProvider dateAdapter={AdapterDayjs}>
-              <LabeledDateField
-                labelText="To"
-                value={dateRange[1]}
-                onChange={(value) => {
-                  setDateRange([dateRange[0], value]);
-                  setDateRangeShortcut("custom");
-                }}
-              />
-            </LocalizationProvider>
+        {!loading && !isFirstTransactionSetup && (
+          <FilterBar onReset={handleResetFilters}>
+            <SearchBar
+              className="self-center"
+              value={search}
+              onChange={(value) => {
+                setSearch(value);
+                resetPage();
+              }}
+              placeholder="Search description or notes"
+            />
+
+            <LabeledSelectField
+              labelText="Category"
+              value={categoryFilter}
+              onChange={(e) => {
+                setCategoryFilter((e.target as HTMLInputElement).value)
+                resetPage();
+              }}
+              options={categoryOptions}
+              size="small"
+              fullWidth
+            />
+
+            <LabeledSelectField
+              labelText="Type"
+              value={typeFilter}
+              onChange={(e) => {
+                setTypeFilter((e.target as HTMLInputElement).value)
+                resetPage();
+              }}
+              options={[
+                { value: "all", label: "All Types" },
+                { value: "INCOME", label: "Income" },
+                { value: "EXPENSE", label: "Expense" },
+                { value: "TRANSFER", label: "Transfer" },
+                { value: "INVESTMENT", label: "Investment" },
+              ]}
+              size="small"
+              fullWidth
+            />
+
           </FilterBar>
         )}
 
@@ -929,14 +995,29 @@ export default function Transactions({
                   rows={rows}
                   columns={columns}
                   pagination
+                  paginationMode="server"
+                  sortingMode="server"
+                  rowCount={pagination?.total ?? 0}
+                  pageSizeOptions={[25, 50, 100]}
                   paginationModel={paginationModel}
                   onPaginationModelChange={setPaginationModel}
+                  sortModel={sortModel}
+                  onSortModelChange={(model) => {
+                    setSortModel(model);
+                    setPaginationModel((previous) => ({ ...previous, page: 0 }));
+                  }}
+                  columnVisibilityModel={{
+                    source: !isStatementView,
+                    destination: !isStatementView,
+                    investment: !isStatementView,
+                    amount: !isStatementView,
+                    debitAmount: isStatementView,
+                    creditAmount: isStatementView,
+                    balanceAfter: isStatementView,
+                  }}
                   rowBufferPx={400}
                   columnBufferPx={300}
                   containerSx={{ height: tableHeight }}
-                  initialState={{
-                    sorting: { sortModel: [{ field: "date", sort: "desc" }] },
-                  }}
                 />
               )}
             </SectionCard>

@@ -1,4 +1,5 @@
 import dayjs, { type Dayjs } from "dayjs";
+import { GOAL_PROGRESS_COLORS } from "../../colors";
 import type { GoalProgressFilter, GoalRecord } from "./goal.types";
 
 export interface GoalHealth {
@@ -30,8 +31,7 @@ const getGoalDeadline = (goal: GoalRecord) =>
 export const getGoalId = (goal: GoalRecord): string =>
   String(goal._id || goal.id || "");
 
-export const formatCurrency = (value: number | string | null | undefined) =>
-  `₹${Number(value || 0).toLocaleString()}`;
+export { formatCurrency } from '../../utils/currency';
 
 export const getProgress = (goal: GoalRecord): number => {
   const target = Number(goal.targetAmount || 0);
@@ -215,6 +215,7 @@ export const getGoalInsights = (filteredGoals: GoalRecord[]): GoalInsights => {
 export const getGoalProgressChart = (
   filteredGoals: GoalRecord[],
   totalGoals: number,
+  segmentColors: Record<keyof typeof GOAL_PROGRESS_COLORS, string> = GOAL_PROGRESS_COLORS,
 ) => {
   const goalsBySegment = {
     completed: filteredGoals.filter(
@@ -232,10 +233,10 @@ export const getGoalProgressChart = (
   };
 
   const segments = [
-    { key: "completed", label: "Completed", color: "#22c55e" },
-    { key: "onTrack", label: "On Track", color: "#3b82f6" },
-    { key: "atRisk", label: "At Risk", color: "#f59e0b" },
-    { key: "notStarted", label: "Not Started", color: "#8b5cf6" },
+    { key: "completed", label: "Completed", color: segmentColors.completed },
+    { key: "onTrack", label: "On Track", color: segmentColors.onTrack },
+    { key: "atRisk", label: "At Risk", color: segmentColors.atRisk },
+    { key: "notStarted", label: "Not Started", color: segmentColors.notStarted },
   ].map((segment) => ({
     ...segment,
     count: goalsBySegment[segment.key as keyof typeof goalsBySegment].length,

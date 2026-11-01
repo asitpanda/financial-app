@@ -1,7 +1,7 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { renderWithProviders } from "../../test/test-utils";
 import { useNotificationStore } from "../../store/notificationStore";
 import Investments, {
@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
     loading: false,
     error: null as Error | null,
     reload: vi.fn(),
+    ready: true,
   },
   dashboard: {
     loading: false,
@@ -46,19 +47,29 @@ const mocks = vi.hoisted(() => ({
     data: null as Record<string, unknown> | null,
   },
   save: vi.fn(),
+  summaryQuery: vi.fn(),
   remove: vi.fn(),
   saveTaxonomy: vi.fn(),
   removeTaxonomy: vi.fn(),
-  confirmRecurring: vi.fn(),
-  updateRecurring: vi.fn(),
   useHeaderAction: vi.fn(),
 }));
 
 vi.mock("./hooks/useInvestments", () => ({
-  useInvestmentSummaryPageData: () => mocks.summary,
+  useInvestmentSummaryPageData: (params: Record<string, unknown>) => {
+    mocks.summaryQuery(params);
+    return {
+    ...mocks.summary,
+    pagination: {
+      ...mocks.summary.pagination,
+      total: mocks.summary.pagination.total || mocks.summary.investments.length,
+      totalPages: mocks.summary.pagination.totalPages || (mocks.summary.investments.length ? 1 : 0),
+    },
+    };
+  },
   useInvestmentReferenceData: () => mocks.reference,
   useInvestmentDashboardAnalytics: () => ({
     data: {
+      responseContext: { currency: "INR" },
       widgets: {
         portfolioGrowth: { order: [], byKey: {} },
         capitalDeployment: { order: [], byKey: {} },
@@ -78,6 +89,7 @@ vi.mock("./hooks/useInvestments", () => ({
       },
     },
     isLoading: mocks.dashboard.loading,
+    isPending: mocks.dashboard.loading,
     error: mocks.dashboard.error,
   }),
   useInvestment: () => ({ data: mocks.investment.data }),
@@ -92,16 +104,8 @@ vi.mock("./hooks/useInvestmentBenefits", () => ({
   useInvestmentBenefits: () => ({
     data: [],
     isLoading: mocks.benefits.loading,
+    isPending: mocks.benefits.loading,
     error: mocks.benefits.error,
-  }),
-}));
-
-vi.mock("./hooks/useContributionPlans", () => ({
-  useConfirmRecurringInvestmentContributionPlan: () => ({
-    mutateAsync: mocks.confirmRecurring,
-  }),
-  useUpdateInvestmentContributionPlan: () => ({
-    mutateAsync: mocks.updateRecurring,
   }),
 }));
 
@@ -159,6 +163,11 @@ vi.mock("./components/InvestmentFormDrawer", () => ({
     title: string;
     initialValues: Record<string, unknown> | null;
   }) => {
+    const [submitError, setSubmitError] = useState<string | null>(null);
+    const submit = async (formValues: Record<string, unknown>) => {
+      const error = await onSubmit(formValues);
+      setSubmitError(typeof error === "string" ? error : null);
+    };
     const values = {
       accountId: "42",
       name: "Growth Fund",
@@ -179,13 +188,14 @@ vi.mock("./components/InvestmentFormDrawer", () => ({
       <section aria-label="Investment form drawer">
         <h2>{title}</h2>
         <p>Editing: {String(initialValues?.name ?? "new investment")}</p>
+        {submitError ? <p>{submitError}</p> : null}
         <button type="button" onClick={onClose}>
           Close investment form
         </button>
         <button
           type="button"
           onClick={() =>
-            void onSubmit({ ...values, contributionType: "one_time" })
+            void submit({ ...values, contributionType: "one_time" })
           }
         >
           Submit investment
@@ -193,7 +203,7 @@ vi.mock("./components/InvestmentFormDrawer", () => ({
         <button
           type="button"
           onClick={() =>
-            void onSubmit({
+            void submit({
               ...values,
               contributionType: "recurring",
               recurringPlan: {
@@ -406,7 +416,7 @@ const investment = {
 const investmentDetails = {
   ...investment,
   activeContributionPlan: {
-    id: "plan-1",
+    id: "9",
     status: "active",
     amount: 100,
     cadenceUnit: "month",
@@ -437,44 +447,22 @@ const resetMocks = () => {
   mocks.benefits.error = null;
   mocks.investment.data = null;
   mocks.save.mockReset();
+  mocks.summaryQuery.mockReset();
   mocks.remove.mockReset();
   mocks.saveTaxonomy.mockReset();
   mocks.removeTaxonomy.mockReset();
-  mocks.confirmRecurring.mockReset();
-  mocks.updateRecurring.mockReset();
   mocks.useHeaderAction.mockReset();
-};
-
-const RouterHistoryControls = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  return (
-    <>
-      <output data-testid="router-location">
-        {location.pathname}{location.search}
-      </output>
-      <button type="button" onClick={() => navigate(-1)}>
-        Go back
-      </button>
-    </>
-  );
 };
 
 describe("Investments", () => {
   beforeEach(resetMocks);
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
-  it.each([
-    ["investment summary", () => (mocks.summary.loading = true)],
-    ["reference data", () => (mocks.reference.loading = true)],
-    ["dashboard analytics", () => (mocks.dashboard.loading = true)],
-    ["investment benefits", () => (mocks.benefits.loading = true)],
-  ])("shows a loading state while %s is being fetched", (_source, setLoading) => {
-    setLoading();
+  it("shows a loading state while investment summary is being fetched", () => {
+    mocks.summary.loading = true;
 
     renderWithProviders(<Investments />);
 
@@ -482,6 +470,20 @@ describe("Investments", () => {
     expect(
       screen.queryByRole("button", { name: "Manage Taxonomy" }),
     ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["reference data", () => (mocks.reference.loading = true)],
+    ["dashboard analytics", () => (mocks.dashboard.loading = true)],
+    ["investment benefits", () => (mocks.benefits.loading = true)],
+  ])("keeps the investment list available while %s is being fetched", (_source, setLoading) => {
+    setLoading();
+    mocks.summary.investments = [investment];
+
+    renderWithProviders(<Investments />);
+
+    expect(screen.getByRole("button", { name: "View Growth Fund" })).toBeInTheDocument();
+    expect(screen.queryByText("Loading investments...")).not.toBeInTheDocument();
   });
 
   it.each([
@@ -534,33 +536,20 @@ describe("Investments", () => {
     );
   });
 
-  it("opens the create form from the action query and replaces that history entry", async () => {
-    const user = userEvent.setup();
+  it("opens the create form through the registered header action", () => {
     mocks.reference.accounts = [{ id: 42, name: "Checking" }];
 
-    renderWithProviders(
-      <>
-        <Routes>
-          <Route path="/dashboard" element={<p>Dashboard origin</p>} />
-          <Route path="/investments" element={<Investments />} />
-        </Routes>
-        <RouterHistoryControls />
-      </>,
-      { router: { initialEntries: ["/dashboard", "/investments?action=create"], initialIndex: 1 } },
-    );
+    renderWithProviders(<Investments />);
+    const action = mocks.useHeaderAction.mock.lastCall?.[1];
+    expect(action).toEqual(expect.objectContaining({ label: "Investment", disabled: false }));
+    act(() => action.onClick());
 
     expect(
-      await screen.findByRole("region", { name: "Investment form drawer" }),
+      screen.getByRole("region", { name: "Investment form drawer" }),
     ).toBeInTheDocument();
-    await waitFor(() =>
-      expect(screen.getByTestId("router-location")).toHaveTextContent("/investments"),
-    );
-
-    await user.click(screen.getByRole("button", { name: "Go back" }));
-    expect(await screen.findByText("Dashboard origin")).toBeInTheDocument();
   });
 
-  it("renders the source dashboard filters and filtered-empty state", async () => {
+  it("sends filters to the summary query and renders the server-filtered empty state", async () => {
     const user = userEvent.setup();
     mocks.summary.investments = [
       { ...investment, type: "mutual_fund", assetType: "mutual_fund" },
@@ -571,7 +560,7 @@ describe("Investments", () => {
       { code: "equity", label: "Equity", categories: [] },
     ];
 
-    renderWithProviders(<Investments />);
+    const view = renderWithProviders(<Investments />);
 
     expect(
       screen.getByPlaceholderText(
@@ -587,10 +576,21 @@ describe("Investments", () => {
       ),
       "not in portfolio",
     );
+    await waitFor(() => expect(mocks.summaryQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: "not in portfolio", page: 1 }),
+    ));
+    mocks.summary.investments = [];
+    view.rerender(<Investments />);
     expect(
-      screen.getByText("No investments match current filters"),
+      screen.getByRole("heading", { name: "No investments match current filters" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Add your first investment to start tracking value, maturity, and recurring contributions.",
+      ),
+    ).not.toBeInTheDocument();
 
+    mocks.summary.investments = [investment];
     await user.click(screen.getByRole("button", { name: "Reset Filters" }));
     expect(
       screen.getByRole("button", { name: "View Growth Fund" }),
@@ -599,10 +599,21 @@ describe("Investments", () => {
     const [, statusFilter] = screen.getAllByRole("combobox");
     await user.click(statusFilter);
     await user.click(screen.getByRole("option", { name: "Matured" }));
+    expect(mocks.summaryQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "matured", search: undefined, page: 1 }),
+    );
+    mocks.summary.investments = [];
+    view.rerender(<Investments />);
     expect(
-      screen.getByText("No investments match current filters"),
+      screen.getByRole("heading", { name: "No investments match current filters" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Add your first investment to start tracking value, maturity, and recurring contributions.",
+      ),
+    ).not.toBeInTheDocument();
 
+    mocks.summary.investments = [investment];
     await user.click(screen.getByRole("button", { name: "Reset Filters" }));
     expect(
       screen.getByRole("button", { name: "View Growth Fund" }),
@@ -719,7 +730,7 @@ describe("Investments", () => {
     await user.click(screen.getByRole("button", { name: "Add Investment" }));
     await user.click(screen.getByRole("button", { name: "Submit investment" }));
 
-    expect(await screen.findByText("Failed to add investment")).toBeInTheDocument();
+    expect(await screen.findByText("Duplicate investment")).toBeInTheDocument();
     expect(
       screen.getByRole("region", { name: "Investment form drawer" }),
     ).toBeInTheDocument();
@@ -822,7 +833,7 @@ describe("Investments", () => {
     });
   });
 
-  it("saves a new taxonomy node and refreshes reference data", async () => {
+  it("saves a new taxonomy node and reports success", async () => {
     const user = userEvent.setup();
     const pushNotification = vi.spyOn(
       useNotificationStore.getState(),
@@ -838,7 +849,6 @@ describe("Investments", () => {
     await waitFor(() =>
       expect(mocks.saveTaxonomy).toHaveBeenCalledWith({ label: "Equities" }),
     );
-    expect(mocks.reference.reload).toHaveBeenCalledTimes(1);
     expect(pushNotification).toHaveBeenCalledWith({
       type: "success",
       message: "Asset taxonomy saved",
@@ -884,24 +894,30 @@ describe("Investments", () => {
     expect(screen.queryByText("Taxonomy conflict")).not.toBeInTheDocument();
   });
 
-  it("reports a taxonomy refresh failure without a success notification", async () => {
+  it("keeps the taxonomy drawer open after a failed save and allows retry", async () => {
     const user = userEvent.setup();
     const pushNotification = vi.spyOn(
       useNotificationStore.getState(),
       "pushNotification",
     );
-    mocks.saveTaxonomy.mockResolvedValue({ id: "taxonomy-1" });
-    mocks.reference.reload.mockRejectedValue(new Error("Refresh failed"));
+    mocks.saveTaxonomy.mockRejectedValueOnce(new Error("Save failed"))
+      .mockResolvedValueOnce({ id: "taxonomy-1" });
 
     renderWithProviders(<Investments />);
     await user.click(screen.getByRole("button", { name: "Manage Taxonomy" }));
     await user.click(screen.getByRole("button", { name: "Save taxonomy" }));
 
-    expect(await screen.findByText("Refresh failed")).toBeInTheDocument();
+    expect(await screen.findByText("Save failed")).toBeInTheDocument();
     expect(pushNotification).not.toHaveBeenCalled();
+    expect(screen.getByRole("region", { name: "Asset taxonomy drawer" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save taxonomy" }));
+    await waitFor(() => expect(pushNotification).toHaveBeenCalledWith({
+      type: "success", message: "Asset taxonomy saved",
+    }));
+    expect(screen.queryByText("Save failed")).not.toBeInTheDocument();
   });
 
-  it("removes a taxonomy node and reloads reference data", async () => {
+  it("removes a taxonomy node and reports success", async () => {
     const user = userEvent.setup();
     const pushNotification = vi.spyOn(
       useNotificationStore.getState(),
@@ -917,7 +933,6 @@ describe("Investments", () => {
     await waitFor(() =>
       expect(mocks.removeTaxonomy).toHaveBeenCalledWith("taxonomy-1"),
     );
-    expect(mocks.reference.reload).toHaveBeenCalledTimes(1);
     expect(pushNotification).toHaveBeenCalledWith({
       type: "success",
       message: "Asset taxonomy removed",
@@ -953,7 +968,6 @@ describe("Investments", () => {
     );
     mocks.reference.accounts = [{ id: 42, name: "Checking" }];
     mocks.save.mockResolvedValue({ id: "investment-2" });
-    mocks.confirmRecurring.mockResolvedValue(undefined);
 
     renderWithProviders(<Investments />);
     await user.click(screen.getByRole("button", { name: "Add Investment" }));
@@ -971,15 +985,18 @@ describe("Investments", () => {
     );
 
     await waitFor(() =>
-      expect(mocks.confirmRecurring).toHaveBeenCalledWith({
-        investmentId: "investment-2",
+      expect(mocks.save).toHaveBeenCalledExactlyOnceWith({
+        selectedInvestmentId: null,
         payload: expect.objectContaining({
-          amount: 100,
-          cadenceUnit: "month",
-          cadenceInterval: 1,
-          anchorDate: "2026-02-01",
-          historicalImportMode: "TRACK_FROM_TODAY",
-          reviewedHistoricalItems: [],
+          contributionMode: "RECURRING",
+          recurringPlan: expect.objectContaining({
+            amount: 100,
+            cadenceUnit: "month",
+            cadenceInterval: 1,
+            anchorDate: "2026-02-01",
+            historicalImportMode: "TRACK_FROM_TODAY",
+            reviewedHistoricalItems: [],
+          }),
         }),
       }),
     );
@@ -1013,23 +1030,19 @@ describe("Investments", () => {
     expect(
       screen.getByRole("region", { name: "Investment form drawer" }),
     ).toBeInTheDocument();
-    expect(pushNotification).toHaveBeenCalledWith({
-      type: "info",
-      message:
-        "Returned to the investment form. Update the draft and confirm again when ready.",
-    });
+    expect(mocks.save).not.toHaveBeenCalled();
+    expect(pushNotification).not.toHaveBeenCalled();
   });
 
-  it("rolls back a new investment and keeps review open when plan confirmation fails", async () => {
+  it("keeps review open after an atomic save fails and allows retry without client rollback", async () => {
     const user = userEvent.setup();
     const pushNotification = vi.spyOn(
       useNotificationStore.getState(),
       "pushNotification",
     );
     mocks.reference.accounts = [{ id: 42, name: "Checking" }];
-    mocks.save.mockResolvedValue({ id: "investment-2" });
-    mocks.confirmRecurring.mockRejectedValue(new Error("Plan conflict"));
-    mocks.remove.mockResolvedValue(undefined);
+    mocks.save.mockRejectedValueOnce(new Error("Plan conflict"))
+      .mockResolvedValueOnce({ id: "investment-2" });
 
     renderWithProviders(<Investments />);
     await user.click(screen.getByRole("button", { name: "Add Investment" }));
@@ -1040,45 +1053,54 @@ describe("Investments", () => {
       screen.getByRole("button", { name: "Confirm recurring investment" }),
     );
 
-    await waitFor(() => expect(mocks.remove).toHaveBeenCalledWith("investment-2"));
-    expect(pushNotification).toHaveBeenCalledWith({
+    await waitFor(() => expect(pushNotification).toHaveBeenCalledWith({
       type: "error",
       message: "Plan conflict",
-    });
-    expect(
-      screen.getByRole("region", { name: "Recurring investment review" }),
-    ).toBeInTheDocument();
-  });
-
-  it("reports a missing investment ID and does not confirm or remove a plan", async () => {
-    const user = userEvent.setup();
-    const pushNotification = vi.spyOn(
-      useNotificationStore.getState(),
-      "pushNotification",
-    );
-    mocks.reference.accounts = [{ id: 42, name: "Checking" }];
-    mocks.save.mockResolvedValue({});
-
-    renderWithProviders(<Investments />);
-    await user.click(screen.getByRole("button", { name: "Add Investment" }));
-    await user.click(
-      screen.getByRole("button", { name: "Submit recurring investment" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Confirm recurring investment" }),
-    );
-
-    await waitFor(() =>
-      expect(pushNotification).toHaveBeenCalledWith({
-        type: "error",
-        message: "Investment ID was not available in the save response.",
-      }),
-    );
-    expect(mocks.confirmRecurring).not.toHaveBeenCalled();
+    }));
     expect(mocks.remove).not.toHaveBeenCalled();
     expect(
       screen.getByRole("region", { name: "Recurring investment review" }),
     ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Confirm recurring investment" }));
+    await waitFor(() => expect(
+      screen.queryByRole("region", { name: "Recurring investment review" }),
+    ).not.toBeInTheDocument());
+    expect(mocks.save).toHaveBeenCalledTimes(2);
+    expect(mocks.save).toHaveBeenNthCalledWith(2, mocks.save.mock.calls[0][0]);
+    expect(pushNotification).toHaveBeenCalledWith({
+      type: "success", message: "Investment and recurring plan created",
+    });
+  });
+
+  it("keeps recurring review open until the atomic save succeeds", async () => {
+    const user = userEvent.setup();
+    const pushNotification = vi.spyOn(
+      useNotificationStore.getState(),
+      "pushNotification",
+    );
+    mocks.reference.accounts = [{ id: 42, name: "Checking" }];
+    let resolveSave!: (value: { id: string }) => void;
+    mocks.save.mockReturnValue(new Promise((resolve) => { resolveSave = resolve; }));
+
+    renderWithProviders(<Investments />);
+    await user.click(screen.getByRole("button", { name: "Add Investment" }));
+    await user.click(
+      screen.getByRole("button", { name: "Submit recurring investment" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Confirm recurring investment" }),
+    );
+
+    expect(mocks.save).toHaveBeenCalledTimes(1);
+    expect(pushNotification).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("region", { name: "Recurring investment review" }),
+    ).toBeInTheDocument();
+    await act(async () => { resolveSave({ id: "investment-2" }); });
+    expect(screen.queryByRole("region", { name: "Recurring investment review" })).not.toBeInTheDocument();
+    expect(pushNotification).toHaveBeenCalledWith({
+      type: "success", message: "Investment and recurring plan created",
+    });
   });
 
   it("updates an existing contribution plan instead of creating another", async () => {
@@ -1090,7 +1112,6 @@ describe("Investments", () => {
     mocks.summary.investments = [investment];
     mocks.investment.data = investmentDetails;
     mocks.save.mockResolvedValue(undefined);
-    mocks.updateRecurring.mockResolvedValue(undefined);
 
     renderWithProviders(<Investments />);
     await user.click(screen.getByRole("button", { name: "Edit Growth Fund" }));
@@ -1102,25 +1123,60 @@ describe("Investments", () => {
     );
 
     await waitFor(() =>
-      expect(mocks.updateRecurring).toHaveBeenCalledWith({
-        investmentId: "investment-1",
-        planId: "plan-1",
+      expect(mocks.save).toHaveBeenCalledExactlyOnceWith({
+        selectedInvestmentId: "investment-1",
         payload: expect.objectContaining({
-          amount: 100,
-          cadenceUnit: "month",
-          cadenceInterval: 1,
-          status: "active",
+          recurringPlanId: 9,
+          recurringPlanUpdate: expect.objectContaining({
+            amount: 100,
+            cadenceUnit: "month",
+            cadenceInterval: 1,
+            status: "active",
+          }),
         }),
       }),
     );
-    expect(mocks.confirmRecurring).not.toHaveBeenCalled();
+    expect(mocks.save.mock.calls[0][0].payload).not.toHaveProperty("recurringPlan");
     expect(pushNotification).toHaveBeenCalledWith({
       type: "success",
       message: "Investment updated and recurring plan confirmed",
     });
   });
 
-  it("reports a missing existing plan ID without creating a new plan", async () => {
+  it("creates a recurring plan when the edited investment has no existing plan", async () => {
+    const user = userEvent.setup();
+    const pushNotification = vi.spyOn(
+      useNotificationStore.getState(),
+      "pushNotification",
+    );
+    mocks.summary.investments = [investment];
+    mocks.investment.data = investment;
+    mocks.save.mockResolvedValue(undefined);
+
+    renderWithProviders(<Investments />);
+    await user.click(screen.getByRole("button", { name: "Edit Growth Fund" }));
+    await user.click(
+      screen.getByRole("button", { name: "Submit recurring investment" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Confirm recurring investment" }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.save).toHaveBeenCalledExactlyOnceWith({
+        selectedInvestmentId: "investment-1",
+        payload: expect.objectContaining({
+          recurringPlan: expect.objectContaining({ amount: 100, cadenceUnit: "month" }),
+        }),
+      }),
+    );
+    expect(mocks.save.mock.calls[0][0].payload).not.toHaveProperty("recurringPlanId");
+    expect(pushNotification).toHaveBeenCalledWith({
+      type: "success", message: "Investment updated and recurring plan confirmed",
+    });
+  });
+
+  it("preserves a paused contribution plan when saving recurring changes", async () => {
     const user = userEvent.setup();
     const pushNotification = vi.spyOn(
       useNotificationStore.getState(),
@@ -1128,8 +1184,8 @@ describe("Investments", () => {
     );
     mocks.summary.investments = [investment];
     mocks.investment.data = {
-      ...investment,
-      activeContributionPlan: { status: "active" },
+      ...investmentDetails,
+      activeContributionPlan: { ...investmentDetails.activeContributionPlan, status: "paused" },
     };
     mocks.save.mockResolvedValue(undefined);
 
@@ -1143,43 +1199,17 @@ describe("Investments", () => {
     );
 
     await waitFor(() =>
-      expect(pushNotification).toHaveBeenCalledWith({
-        type: "error",
-        message: "Recurring plan ID was not available in the save response.",
+      expect(mocks.save).toHaveBeenCalledExactlyOnceWith({
+        selectedInvestmentId: "investment-1",
+        payload: expect.objectContaining({
+          recurringPlanId: 9,
+          recurringPlanUpdate: expect.objectContaining({ status: "paused" }),
+        }),
       }),
     );
-    expect(mocks.updateRecurring).not.toHaveBeenCalled();
-    expect(mocks.confirmRecurring).not.toHaveBeenCalled();
-  });
-
-  it("keeps the recurring review open when saving the investment fails", async () => {
-    const user = userEvent.setup();
-    const pushNotification = vi.spyOn(
-      useNotificationStore.getState(),
-      "pushNotification",
-    );
-    mocks.reference.accounts = [{ id: 42, name: "Checking" }];
-    mocks.save.mockRejectedValue(new Error("Save unavailable"));
-
-    renderWithProviders(<Investments />);
-    await user.click(screen.getByRole("button", { name: "Add Investment" }));
-    await user.click(
-      screen.getByRole("button", { name: "Submit recurring investment" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Confirm recurring investment" }),
-    );
-
-    await waitFor(() =>
-      expect(pushNotification).toHaveBeenCalledWith({
-        type: "error",
-        message: "Save unavailable",
-      }),
-    );
-    expect(mocks.confirmRecurring).not.toHaveBeenCalled();
-    expect(
-      screen.getByRole("region", { name: "Recurring investment review" }),
-    ).toBeInTheDocument();
+    expect(pushNotification).toHaveBeenCalledWith({
+      type: "success", message: "Investment updated and recurring plan confirmed",
+    });
   });
 });
 
@@ -1242,7 +1272,6 @@ describe("buildRecurringPayloadFromFormValues", () => {
       cadenceUnit: "month",
       cadenceInterval: 6,
       anchorDate: "2026-02-01",
-      nextDueDate: "2026-03-01",
       endDate: "2027-02-01",
       historicalImportMode: "OPENING_BALANCE",
       autoCreateEvent: false,
@@ -1314,6 +1343,7 @@ describe("buildRecurringPlanUpdatePayloadFromFormValues", () => {
       anchorDate: "2026-02-01",
       endDate: "2027-02-01",
       historicalImportMode: "OPENING_BALANCE",
+      nextDueDate: "2026-03-01",
       status: "paused",
     });
   });
@@ -1372,7 +1402,7 @@ describe("buildRecurringReviewState", () => {
     ]);
     expect(state.reviewSummary.recurring).toEqual([
       { label: "Contribution", value: expect.any(String) },
-      { label: "Anchor date", value: "2026-02-01" },
+      { label: "Anchor date", value: "01/02/2026" },
       { label: "Import mode", value: "OPENING_BALANCE" },
     ]);
   });

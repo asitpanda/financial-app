@@ -6,6 +6,8 @@ import type {
 } from "../dashboard.types";
 import { getStableSeriesColorMap } from "../../../colors";
 import { useTheme } from "@mui/material/styles";
+import { useCurrencyFormatter } from "../../../utils/currency";
+import { useDateFormatter } from "../../../utils/date";
 
 interface DashboardInvestmentsSectionProps {
   selectedPeriodLabel?: string;
@@ -14,15 +16,6 @@ interface DashboardInvestmentsSectionProps {
   onOpenInvestments: () => void;
   onAddInvestment: () => void;
 }
-
-const formatCurrency = (value: number) =>
-  `₹${Number(value || 0).toLocaleString("en-IN")}`;
-const formatShortDate = (value?: string | null) =>
-  new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value || Date.now()));
 
 const ALLOCATION_VISIBLE_LIMIT = 7;
 
@@ -39,6 +32,8 @@ export default function DashboardInvestmentsSection({
   onAddInvestment,
 }: DashboardInvestmentsSectionProps) {
   const theme = useTheme();
+  const formatCurrency = useCurrencyFormatter();
+  const formatShortDate = useDateFormatter();
   const allocationColorByKey = getStableSeriesColorMap(
     investmentSummary.allocationBreakdown.map((item) => item.key),
     "dashboard-investments-allocation",
@@ -57,7 +52,8 @@ export default function DashboardInvestmentsSection({
           Open Investments
         </button>
       }
-      className="h-full xl:col-span-2 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+      className="h-full xl:col-span-2"
+      sx={{ boxShadow: 1 }}
       empty={investments.length === 0}
       emptyState={{
         title: "No investments tracked yet",
@@ -99,7 +95,7 @@ export default function DashboardInvestmentsSection({
                           style={{
                             width: `${Math.max(item.pct, 4)}%`,
                             backgroundColor:
-                              allocationColorByKey.get(item.key) ?? "#94a3b8",
+                              allocationColorByKey.get(item.key) ?? theme.palette.text.disabled,
                           }}
                         />
                       </div>

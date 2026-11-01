@@ -3,7 +3,7 @@ import { renderWithProviders, screen, userEvent, waitFor } from '../../test/test
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Dashboard from './Dashboard';
 import { useDashboard } from './useDashboard';
-import { useInvestmentMetadata } from '../investments/hooks/useInvestments';
+import { useInvestmentMetadata, useInvestmentReferenceData } from '../investments/hooks/useInvestments';
 import { useSaveGoal } from '../goals/useGoals';
 import { saveTransaction } from '../transactions/transactions.service';
 import { createCategory } from '../categories/categories.api';
@@ -12,7 +12,10 @@ import { getFinancialAccounts } from '../accounts/financialAccounts.api';
 import { navigateTo } from '../../services/navigation';
 
 vi.mock('./useDashboard', () => ({ useDashboard: vi.fn() }));
-vi.mock('../investments/hooks/useInvestments', () => ({ useInvestmentMetadata: vi.fn() }));
+vi.mock('../investments/hooks/useInvestments', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../investments/hooks/useInvestments')>();
+  return { ...actual, useInvestmentMetadata: vi.fn(), useInvestmentReferenceData: vi.fn() };
+});
 vi.mock('../goals/useGoals', () => ({ useSaveGoal: vi.fn() }));
 vi.mock('../transactions/transactions.service', () => ({ saveTransaction: vi.fn() }));
 vi.mock('../transactions/components/TransactionsAddEditDrawer', () => ({
@@ -29,14 +32,23 @@ vi.mock('../categories/components/CategoriesFormDrawer', () => ({
 }));
 vi.mock('../investments/components/InvestmentFormDrawer', () => ({
   default: ({ open, onSubmit }: { open: boolean; onSubmit: (payload: unknown) => void }) =>
-    open ? <button type="button" onClick={() => onSubmit({ name: 'Index Fund', type: 'equity', category: 'equity', institution: '', totalInvested: '100', currentValue: '100', startDate: '2026-01-01', maturityDate: '', status: 'active', accountId: '', insuranceCover: '', contributionType: 'one_time', referenceNumber: '', notes: '', expectedBenefits: [] })}>Submit Investment</button> : null,
+    open ? <button type="button" onClick={() => onSubmit({ name: 'Index Fund', type: 'equity', category: 'equity', institution: '', totalInvested: '100', currentValue: '100', startDate: '2026-01-01', maturityDate: '', status: 'active', accountId: '1', insuranceCover: '', contributionType: 'one_time', referenceNumber: '', notes: '', expectedBenefits: [] })}>Submit Investment</button> : null,
 }));
 vi.mock('../accounts/components/FinancialAccountFormDrawer', () => ({
   default: ({ open, onUpdated }: { open: boolean; onUpdated: () => void }) =>
     open ? <button type="button" onClick={onUpdated}>Refresh Account</button> : null,
 }));
 vi.mock('../categories/categories.api', () => ({ createCategory: vi.fn() }));
-vi.mock('../investments/api/investments.api', () => ({ createInvestment: vi.fn(), getInvestments: vi.fn() }));
+vi.mock('../investments/api/investments.api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../investments/api/investments.api')>();
+  const createInvestment = vi.fn();
+  return {
+    ...actual,
+    createInvestment,
+    getInvestments: vi.fn(),
+    default: { ...actual.default, create: createInvestment },
+  };
+});
 vi.mock('../accounts/financialAccounts.api', () => ({ getFinancialAccounts: vi.fn() }));
 vi.mock('../../services/navigation', () => ({ navigateTo: vi.fn() }));
 
@@ -59,6 +71,15 @@ describe('Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useInvestmentMetadata).mockReturnValue({ data: { asset_configs: [] } } as never);
+    vi.mocked(useInvestmentReferenceData).mockReturnValue({
+      taxonomyNodes: [],
+      accounts: [{ id: '1', name: 'Savings' }],
+      assetTypeConfigs: [],
+      loading: false,
+      error: null,
+      ready: true,
+      reload: vi.fn(),
+    } as never);
     vi.mocked(useSaveGoal).mockReturnValue({ mutateAsync: vi.fn() } as never);
   });
 
@@ -179,13 +200,15 @@ describe('Dashboard', () => {
     const user = userEvent.setup();
     vi.mocked(createInvestment).mockResolvedValue({ id: 'investment-1' } as never);
     vi.mocked(getInvestments).mockResolvedValue({ data: [{ id: 'investment-1' }] } as never);
-    vi.mocked(useDashboard).mockReturnValue({ data: { ...emptyData, accounts: [{ id: 'account-1', name: 'Savings' }] }, loading: false, error: null } as never);
+    vi.mocked(useDashboard).mockReturnValue({ data: { ...emptyData, accounts: [{ id: '1', name: 'Savings' }] }, loading: false, error: null } as never);
     renderDashboard();
 
     await user.click(screen.getByRole('button', { name: /Add Investments/ }));
     await user.click(screen.getByRole('button', { name: 'Submit Investment' }));
-    await waitFor(() => expect(createInvestment).toHaveBeenCalled());
-    expect(screen.queryByRole('button', { name: 'Submit Investment' })).not.toBeInTheDocument();
+    await waitFor(() => expect(createInvestment).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Index Fund', accountId: 1 }),
+    ));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Submit Investment' })).not.toBeInTheDocument());
   });
 
   it('invalidates the transactions query after a successful quick add', async () => {

@@ -22,7 +22,7 @@ const createWrapper = (queryClient: QueryClient) =>
 
 afterEach(() => vi.restoreAllMocks());
 
-describe('contribution plan hooks', () => {
+describe('useContributionPlans', () => {
   it('records contribution and withdrawal through their exact API payloads', async () => {
     const contribution = vi.spyOn(plansApi, 'recordInvestmentContribution').mockResolvedValue({ id: 1 });
     const withdrawal = vi.spyOn(plansApi, 'recordInvestmentWithdrawal').mockResolvedValue({ id: 2 });
@@ -32,12 +32,12 @@ describe('contribution plan hooks', () => {
     const withdrawalHook = renderHook(() => useRecordInvestmentWithdrawal(), { wrapper });
 
     await act(async () => {
-      await contributionHook.result.current.mutateAsync({ investmentId: 'investment-1', amount: 100 });
-      await withdrawalHook.result.current.mutateAsync({ investmentId: 'investment-1', amount: 25 });
+      await contributionHook.result.current.mutateAsync({ investmentId: '1', amount: 100 });
+      await withdrawalHook.result.current.mutateAsync({ investmentId: '1', amount: 25 });
     });
 
-    expect(contribution).toHaveBeenCalledWith({ investmentId: 'investment-1', amount: 100 });
-    expect(withdrawal).toHaveBeenCalledWith({ investmentId: 'investment-1', amount: 25 });
+    expect(contribution).toHaveBeenCalledWith({ investmentId: '1', amount: 100 });
+    expect(withdrawal).toHaveBeenCalledWith({ investmentId: '1', amount: 25 });
   });
 
   it('covers recurring plan, skip, income, and event update/delete mutations', async () => {
@@ -70,7 +70,7 @@ describe('contribution plan hooks', () => {
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['investments', 'dashboard'] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['investment', 1] });
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['investment-events', 1] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['investment-events'] });
   });
 
   it('exposes mutation errors without invalidating on failure', async () => {

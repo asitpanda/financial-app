@@ -57,6 +57,36 @@ describe('apiClient interceptors', () => {
     expect(authorization).toBeUndefined();
   });
 
+  it('preserves an explicitly bound session token', async () => {
+    sessionStorage.setItem('token', 'new-session');
+    let authorization: unknown;
+    apiClient.defaults.adapter = async (config) => {
+      authorization = config.headers.Authorization;
+      return successAdapter(config);
+    };
+
+    await apiClient.patch('/users/me/preferences', { currencyDisplay: 'code' }, {
+      headers: { Authorization: 'Bearer original-session' },
+    });
+
+    expect(authorization).toBe('Bearer original-session');
+  });
+
+  it('does not log out a newer session when an older request returns unauthorized', async () => {
+    sessionStorage.setItem('token', 'new-session');
+    const unauthorized = vi.fn();
+    const unsubscribe = authEvents.onUnauthorized(unauthorized);
+    apiClient.defaults.adapter = createErrorAdapter(401);
+
+    await expect(apiClient.get('/users/me/preferences', {
+      headers: { Authorization: 'Bearer old-session' },
+    })).rejects.toBeInstanceOf(AxiosError);
+
+    expect(sessionStorage.getItem('token')).toBe('new-session');
+    expect(unauthorized).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
   it('passes successful responses through unchanged', async () => {
     await expect(apiClient.get('/accounts')).resolves.toMatchObject({
       status: 200,

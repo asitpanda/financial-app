@@ -4,6 +4,7 @@ import type { TransactionRecord } from '../transaction.types';
 import type { CreateTransactionDto } from '../dto/create-transaction.dto';
 import type { UpdateTransactionDto } from '../dto/update-transaction.dto';
 import { ITransactionDataSourcePort } from './transaction.datasource.port';
+import type { TransactionListQuery, TransactionListResult } from '../transaction.types';
 
 @Injectable()
 export class TransactionRepository {
@@ -38,5 +39,17 @@ export class TransactionRepository {
 
   async findByType(userId: number, type: string): Promise<TransactionRecord[]> {
     return this.dataSource.findByType(userId, type);
+  }
+
+  async findPage(userId: number, query: TransactionListQuery): Promise<TransactionListResult> {
+    return this.dataSource.findPage(userId, query);
+  }
+
+  async findAllForAccount(userId: number, accountId: number): Promise<TransactionRecord[]> {
+    return this.dataSource.findAllForAccount(userId, accountId);
+  }
+
+  async getPeriodTypeTotals(userId: number, fromDate?: string, toDate?: string) {
+    return this.dataSource.getPeriodTypeTotals(userId, fromDate, toDate);
   }
 }

@@ -1,6 +1,8 @@
 // @ts-nocheck
 /** @typedef {import('../types/investment.types').InvestmentDrawerData} InvestmentDrawerData */
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useCurrencyFormatter } from "../../../utils/currency";
+import { useDateFormatter } from "../../../utils/date";
 import dayjs from "dayjs";
 import { INVESTMENT_EVENT_TYPES, OPENING_INVESTMENT_EVENT_TYPES } from "../../../types/investmentEventTypes";
 import {
@@ -111,6 +113,10 @@ export default function InvestmentFormDrawer({
   submitError = "",
 }) {
   const [form, setForm] = useState(() => createEmptyInvestmentForm());
+  const formatCurrency = useCurrencyFormatter();
+  const formatDate = useDateFormatter("—");
+  const currencyCode = accounts.find((account) => String(account.id) === String(form.accountId))?.currency
+    || initialValues?.currency || "INR";
   const [errors, setErrors] = useState({});
   const [localSubmitError, setLocalSubmitError] = useState("");
   const [typePickerOpen, setTypePickerOpen] = useState(false);
@@ -915,6 +921,7 @@ export default function InvestmentFormDrawer({
             }}
           >
             <LabelCurrencyField
+              currencyCode={currencyCode}
               labelText={
                 isRecurring
                   ? "Initial Principal (Seed Value)"
@@ -933,6 +940,7 @@ export default function InvestmentFormDrawer({
               disabled={isRecurring || Boolean(initialValues)}
             />
             <LabelCurrencyField
+              currencyCode={currencyCode}
               labelText={isInsuranceSavings ? "Current Value (Optional)" : "Current Value"}
               value={displayCurrentValue}
               onValueChange={(value) => handleFormChange("currentValue", value)}
@@ -952,6 +960,7 @@ export default function InvestmentFormDrawer({
             />
             {isInsurance ? (
               <LabelCurrencyField
+                currencyCode={currencyCode}
                 labelText="Insurance Cover"
                 value={form.insuranceCover}
                 onValueChange={(value) =>
@@ -1051,6 +1060,7 @@ export default function InvestmentFormDrawer({
                 }}
               >
                 <LabelCurrencyField
+                  currencyCode={currencyCode}
                   labelText="Recurring Amount"
                   value={recurringPlan.amount}
                   onValueChange={(value) =>
@@ -1148,6 +1158,7 @@ export default function InvestmentFormDrawer({
                     }}
                   >
                     <LabelCurrencyField
+                      currencyCode={currencyCode}
                       labelText="Opening Principal Amount"
                       value={recurringPlan.openingPrincipalAmount}
                       onValueChange={(value) =>
@@ -1161,6 +1172,7 @@ export default function InvestmentFormDrawer({
                       disabled={isHistoricalImportLocked}
                     />
                     <LabelCurrencyField
+                      currencyCode={currencyCode}
                       labelText="Opening Income/Profit Amount"
                       value={recurringPlan.openingIncomeAmount}
                       onValueChange={(value) =>
@@ -1227,7 +1239,7 @@ export default function InvestmentFormDrawer({
                             Amount
                           </Typography>
                           <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                            ₹{Number(benefit.amount || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                            {formatCurrency(benefit.amount, currencyCode)}
                           </Typography>
                         </Box>
                         <Box>
@@ -1235,7 +1247,7 @@ export default function InvestmentFormDrawer({
                             Expected Date
                           </Typography>
                           <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                            {benefit.benefitDate ? dayjs(benefit.benefitDate).format("DD MMM YYYY") : "—"}
+                            {formatDate(benefit.benefitDate)}
                           </Typography>
                         </Box>
                       </Box>
@@ -1289,6 +1301,7 @@ export default function InvestmentFormDrawer({
                   />
 
                   <LabelCurrencyField
+                    currencyCode={currencyCode}
                     labelText="Benefit Amount"
                     value={newBenefit.amount}
                     onChange={(e) => {

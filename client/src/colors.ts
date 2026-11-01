@@ -37,6 +37,9 @@ export const themeColors = {
     actionActive: "#344054",
     actionHover: "rgba(37, 99, 235, 0.07)",
     actionSelected: "rgba(37, 99, 235, 0.12)",
+    actionSelectedOpacity: 0.12,
+    movementTransfer: "#64748b",
+    movementInvestment: "#0ea5e9",
     actionDisabled: "rgba(23, 32, 51, 0.34)",
     actionDisabledBackground: "rgba(23, 32, 51, 0.06)",
     tableHeader: "#eef2f7",
@@ -57,6 +60,9 @@ export const themeColors = {
     actionActive: "#dbeafe",
     actionHover: "rgba(96, 165, 250, 0.12)",
     actionSelected: "rgba(96, 165, 250, 0.18)",
+    actionSelectedOpacity: 0.18,
+    movementTransfer: "#94a3b8",
+    movementInvestment: "#38bdf8",
     actionDisabled: "rgba(226, 232, 240, 0.34)",
     actionDisabledBackground: "rgba(226, 232, 240, 0.08)",
     tableHeader: "#182235",
@@ -64,6 +70,40 @@ export const themeColors = {
 } as const;
 
 // Finance semantic colors and palettes.
+export const CATEGORY_DEFAULT_COLOR = "#111827";
+export const CHART_SERIES_FALLBACK_COLOR = "#94a3b8";
+export const CATEGORY_FALLBACK_COLORS = [
+  "#22c55e",
+  "#ef4444",
+  "#3b82f6",
+  "#f59e0b",
+  "#8b5cf6",
+  "#06b6d4",
+  "#ec4899",
+  "#84cc16",
+];
+
+export const GOAL_PROGRESS_COLORS = {
+  completed: themeColors.light.success,
+  onTrack: themeColors.light.primary,
+  atRisk: themeColors.light.warning,
+  notStarted: themeColors.light.secondary,
+};
+
+export const INSURANCE_CATEGORY_COLORS: Record<string, string> = {
+  TERM_LIFE: "#0284c7",
+  LIFE_INSURANCE: "#0284c7",
+  HEALTH: "#8b5cf6",
+  HEALTH_INSURANCE: "#8b5cf6",
+  SAVINGS: "#10b981",
+  INSURANCE_SAVINGS: "#10b981",
+  ENDOWMENT: "#10b981",
+  ULIP: "#10b981",
+  MOTOR: "#f59e0b",
+  GENERAL: "#f59e0b",
+  OTHER: "#64748b",
+};
+
 type ZeroColorMode = "neutral" | "gain" | "loss";
 
 const resolveZeroMode = (zeroMode: ZeroColorMode) => {
@@ -210,8 +250,8 @@ export const getSignedValuePrefix = (value: number, includeZero = false) => {
 
 // Non-P&L account movement colors (money moved between own accounts, not a gain/loss).
 export const TRANSACTION_MOVEMENT_COLORS = {
-  transferHex: "#64748b",
-  investmentHex: "#0ea5e9",
+  transferHex: themeColors.light.movementTransfer,
+  investmentHex: themeColors.light.movementInvestment,
 } as const;
 
 export const getTransactionMovementHexColor = (

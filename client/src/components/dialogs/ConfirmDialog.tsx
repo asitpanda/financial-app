@@ -36,35 +36,35 @@ type ToneStyleResolver = (theme: Theme) => string;
 const DIALOG_TONE_META = {
   error: {
     icon: mdiDeleteOutline,
-    iconColor: '#ef4444',
+    iconColor: 'error.main',
     iconBg: ((theme: Theme) => alpha(theme.palette.error.main, 0.1)) as ToneStyleResolver,
     headerBg: ((theme: Theme) => alpha(theme.palette.error.main, 0.08)) as ToneStyleResolver,
     borderColor: ((theme: Theme) => alpha(theme.palette.error.main, 0.16)) as ToneStyleResolver,
   },
   warning: {
     icon: mdiAlertOutline,
-    iconColor: '#f59e0b',
+    iconColor: 'warning.main',
     iconBg: ((theme: Theme) => alpha(theme.palette.warning.main, 0.12)) as ToneStyleResolver,
     headerBg: ((theme: Theme) => alpha(theme.palette.warning.main, 0.1)) as ToneStyleResolver,
     borderColor: ((theme: Theme) => alpha(theme.palette.warning.main, 0.18)) as ToneStyleResolver,
   },
   success: {
     icon: mdiCheckCircleOutline,
-    iconColor: '#10b981',
+    iconColor: 'success.main',
     iconBg: ((theme: Theme) => alpha(theme.palette.success.main, 0.12)) as ToneStyleResolver,
     headerBg: ((theme: Theme) => alpha(theme.palette.success.main, 0.1)) as ToneStyleResolver,
     borderColor: ((theme: Theme) => alpha(theme.palette.success.main, 0.16)) as ToneStyleResolver,
   },
   info: {
     icon: mdiInformationOutline,
-    iconColor: '#3b82f6',
+    iconColor: 'info.main',
     iconBg: ((theme: Theme) => alpha(theme.palette.info.main, 0.12)) as ToneStyleResolver,
     headerBg: ((theme: Theme) => alpha(theme.palette.info.main, 0.1)) as ToneStyleResolver,
     borderColor: ((theme: Theme) => alpha(theme.palette.info.main, 0.16)) as ToneStyleResolver,
   },
   primary: {
     icon: mdiAlertCircleOutline,
-    iconColor: '#2563eb',
+    iconColor: 'primary.main',
     iconBg: ((theme: Theme) => alpha(theme.palette.primary.main, 0.12)) as ToneStyleResolver,
     headerBg: ((theme: Theme) => alpha(theme.palette.primary.main, 0.1)) as ToneStyleResolver,
     borderColor: ((theme: Theme) => alpha(theme.palette.primary.main, 0.16)) as ToneStyleResolver,
@@ -96,7 +96,7 @@ export default function ConfirmDialog({
           pd: 0,
           border: '1px solid',
           borderColor: toneMeta.borderColor,
-          boxShadow: '0 18px 48px rgba(15, 23, 42, 0.12)',
+          boxShadow: 8,
           overflow: 'hidden',
         },
       }}
@@ -129,6 +129,7 @@ export default function ConfirmDialog({
             }}
           >
             <Box
+              sx={{ color: toneMeta.iconColor }}
               // sx={{
               //   width: 48,
               //   height: 48,
@@ -139,7 +140,7 @@ export default function ConfirmDialog({
               //   backgroundColor: toneMeta.iconBg,
               // }}
             >
-              <Icon path={toneMeta.icon} size={1.2} color={toneMeta.iconColor} />
+              <Icon path={toneMeta.icon} size={1.2} />
             </Box>
 
             <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: -0.2 }}>

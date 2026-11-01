@@ -164,6 +164,68 @@ From server:
 - `npm run prisma:migrate`
 - `npm run prisma:studio`
 
+## User Preferences
+
+Settings saves light/dark theme, symbol/code currency display, and date format per
+authenticated user. Save applies the server response; Cancel discards the local draft. Login and
+session startup load saved preferences, including when a user profile is cached.
+The header theme shortcut saves immediately through the same persistence path.
+Theme changes apply after successful saves, and failed saves preserve the previous
+appearance. Settings and the header share a save lock to prevent overlapping writes.
+
+For an existing PostgreSQL/Supabase database:
+
+1. If currency preferences have not been installed, apply
+  `server/prisma/sql/add_user_preferences.sql` once.
+2. Apply `server/prisma/sql/add_theme_preferences.sql` once. It adds `themeMode`
+  with a light default for existing rows.
+3. Apply `server/prisma/sql/add_user_preferences_timestamps.sql` once to add
+  creation and last-update timestamps. Existing rows receive the upgrade time;
+  their original creation and update times were not recorded.
+4. Apply `server/prisma/sql/add_date_format_preferences.sql` once to add
+  `dateFormat`, defaulting existing rows to `DD_MM_YYYY` (`DD/MM/YYYY`).
+5. Regenerate Prisma bindings with `npm run prisma:generate` in server before
+  deploying the updated server.
+
+Fresh databases include all preference fields in `server/prisma/sql/core_schema.sql`
+and do not need these upgrade scripts. No upgrade changes monetary records. Mock
+mode stores preferences in memory for the server process lifetime, like the other
+mock data. Browser `app-theme-mode` values are no longer read or imported; the
+anonymous/logged-out theme is light.
+
+Persisted preferences include timezone-aware `createdAt` and `updatedAt` fields;
+Prisma maintains `updatedAt` on writes. Direct SQL updates must set it explicitly.
+These timestamps are persistence metadata and are not included in preference API responses.
+
+- `GET /api/users/me/preferences` returns resolved preferences.
+- `PATCH /api/users/me/preferences` accepts `currencyDisplay` (`symbol` or `code`),
+  `themeMode` (`light` or `dark`), and/or `dateFormat`, updates only supplied fields, and returns
+  the complete saved object.
+- Login/register responses include `preferences`; `/api/auth/me` includes it
+  alongside the public profile.
+
+Supported date format values:
+
+| API Value | Display Pattern | Example |
+| --- | --- | --- |
+| `DD_MM_YYYY` (default) | `DD/MM/YYYY` | `30/10/2026` |
+| `MM_DD_YYYY` | `MM/DD/YYYY` | `10/30/2026` |
+| `YYYY_MM_DD` | `YYYY-MM-DD` | `2026-10-30` |
+| `DD_MMM_YYYY` | `DD MMM YYYY` | `30 Oct 2026` |
+
+Date format applies to full-date displays and MUI date-picker inputs after saving.
+English month names, relative labels, and compact month/year chart labels remain
+unchanged. Date-only strings are displayed as calendar dates without UTC conversion;
+timestamps retain local-time display. API serialization, stored financial dates,
+sorting, filters, and recurring schedules are unchanged. This is not a timezone or
+language preference.
+
+These preferences change presentation only. They do not choose a default currency,
+convert amounts, or add language/region settings. Record currency is retained where
+available; currency-less displays keep their existing INR context. Existing
+mixed-currency home-dashboard aggregation limitations remain a separate financial
+correctness task.
+
 ## Runtime Logging And Error Contract
 
 - Request/response logging with `x-request-id` is configured globally.

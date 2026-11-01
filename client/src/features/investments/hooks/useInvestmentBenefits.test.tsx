@@ -21,7 +21,7 @@ const createWrapper = (queryClient: QueryClient) =>
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("investment benefit hooks", () => {
+describe("useInvestmentBenefits", () => {
   it("loads all, investment-scoped, and individual benefits", async () => {
     const getAll = vi.spyOn(investmentBenefitsApi, "getAll").mockResolvedValue([{ id: 1 }] as never);
     const getByInvestmentId = vi.spyOn(investmentBenefitsApi, "getByInvestmentId").mockResolvedValue([{ id: 2 }] as never);
@@ -86,7 +86,7 @@ describe("investment benefit hooks", () => {
     expect(realize).toHaveBeenCalledWith("7", "2", { components: [] });
     expect(quickRealize).toHaveBeenCalledWith("7", { ...payload, eventType: "INTEREST" });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["dashboard"] });
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["investment", "7"] });
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["investment-benefits", "7"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["investment", 7] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["investment-benefits"] });
   });
 });

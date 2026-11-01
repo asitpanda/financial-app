@@ -1,5 +1,5 @@
 import { getInvestmentCategoryOptions, normalizeInvestmentForUi } from '../../utils/investmentHelpers';
-import { getStableSeriesColorMap } from '../../colors';
+import { CHART_SERIES_FALLBACK_COLOR, getStableSeriesColorMap } from '../../colors';
 import type { CategoryRecord } from '../categories/categories.types';
 import type { GoalRecord } from '../goals/goal.types';
 import type { TransactionRecord } from '../transactions/transaction.types';
@@ -24,6 +24,7 @@ export const getDashboardAccountOverviewRows = (
       // Balance comes straight from the server (financial-accounts.currentBalance); no client-side recompute.
       name: account.displayName || account.institutionName || account.name || 'Account',
       balance: Number(account.currentBalance ?? account.openingBalance) || 0,
+      currency: account.currency,
       transactions: transactionCountByAccountId[Number(account.id)] || 0,
     }))
     .sort((left, right) => {
@@ -50,7 +51,7 @@ export const getDashboardCategoryPieData = (filteredTransactions: TransactionRec
     .map(([name, value]) => ({
       name,
       value,
-      color: colorByCategory.get(name) ?? '#94a3b8',
+      color: colorByCategory.get(name) ?? CHART_SERIES_FALLBACK_COLOR,
     }))
     .sort((left, right) => right.value - left.value);
 

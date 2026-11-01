@@ -19,9 +19,7 @@ export default function FilterBar({ children, onReset, resetLabel = 'Reset Filte
         border: '1px solid',
         borderColor: 'divider',
         backgroundColor: (theme) =>
-          theme.palette.mode === 'light'
-            ? alpha(theme.palette.common.white, 0.9)
-            : alpha(theme.palette.background.paper, 0.96),
+          alpha(theme.palette.background.paper, theme.palette.mode === 'light' ? 0.9 : 0.96),
         boxShadow: 'none',
       }}
     >

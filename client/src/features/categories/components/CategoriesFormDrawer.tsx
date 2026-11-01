@@ -8,6 +8,7 @@ import {
   Stack,
   TextField,
   Typography,
+  useTheme,
 } from "@mui/material";
 import Button from "../../../components/common/AppButton";
 import Icon from "@mdi/react";
@@ -20,8 +21,8 @@ import {
 } from "../categories.schema";
 import { CATEGORY_ICON_OPTIONS } from "../../../constants/categoryIcons";
 import type { CategoryRecord, CategorySavePayload } from "../categories.types";
+import { CATEGORY_DEFAULT_COLOR as DEFAULT_TEXT_COLOR } from "../../../colors";
 
-const DEFAULT_TEXT_COLOR = "#111827";
 const DEFAULT_ICON_BY_TYPE: Record<"income" | "expense", string> = {
   income: "cash",
   expense: "cart",
@@ -62,6 +63,7 @@ export default function CategoryFormDrawer({
   submitLabel = "Add",
   submitError = "",
 }: CategoryFormDrawerProps) {
+  const theme = useTheme();
   const [localSubmitError, setLocalSubmitError] = React.useState("");
   const { data: categories = [] } = useCategories();
   const currentCategoryName = initialValues?.name?.trim().toLowerCase() || "";
@@ -308,7 +310,7 @@ export default function CategoryFormDrawer({
                       onChange={(e) => field.onChange(e.target.value)}
                       onBlur={field.onBlur}
                       inputRef={field.ref}
-                      placeholder="#111827"
+                      placeholder={DEFAULT_TEXT_COLOR}
                       error={Boolean(errors.color)}
                       slotProps={{ htmlInput: { maxLength: 7 } }}
                       size="small"
@@ -375,12 +377,13 @@ export default function CategoryFormDrawer({
                 width: 68,
                 height: 68,
                 bgcolor: previewColor,
+                color: theme.palette.getContrastText(previewColor),
                 border: "1px solid",
                 borderColor: "divider",
                 flexShrink: 0,
               }}
             >
-              <Icon path={previewIconOption.path} size={1.5} color="#ffffff" />
+              <Icon path={previewIconOption.path} size={1.5} />
             </Box>
             <Box sx={{ minWidth: 0 }}>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>

@@ -55,12 +55,12 @@ describe("CategoryPerformanceTable", () => {
     expect(screen.getByText("Domestic")).toBeInTheDocument();
   });
 
-  it("uses the selected trend window and focuses a holding", async () => {
+  it("shows reported performance and focuses a holding", async () => {
     const user = userEvent.setup();
     const onSelectRow = vi.fn();
     const holding = row("fund-a", "Fund A", { sparkline: [1, 2, 3, 4] });
 
-    const { container } = renderWithProviders(
+    renderWithProviders(
       <CategoryPerformanceTable
         rows={[holding]}
         formatValue={(value) => `$${value}`}
@@ -68,27 +68,24 @@ describe("CategoryPerformanceTable", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "3M" }));
-    expect(container.querySelector("path")?.getAttribute("d")).toContain("M 0 28");
+    expect(screen.getByText("$100")).toBeInTheDocument();
+    expect(screen.getByText("$120")).toBeInTheDocument();
+    expect(screen.getByText("+$20")).toBeInTheDocument();
+    expect(screen.getByText("+20.0%")).toBeInTheDocument();
 
     await user.click(screen.getByText("Fund A"));
     expect(onSelectRow).toHaveBeenCalledWith(holding);
   });
 
-  it("shows the complete available sparkline in the All range", async () => {
-    const user = userEvent.setup();
-    const { container } = renderWithProviders(
+  it("shows reported losses without deriving returns from invested and current values", () => {
+    renderWithProviders(
       <CategoryPerformanceTable
-        rows={[row("equity", "Equity", { sparkline: Array.from({ length: 15 }, (_, index) => index + 1) })]}
+        rows={[row("equity", "Equity", { returnAmount: -7, returnPercentage: -3.2 })]}
         formatValue={(value) => `$${value}`}
       />,
     );
 
-    const getSegmentCount = () => container.querySelector("path")?.getAttribute("d")?.match(/L/g)?.length;
-    await user.click(screen.getByRole("button", { name: "All" }));
-    expect(getSegmentCount()).toBe(14);
-
-    await user.click(screen.getByRole("button", { name: "1Y" }));
-    expect(getSegmentCount()).toBe(11);
+    expect(screen.getByText("$-7")).toBeInTheDocument();
+    expect(screen.getByText("-3.2%")).toBeInTheDocument();
   });
 });

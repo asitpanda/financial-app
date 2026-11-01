@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Box, Stack, Typography } from "@mui/material";
+import { Box, Stack, Typography, useTheme } from "@mui/material";
 import AppButton from "../../../components/common/AppButton";
 import Icon from "@mdi/react";
 import { mdiChevronLeft, mdiChevronRight } from "@mdi/js";
@@ -34,6 +34,7 @@ export default function AllocationDonutChart({
   holdingCurrentValueData,
   onSelectSegment,
 }: AllocationDonutChartProps) {
+  const theme = useTheme();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [mode, setMode] = useState<AllocationMode>("contribution");
   const [drilledType, setDrilledType] = useState<string | null>(null);
@@ -142,7 +143,7 @@ export default function AllocationDonutChart({
     return {
       ...item,
       d,
-      color: colorByKey.get(item.key) ?? "#94a3b8",
+      color: colorByKey.get(item.key) ?? theme.palette.text.disabled,
       fraction,
       numericValue,
     };

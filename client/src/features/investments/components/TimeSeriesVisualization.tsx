@@ -113,7 +113,7 @@ export default function TimeSeriesVisualization({
         y={y}
         textAnchor="end"
         dominantBaseline="middle"
-        style={{ fontSize: 11, fill: "#6b7280" }}
+        style={{ fontSize: 11, fill: theme.palette.text.secondary }}
       >
         {formatValue(value)}
       </text>,
@@ -204,7 +204,7 @@ export default function TimeSeriesVisualization({
                   x={point.x}
                   y={chartHeight - padding.bottom + 20}
                   textAnchor="middle"
-                  style={{ fontSize: 11, fill: "#6b7280" }}
+                  style={{ fontSize: 11, fill: theme.palette.text.secondary }}
                 >
                   {point.label}
                 </text>

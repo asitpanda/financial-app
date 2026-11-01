@@ -14,7 +14,7 @@ export const apiClient = axios.create({
 apiClient.interceptors.request.use(
   (config) => {
     const token = sessionStorage.getItem('token');
-    if (token) {
+    if (token && !config.headers.Authorization) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -29,6 +29,11 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error?.response?.status === 401) {
+      const requestAuthorization = error.config?.headers?.Authorization;
+      const currentToken = sessionStorage.getItem('token');
+      if (requestAuthorization && requestAuthorization !== `Bearer ${currentToken}`) {
+        return Promise.reject(error);
+      }
       sessionStorage.removeItem('token');
       sessionStorage.removeItem('user');
       // Notify the auth store to clear in-memory state too, not just storage.

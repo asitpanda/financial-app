@@ -21,7 +21,9 @@ import {
   LabeledTextareaField,
 } from '../../../components/common';
 import { getProfitLossHexColor } from '../../../colors';
-import { formatInvestmentCurrency, INVESTMENT_BENEFIT_OPTIONS } from '../../../utils/investmentHelpers';
+import { INVESTMENT_BENEFIT_OPTIONS } from '../../../utils/investmentHelpers';
+import { useCurrencyFormatter } from '../../../utils/currency';
+import { useDateFormatter } from '../../../utils/date';
 import {
   useRecordInvestmentContribution,
   useRecordInvestmentIncomeCredit,
@@ -119,7 +121,9 @@ export default function RecordInvestmentActivityModal({
   realizationBenefit = null,
   closeMode = false,
 }: RecordInvestmentActivityModalProps) {
-  const formatCurrency = (value) => formatInvestmentCurrency(value, investment?.currency || 'INR');
+  const formatAmount = useCurrencyFormatter();
+  const formatDate = useDateFormatter();
+  const formatCurrency = (value) => formatAmount(value, investment?.currency || 'INR', { minimumFractionDigits: undefined, maximumFractionDigits: undefined });
   const activityRequest = useRef({ signature: '', requestId: '' });
   const isEditing = Boolean(editingEvent?.id);
   const isEditingBenefit = Boolean(editingBenefit?.id);
@@ -570,7 +574,7 @@ export default function RecordInvestmentActivityModal({
           {mode === 'contribution' && contributionPlan?.nextDueDate ? (
             <LabeledTextField
               labelText="Scheduled due contribution"
-              value={dayjs(contributionPlan.nextDueDate).format('DD MMM YYYY')}
+              value={formatDate(contributionPlan.nextDueDate)}
               slotProps={{ input: { readOnly: true } }}
             />
           ) : null}
@@ -581,7 +585,8 @@ export default function RecordInvestmentActivityModal({
             onChange={(value) => setDate(value ? value.format('YYYY-MM-DD') : '')}
           />
           <LabelCurrencyField
-            labelText="Amount (₹)"
+            labelText="Amount"
+            currencyCode={investment?.currency || 'INR'}
             value={amount}
             onValueChange={setAmount}
           />

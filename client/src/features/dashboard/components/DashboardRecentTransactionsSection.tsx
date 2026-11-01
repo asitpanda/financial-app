@@ -1,10 +1,11 @@
 import Icon from "@mdi/react";
+import { Box } from "@mui/material";
 import { SectionCard } from "../../../components/common";
 import { getIconPathByKey } from "../../../constants/categoryIcons";
 import type { CategoryRecord } from "../../categories/categories.types";
 import type { TransactionRecord } from "../../transactions/transaction.types";
 import { getProfitLossHexColor } from "../../../colors";
-import { useTheme } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
 
 interface DashboardRecentTransactionsSectionProps {
   recentTransactions: TransactionRecord[];
@@ -18,14 +19,8 @@ const DEFAULT_TX_ICON_BY_TYPE: Record<"income" | "expense", string> = {
   expense: "cart",
 };
 
-const formatCurrency = (value: number) =>
-  `₹${Number(value || 0).toLocaleString("en-IN")}`;
-const formatShortDate = (value: string | number | Date) =>
-  new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
+import { useCurrencyFormatter } from "../../../utils/currency";
+import { useDateFormatter } from "../../../utils/date";
 
 const getTransactionId = (transaction: TransactionRecord) =>
   transaction?._id || transaction?.id;
@@ -37,6 +32,8 @@ export default function DashboardRecentTransactionsSection({
   onAddTransaction,
 }: DashboardRecentTransactionsSectionProps) {
   const theme = useTheme();
+  const formatCurrency = useCurrencyFormatter();
+  const formatShortDate = useDateFormatter();
 
   return (
     <SectionCard
@@ -51,7 +48,8 @@ export default function DashboardRecentTransactionsSection({
           View All
         </button>
       }
-      className="h-full xl:col-span-1 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+      className="h-full xl:col-span-1"
+      sx={{ boxShadow: 1 }}
       empty={recentTransactions.length === 0}
       emptyState={{
         title: "No transactions in this period",
@@ -61,7 +59,7 @@ export default function DashboardRecentTransactionsSection({
         onAction: onAddTransaction,
       }}
     >
-      <div className="divide-y divide-slate-200/80">
+      <Box sx={{ '& > * + *': { borderTop: '1px solid', borderColor: 'divider' } }}>
         {recentTransactions.map((transaction) => {
           const amount = Number(transaction.amount) || 0;
              const isExpense = transaction.type === "EXPENSE";
@@ -75,8 +73,11 @@ export default function DashboardRecentTransactionsSection({
           const iconPath =
             getIconPathByKey(iconKey) || getIconPathByKey("cash") || "";
           const iconContainerStyle = matchedCategory?.color
-            ? { backgroundColor: matchedCategory.color, color: "#ffffff" }
-            : undefined;
+            ? { backgroundColor: matchedCategory.color, color: theme.palette.getContrastText(matchedCategory.color) }
+            : {
+                backgroundColor: alpha(isExpense ? theme.palette.error.main : theme.palette.success.main, 0.12),
+                color: isExpense ? theme.palette.error.main : theme.palette.success.main,
+              };
 
           return (
             <div
@@ -85,7 +86,7 @@ export default function DashboardRecentTransactionsSection({
             >
               <div className="flex min-w-0 items-center gap-3">
                 <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-2xl text-base font-semibold ${matchedCategory?.color ? "" : isExpense ? "bg-red-50 text-red-500" : "bg-emerald-50 text-emerald-500"}`}
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl text-base font-semibold"
                   style={iconContainerStyle}
                 >
                   <Icon path={iconPath} size={0.82} color="currentColor" />
@@ -94,7 +95,7 @@ export default function DashboardRecentTransactionsSection({
                   <div className="truncate text-sm font-semibold" style={{ color: theme.palette.text.primary }}>
                        {transaction.categoryLabelSnapshot || transaction.category || "Transaction"}
                   </div>
-                  <div className="text-xs text-slate-500">
+                  <div className="text-xs" style={{ color: theme.palette.text.secondary }}>
                        {isExpense ? "Expense" : "Income"}
                   </div>
                 </div>
@@ -107,7 +108,7 @@ export default function DashboardRecentTransactionsSection({
                   {isExpense ? "-" : "+"}
                   {formatCurrency(amount)}
                 </div>
-                <div className="mt-1 text-xs text-slate-400">
+                <div className="mt-1 text-xs" style={{ color: theme.palette.text.secondary }}>
                   {formatShortDate(
                     transaction.date || transaction.createdAt || Date.now(),
                   )}
@@ -116,7 +117,7 @@ export default function DashboardRecentTransactionsSection({
             </div>
           );
         })}
-      </div>
+      </Box>
     </SectionCard>
   );
 }

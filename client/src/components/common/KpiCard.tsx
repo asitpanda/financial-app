@@ -30,7 +30,7 @@ export default function KpiCard({ title, value, delta, deltaTone = 'neutral', ic
         '&:hover': onClick
           ? {
               transform: 'translateY(-1px)',
-              boxShadow: '0 10px 24px rgba(15, 23, 42, 0.08)',
+              boxShadow: 3,
               borderColor: 'primary.main',
             }
           : undefined,

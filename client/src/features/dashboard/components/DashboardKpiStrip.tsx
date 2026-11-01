@@ -16,13 +16,13 @@ interface DashboardKpiStripProps {
   >;
 }
 
-const formatCurrency = (value: number) =>
-  `₹${Number(value || 0).toLocaleString("en-IN")}`;
+import { useCurrencyFormatter } from "../../../utils/currency";
 
 export default function DashboardKpiStrip({
   balance,
   investmentSummary,
 }: DashboardKpiStripProps) {
+  const formatCurrency = useCurrencyFormatter();
   return (
     <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
       <KpiCard

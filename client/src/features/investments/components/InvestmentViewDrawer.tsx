@@ -13,6 +13,7 @@ import {
   Tabs,
   Typography,
   useTheme,
+  alpha,
 } from "@mui/material";
 import {
   mdiCalendarBlankOutline,
@@ -57,8 +58,6 @@ import { INVESTMENT_EVENT_TYPES } from "../../../types/investmentEventTypes";
 import { useNotificationStore } from "../../../store/notificationStore";
 import { getRuntimeErrorMessage } from "../../../utils/errorMessage";
 import {
-  formatInvestmentCurrency,
-  formatInvestmentDate,
   getInvestmentCategoryLabel,
   getInvestmentStatusTone,
 } from "../../../utils/investmentHelpers";
@@ -70,7 +69,8 @@ import {
 } from "../../../colors";
 import { getCadenceLabel } from "../../../utils/investmentHelpers";
 
-const formatCurrencyAmount = formatInvestmentCurrency;
+import { useCurrencyFormatter } from '../../../utils/currency';
+import { useDateFormatter } from '../../../utils/date';
 
 const DRAWER_TABS = [
   "overview",
@@ -101,12 +101,6 @@ function formatValueOrDash(value, formatter) {
   }
 
   return formatter ? formatter(value) : value;
-}
-
-function formatDateOrDash(value) {
-  if (!value) return "—";
-  const formatted = formatInvestmentDate(value);
-  return formatted === "Not set" ? "—" : formatted;
 }
 
 function getContributionEventLabel(eventType) {
@@ -241,6 +235,7 @@ const tableCellCenterSx = {
 };
 
 function InvestmentPerformanceChart({ points, formatValue }) {
+  const formatDate = useDateFormatter("—");
   const theme = useTheme();
   const [hoveredIndex, setHoveredIndex] = React.useState(null);
 
@@ -316,7 +311,7 @@ function InvestmentPerformanceChart({ points, formatValue }) {
         px: 0,
         py: 0.5,
         borderRadius: 2,
-        bgcolor: "rgba(248, 250, 252, 0.72)",
+        bgcolor: "action.hover",
       }}
     >
       <svg
@@ -363,7 +358,7 @@ function InvestmentPerformanceChart({ points, formatValue }) {
                 y={y}
                 textAnchor="end"
                 dominantBaseline="middle"
-                style={{ fontSize: 12, fill: "#6b7280" }}
+                style={{ fontSize: 12, fill: theme.palette.text.secondary }}
               >
                 {formatValue(value)}
               </text>
@@ -385,7 +380,7 @@ function InvestmentPerformanceChart({ points, formatValue }) {
               textAnchor="middle"
               style={{
                 fontSize: chartData.length > 100 ? 9 : 10,
-                fill: "#6b7280",
+                fill: theme.palette.text.secondary,
               }}
             >
               {point.label}
@@ -467,7 +462,7 @@ function InvestmentPerformanceChart({ points, formatValue }) {
                       fill: CHART_TOOLTIP_COLORS.titleHex,
                     }}
                   >
-                    {dayjs(point.date).format("DD MMM YYYY")}
+                    {formatDate(point.date)}
                   </text>
                   <text
                     x={tooltipX + 10}
@@ -583,7 +578,10 @@ export function InvestmentViewDrawer({
   performanceError = null,
   onRetryHistory,
 }) {
-  const formatInvestmentCurrency = (value) => formatCurrencyAmount(value, investment?.currency || 'INR');
+  const formatCurrencyAmount = useCurrencyFormatter();
+  const formatInvestmentDate = useDateFormatter("Not set");
+  const formatDateOrDash = useDateFormatter("—");
+  const formatInvestmentCurrency = (value) => formatCurrencyAmount(value, investment?.currency || 'INR', { minimumFractionDigits: undefined, maximumFractionDigits: undefined });
   const theme = useTheme();
   const [activeTab, setActiveTab] = React.useState("overview");
   const [contributionFilter, setContributionFilter] = React.useState("all");
@@ -1403,27 +1401,27 @@ export function InvestmentViewDrawer({
                   borderRadius: "8px",
                   bgcolor:
                     (pendingInvestmentStatus || investment?.status) === "active"
-                      ? "rgba(46, 125, 50, 0.08)"
+                      ? alpha(theme.palette.success.main, 0.08)
                       : (pendingInvestmentStatus || investment?.status) ===
                           "matured"
-                        ? "rgba(237, 108, 2, 0.08)"
-                        : "rgba(0, 0, 0, 0.04)",
+                        ? alpha(theme.palette.warning.main, 0.08)
+                        : theme.palette.action.hover,
                   color:
                     (pendingInvestmentStatus || investment?.status) === "active"
-                      ? "#2e7d32"
+                      ? theme.palette.success.main
                       : (pendingInvestmentStatus || investment?.status) ===
                           "matured"
-                        ? "#ed6c02"
-                        : "#666666",
+                        ? theme.palette.warning.main
+                        : theme.palette.text.secondary,
                   "& .MuiOutlinedInput-notchedOutline": {
                     borderColor:
                       (pendingInvestmentStatus || investment?.status) ===
                       "active"
-                        ? "rgba(46, 125, 50, 0.3)"
+                        ? alpha(theme.palette.success.main, 0.3)
                         : (pendingInvestmentStatus || investment?.status) ===
                             "matured"
-                          ? "rgba(237, 108, 2, 0.3)"
-                          : "rgba(0, 0, 0, 0.2)",
+                          ? alpha(theme.palette.warning.main, 0.3)
+                          : theme.palette.divider,
                   },
                   "& .MuiSelect-select": {
                     py: "4px",
@@ -1516,7 +1514,7 @@ export function InvestmentViewDrawer({
             <Box
               sx={{ display: "inline-flex", alignItems: "center", gap: 0.8 }}
             >
-              <Icon path={mdiBank} size={0.8} color="#0f766e" />
+              <Icon path={mdiBank} size={0.8} color={theme.palette.success.main} />
               <Typography
                 component="span"
                 variant="subtitle1"
@@ -1575,7 +1573,7 @@ export function InvestmentViewDrawer({
               </Typography>
             </Box>
 
-            <Icon path={mdiArrowRight} size={0.9} color="#64748b" />
+            <Icon path={mdiArrowRight} size={0.9} color={theme.palette.text.secondary} />
 
             <Box
               sx={{
@@ -1584,7 +1582,7 @@ export function InvestmentViewDrawer({
                 border: "1px dashed",
                 borderColor: "warning.main",
                 borderRadius: 1,
-                bgcolor: "rgba(245, 158, 11, 0.06)",
+                bgcolor: alpha(theme.palette.warning.main, 0.06),
               }}
             >
               <Typography
@@ -1631,7 +1629,7 @@ export function InvestmentViewDrawer({
                 <Icon
                   path={mdiCalendarBlankOutline}
                   size={0.8}
-                  color="#d97706"
+                  color={theme.palette.warning.main}
                 />
                 <Typography
                   component="span"
@@ -1793,7 +1791,7 @@ export function InvestmentViewDrawer({
               <Box
                 sx={{ display: "inline-flex", alignItems: "center", gap: 0.8 }}
               >
-                <Icon path={mdiTrendingUp} size={0.8} color="#2563eb" />
+                <Icon path={mdiTrendingUp} size={0.8} color={theme.palette.primary.main} />
                 <Typography
                   component="span"
                   variant="subtitle1"
@@ -1996,27 +1994,27 @@ export function InvestmentViewDrawer({
                       borderRadius: "8px",
                       bgcolor:
                         (pendingPlanStatus || planStatusNormalized) === "active"
-                          ? "rgba(46, 125, 50, 0.08)"
+                          ? alpha(theme.palette.success.main, 0.08)
                           : (pendingPlanStatus || planStatusNormalized) ===
                               "paused"
-                            ? "rgba(237, 108, 2, 0.08)"
-                            : "rgba(0, 0, 0, 0.04)",
+                            ? alpha(theme.palette.warning.main, 0.08)
+                            : theme.palette.action.hover,
                       color:
                         (pendingPlanStatus || planStatusNormalized) === "active"
-                          ? "#2e7d32"
+                          ? theme.palette.success.main
                           : (pendingPlanStatus || planStatusNormalized) ===
                               "paused"
-                            ? "#ed6c02"
-                            : "#666666",
+                            ? theme.palette.warning.main
+                            : theme.palette.text.secondary,
                       "& .MuiOutlinedInput-notchedOutline": {
                         borderColor:
                           (pendingPlanStatus || planStatusNormalized) ===
                           "active"
-                            ? "rgba(46, 125, 50, 0.3)"
+                            ? alpha(theme.palette.success.main, 0.3)
                             : (pendingPlanStatus || planStatusNormalized) ===
                                 "paused"
-                              ? "rgba(237, 108, 2, 0.3)"
-                              : "rgba(0, 0, 0, 0.2)",
+                              ? alpha(theme.palette.warning.main, 0.3)
+                              : theme.palette.divider,
                       },
                       "& .MuiSelect-select": {
                         py: "4px",
@@ -2122,7 +2120,7 @@ export function InvestmentViewDrawer({
                         mb: 0.5,
                       }}
                     >
-                      <Icon path={field.icon} size={0.72} color="#2563eb" />
+                      <Icon path={field.icon} size={0.72} color={theme.palette.primary.main} />
                       <Typography
                         variant="caption"
                         color="text.secondary"
@@ -2405,7 +2403,7 @@ export function InvestmentViewDrawer({
                     mb: 0.25,
                   }}
                 >
-                  <Icon path={item.icon} size={0.68} color="#2563eb" />
+                  <Icon path={item.icon} size={0.68} color={theme.palette.primary.main} />
                   <Typography
                     variant="caption"
                     color="text.secondary"
@@ -2791,7 +2789,7 @@ export function InvestmentViewDrawer({
                                 <Icon
                                   path={mdiCheckCircle}
                                   size={0.6}
-                                  color="#2e7d32"
+                                  color={theme.palette.success.main}
                                 />
                                 <Typography variant="caption" sx={{ flex: 1 }}>
                                   <strong>
@@ -2870,7 +2868,7 @@ export function InvestmentViewDrawer({
                         <Icon
                           path={benefit.isCancelled ? mdiAlert : mdiCheckCircle}
                           size={0.9}
-                          color={benefit.isCancelled ? "#ed6c02" : "#2e7d32"}
+                          color={benefit.isCancelled ? theme.palette.warning.main : theme.palette.success.main}
                         />
                         <Typography variant="caption" sx={{ fontWeight: 600 }}>
                           {benefit.isCancelled ? "Cancelled" : "Received"}
@@ -3168,6 +3166,7 @@ export function InvestmentViewDrawer({
         </Box>
       )}
       <RecordValuationModal
+        currency={investment?.currency || 'INR'}
         open={recordValuationOpen}
         onClose={handleCloseSnapshotModal}
         investmentId={investment?.id}

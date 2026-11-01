@@ -3,6 +3,8 @@ import type {
   Transaction,
   CreateTransactionDto,
   UpdateTransactionDto,
+  TransactionListQuery,
+  TransactionListResponse,
 } from "./transaction.types";
 
 export const getTransactions = async (): Promise<Transaction[]> => {
@@ -34,8 +36,17 @@ const deleteTransaction = async (id: string): Promise<void> => {
   await apiClient.delete(`/transactions/${id}`);
 };
 
+const getTransactionPage = async (
+  query: TransactionListQuery,
+): Promise<TransactionListResponse> => {
+  const response = await apiClient.get("/transactions/list", { params: query });
+  return response.data;
+};
+
 export const transactionApi = {
   getAll: getTransactions,
+
+  getPage: getTransactionPage,
 
   getById: getTransactionById,
 

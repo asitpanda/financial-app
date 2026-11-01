@@ -15,7 +15,6 @@ import { getInvestmentsTableColumns } from "./components/investmentsTableColumns
 import { useHeaderAction } from "../../hooks/useHeaderAction";
 import { useNotificationStore } from "../../store/notificationStore";
 import {
-  formatInvestmentCurrency,
   normalizeInvestmentForUi,
 } from "../../utils/investmentHelpers";
 import { getRuntimeErrorMessage } from "../../utils/errorMessage";
@@ -42,6 +41,8 @@ import {
 import type { InvestmentDrawerData } from "./types/investment.types";
 import type { InvestmentSummaryPagination } from "./types/investment.types";
 import { useInvestmentBenefits } from "./hooks/useInvestmentBenefits";
+import { useCurrencyFormatter } from "../../utils/currency";
+import { useDateFormatter } from "../../utils/date";
 
 export {
   mapFrequencyToCadence,
@@ -53,6 +54,8 @@ export {
 } from "../../utils/investmentHelpers";
 
 export default function Investments() {
+  const formatCurrency = useCurrencyFormatter();
+  const formatDate = useDateFormatter("Not set");
   const [investmentPage, setInvestmentPage] = useState(1);
   const [investmentPageSize, setInvestmentPageSize] = useState(25);
   const [search, setSearch] = useState("");
@@ -344,6 +347,7 @@ export default function Investments() {
     (dashboardWidgets?.upcomingContributions ?? []).map((item) =>
       normalizeInvestmentForUi(item, taxonomyNodes),
     ),
+    formatDate,
   );
 
   const openEditDrawer = (investment) => {
@@ -520,8 +524,10 @@ export default function Investments() {
         onEdit: openEditDrawer,
         onDelete: (investment) => setDeleteTarget(investment),
         assetTypeConfigs,
+        formatCurrency: (value, currency) => formatCurrency(value, currency, { minimumFractionDigits: undefined, maximumFractionDigits: undefined }),
+        formatDate,
       }),
-    [assetTypeConfigs],
+    [assetTypeConfigs, formatCurrency, formatDate],
   );
 
   const renderDashboardView = () => (
@@ -566,7 +572,7 @@ export default function Investments() {
       onResetFilters={handleResetFilters}
       onCreateInvestment={openCreateDrawer}
       onRecordContribution={openRecordContributionModal}
-      formatCurrency={(value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: dashboardAnalyticsQuery.data?.responseContext.currency ?? 'INR', maximumFractionDigits: 0 }).format(Number(value) || 0)}
+      formatCurrency={(value) => formatCurrency(value, dashboardAnalyticsQuery.data?.responseContext.currency ?? 'INR', { maximumFractionDigits: 0 })}
         pagination={investmentPagination}
         onPageChange={handlePageChange}
         focusedAssetIds={focusedAssetIds}

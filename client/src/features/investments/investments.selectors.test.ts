@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   getFilteredInvestments,
   getInvestmentContributionAllocation,
@@ -32,6 +32,10 @@ const investment = (overrides: Partial<Investment> = {}): Investment => ({
 });
 
 describe('investment selectors', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('separates accounting treatments in dashboard KPIs', () => {
     const result = getInvestmentDashboardKpis([
       investment({ id: 'investment', totalInvested: 1000, currentValue: 1200, lastValuationAt: daysFromNow(-1) }),
@@ -128,6 +132,9 @@ describe('investment selectors', () => {
   });
 
   it('creates fiscal-year monthly series and maturity buckets', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 3, 15, 12));
+
     const values = [investment({ maturityDate: daysFromNow(10), startDate: '2026-04-01' })];
     const fiscalYear = `FY ${dayjs('2026-04-01').year()}-${String(dayjs('2026-04-01').year() + 1).slice(-2)}`;
     const monthly = getInvestmentMonthlyTimeSeriesData(values, fiscalYear);

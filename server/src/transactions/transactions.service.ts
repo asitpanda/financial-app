@@ -15,6 +15,12 @@ import { TransactionRepository } from './repositories/transaction.repository';
 import { InvestmentRepository } from '../investments/repositories/investment.repository';
 import { FinancialAccountsService } from '../financial-accounts/financial-accounts.service';
 import { PrismaService } from '../database/prisma.service';
+import { buildPage } from '../common/listing/listing.utils';
+import type {
+  TransactionListQuery,
+  TransactionListRow,
+  TransactionPeriodSummary,
+} from './transaction.types';
 
 @Injectable()
 export class TransactionsService {
@@ -29,6 +35,110 @@ export class TransactionsService {
 
   async findAll(userId: number) {
     return this.repository.findAll(userId);
+  }
+
+  async findPage(userId: number, query: TransactionListQuery) {
+    if (
+      query.fromDate &&
+      query.toDate &&
+      new Date(query.fromDate).getTime() > new Date(query.toDate).getTime()
+    ) {
+      throw new BadRequestException('The transaction date range is invalid.');
+    }
+
+    const account = query.accountId
+      ? await this.financialAccountsService.findOne(query.accountId, userId)
+      : null;
+    if (query.accountId && !account) {
+      throw new BadRequestException('The selected account does not exist.');
+    }
+
+    const result = await this.repository.findPage(userId, query);
+    const page = buildPage(result, query);
+    let rows: TransactionListRow[];
+    let summary: TransactionPeriodSummary;
+
+    if (account) {
+      const ledger = await this.repository.findAllForAccount(userId, account.id);
+      const accountId = Number(account.id);
+      const amountByTransactionId = new Map<number, {
+        debitAmount: number;
+        creditAmount: number;
+        balanceAfter: number;
+      }>();
+      const from = query.fromDate ? new Date(query.fromDate).getTime() : Number.NEGATIVE_INFINITY;
+      const to = query.toDate ? new Date(query.toDate).getTime() : Number.POSITIVE_INFINITY;
+      let balance = Number(account.openingBalance || 0);
+      let openingBalance = balance;
+      let moneyIn = 0;
+      let moneyOut = 0;
+      let transactionCount = 0;
+
+      for (const transaction of ledger) {
+        const amount = Number(transaction.amount || 0);
+        const debitAmount = ['EXPENSE', 'TRANSFER', 'INVESTMENT'].includes(transaction.type) &&
+          transaction.sourceAccountId === accountId ? amount : 0;
+        const creditAmount = ['INCOME', 'TRANSFER', 'INVESTMENT'].includes(transaction.type) &&
+          transaction.destinationAccountId === accountId ? amount : 0;
+        const timestamp = new Date(transaction.date).getTime();
+        balance += creditAmount - debitAmount;
+        amountByTransactionId.set(transaction.id, { debitAmount, creditAmount, balanceAfter: balance });
+
+        if (timestamp < from) {
+          openingBalance = balance;
+        } else if (timestamp <= to) {
+          moneyIn += creditAmount;
+          moneyOut += debitAmount;
+          transactionCount += 1;
+        }
+      }
+
+      const closingBalance = openingBalance + moneyIn - moneyOut;
+      rows = page.data.map((transaction) => ({
+        ...transaction,
+        debitAmount: amountByTransactionId.get(transaction.id)?.debitAmount ?? 0,
+        creditAmount: amountByTransactionId.get(transaction.id)?.creditAmount ?? 0,
+        balanceAfter: amountByTransactionId.get(transaction.id)?.balanceAfter ?? null,
+      }));
+      summary = {
+        totalIncome: null,
+        totalExpense: null,
+        net: null,
+        transactionCount,
+        openingBalance,
+        moneyIn,
+        moneyOut,
+        closingBalance,
+        multiCurrency: false,
+      };
+    } else {
+      const [typeTotals, accounts] = await Promise.all([
+        this.repository.getPeriodTypeTotals(userId, query.fromDate, query.toDate),
+        this.financialAccountsService.findAll(userId),
+      ]);
+      const income = typeTotals.find((item) => item.type === 'INCOME')?.amount ?? 0;
+      const expense = typeTotals.find((item) => item.type === 'EXPENSE')?.amount ?? 0;
+      const multiCurrency = new Set(accounts.map((item) => item.currency)).size > 1;
+      summary = {
+        totalIncome: multiCurrency ? null : income,
+        totalExpense: multiCurrency ? null : expense,
+        net: multiCurrency ? null : income - expense,
+        transactionCount: typeTotals.reduce((count, item) => count + item.count, 0),
+        openingBalance: null,
+        moneyIn: null,
+        moneyOut: null,
+        closingBalance: null,
+        multiCurrency,
+      };
+      rows = page.data.map((transaction) => ({
+        ...transaction,
+        debitAmount: null,
+        creditAmount: null,
+        balanceAfter: null,
+      }));
+    }
+
+    return { ...page, data: rows, summary };
   }
 
   async findOne(id: number, userId: number) {

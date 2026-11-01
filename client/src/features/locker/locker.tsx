@@ -28,7 +28,8 @@ import {
   useLockerEntities,
   useLockerRecords,
 } from "./useLocker";
-import { formatDate, getErrorMessage } from "./locker.utils";
+import { getErrorMessage } from "./locker.utils";
+import { useDateFormatter } from "../../utils/date";
 import type { LockerEntity, LockerRecord } from "./locker.types";
 
 type TabValue = "entities" | "records";
@@ -39,6 +40,7 @@ type DeleteTarget = {
 } | null;
 
 export default function Locker() {
+  const formatDate = useDateFormatter("");
   const [tab, setTab] = useState<TabValue>("entities");
   const [entityForm, setEntityForm] = useState<{
     open: boolean;

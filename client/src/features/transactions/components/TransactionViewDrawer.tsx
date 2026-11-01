@@ -2,7 +2,6 @@ import { Box, Divider, Stack, Typography } from "@mui/material";
 import Button from "../../../components/common/AppButton";
 import { SectionCard, StatusChip } from "../../../components/common";
 import AppDrawer from "../../../components/drawers/AppDrawer";
-import { getTransactionMovementHexColor } from "../../../colors";
 import type { TransactionRecord } from "../transaction.types";
 
 interface TransactionViewDrawerProps {
@@ -15,8 +14,8 @@ interface TransactionViewDrawerProps {
   onEdit?: (transaction: TransactionRecord) => void;
 }
 
-const formatCurrency = (value: number | string | null | undefined) =>
-  `₹${Number(value || 0).toLocaleString()}`;
+import { useCurrencyFormatter } from "../../../utils/currency";
+import { useDateFormatter } from "../../../utils/date";
 
 export function TransactionViewDrawer({
   open,
@@ -27,6 +26,8 @@ export function TransactionViewDrawer({
   onDelete,
   onEdit,
 }: TransactionViewDrawerProps) {
+  const formatCurrency = useCurrencyFormatter();
+  const formatDate = useDateFormatter();
   const footer = (
     <Box
       sx={{
@@ -67,8 +68,10 @@ export function TransactionViewDrawer({
 
   const isMovementType =
     transaction?.type === "TRANSFER" || transaction?.type === "INVESTMENT";
-  const movementHexColor = isMovementType
-    ? getTransactionMovementHexColor(transaction!.type as "TRANSFER" | "INVESTMENT")
+  const movementTone = transaction?.type === "TRANSFER"
+    ? "transfer"
+    : transaction?.type === "INVESTMENT"
+    ? "investment"
     : undefined;
   const amountTone = transaction?.type === "EXPENSE" ? "error" : "success";
   const sourceLabel = transaction?.sourceAccountId != null
@@ -134,7 +137,7 @@ export function TransactionViewDrawer({
                     sx={{
                       mt: 0.5,
                       fontWeight: 800,
-                      color: movementHexColor || `${amountTone}.main`,
+                      color: movementTone ? `movement.${movementTone}` : `${amountTone}.main`,
                     }}
                   >
                     {transaction.type === "EXPENSE" ? "-" : isMovementType ? "" : "+"}{" "}
@@ -143,8 +146,7 @@ export function TransactionViewDrawer({
                 </Box>
                 <StatusChip
                   label={transaction.type || "Unknown"}
-                  tone={amountTone}
-                  hexColor={movementHexColor}
+                  tone={movementTone || amountTone}
                 />
               </Box>
 
@@ -210,9 +212,9 @@ export function TransactionViewDrawer({
                     Date
                   </Typography>
                   <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 600 }}>
-                    {new Date(
+                    {formatDate(
                       transaction.date || transaction.createdAt || Date.now(),
-                    ).toLocaleDateString()}
+                    )}
                   </Typography>
                 </Box>
                 <Box>
@@ -220,9 +222,9 @@ export function TransactionViewDrawer({
                     Created
                   </Typography>
                   <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 600 }}>
-                    {new Date(
+                    {formatDate(
                       transaction.createdAt || transaction.date || Date.now(),
-                    ).toLocaleDateString()}
+                    )}
                   </Typography>
                 </Box>
               </Box>

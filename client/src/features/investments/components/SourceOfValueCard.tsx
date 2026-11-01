@@ -1,9 +1,6 @@
 import { Box, Chip, Stack, Typography } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 import type { InvestmentValueSourceSummary } from "../investments.selectors";
-import {
-  INVESTMENT_CHART_SERIES_COLORS,
-  PROFIT_LOSS_COLORS,
-} from "../../../colors";
 
 interface SourceOfValueCardProps {
   summary: InvestmentValueSourceSummary;
@@ -22,24 +19,21 @@ const sourceRows = [
     key: "snapshotBackedValue",
     countKey: "snapshotBackedCount",
     label: "Snapshot-backed",
-    color: INVESTMENT_CHART_SERIES_COLORS.currentValueHex,
-    bg: "rgba(15, 118, 110, 0.1)",
+    tone: "success",
   },
   {
     idKey: "estimatedIds",
     key: "estimatedValue",
     countKey: "estimatedCount",
     label: "Stored current value",
-    color: "#b45309",
-    bg: "rgba(245, 158, 11, 0.12)",
+    tone: "warning",
   },
   {
     idKey: "investedOnlyIds",
     key: "investedOnlyValue",
     countKey: "investedOnlyCount",
     label: "Invested-only fallback",
-    color: "#475569",
-    bg: "rgba(148, 163, 184, 0.14)",
+    tone: "neutral",
   },
 ] as const;
 
@@ -49,6 +43,10 @@ export default function SourceOfValueCard({
   onSelectSource,
   onSelectStaleValuations,
 }: SourceOfValueCardProps) {
+  const theme = useTheme();
+  const freshnessColor = summary.staleValuationCount > 0
+    ? theme.palette.warning.main
+    : theme.palette.success.main;
   const totalTrackedValue =
     summary.snapshotBackedValue +
     summary.estimatedValue +
@@ -61,6 +59,10 @@ export default function SourceOfValueCard({
       </Typography>
 
       {sourceRows.map((row) => {
+        const sourceColor = row.tone === "neutral"
+          ? theme.palette.text.secondary
+          : theme.palette[row.tone].main;
+        const sourceBg = alpha(sourceColor, 0.12);
         const value = summary[row.key];
         const count = summary[row.countKey];
         const share = totalTrackedValue > 0 ? (value / totalTrackedValue) * 100 : 0;
@@ -87,8 +89,8 @@ export default function SourceOfValueCard({
               '&:hover':
                 count > 0 && onSelectSource
                   ? {
-                      borderColor: row.color,
-                      backgroundColor: row.bg,
+                      borderColor: sourceColor,
+                      backgroundColor: sourceBg,
                     }
                   : undefined,
             }}
@@ -110,13 +112,13 @@ export default function SourceOfValueCard({
                 sx={{
                   height: 22,
                   fontSize: 11,
-                  bgcolor: row.bg,
-                  color: row.color,
+                  bgcolor: sourceBg,
+                  color: sourceColor,
                   fontWeight: 700,
                 }}
               />
             </Box>
-            <Typography sx={{ mt: 0.75, fontWeight: 800, color: row.color }}>
+            <Typography sx={{ mt: 0.75, fontWeight: 800, color: sourceColor }}>
               {formatValue(value)}
             </Typography>
             <Box sx={{ mt: 0.9 }}>
@@ -124,7 +126,7 @@ export default function SourceOfValueCard({
                 sx={{
                   height: 7,
                   borderRadius: 999,
-                  bgcolor: "rgba(148, 163, 184, 0.14)",
+                  bgcolor: "action.selected",
                   overflow: "hidden",
                 }}
               >
@@ -132,7 +134,7 @@ export default function SourceOfValueCard({
                   sx={{
                     width: `${Math.max(Math.min(share, 100), value > 0 ? 6 : 0)}%`,
                     height: "100%",
-                    bgcolor: row.color,
+                    bgcolor: sourceColor,
                     borderRadius: 999,
                   }}
                 />
@@ -158,15 +160,9 @@ export default function SourceOfValueCard({
         sx={{
           p: 1.25,
           borderRadius: 1,
-          bgcolor:
-            summary.staleValuationCount > 0
-              ? "rgba(245, 158, 11, 0.08)"
-              : `${PROFIT_LOSS_COLORS.gainHex}14`,
+          bgcolor: alpha(freshnessColor, 0.08),
           border: "1px solid",
-          borderColor:
-            summary.staleValuationCount > 0
-              ? "rgba(245, 158, 11, 0.26)"
-              : `${PROFIT_LOSS_COLORS.gainHex}3D`,
+          borderColor: alpha(freshnessColor, 0.26),
           cursor:
             summary.staleValuationCount > 0 && onSelectStaleValuations
               ? "pointer"

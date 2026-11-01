@@ -35,6 +35,7 @@ import {
   StatusChip,
 } from "../../components/common";
 import { getIconPathByKey } from "../../constants/categoryIcons";
+import { CATEGORY_FALLBACK_COLORS } from "../../colors";
 import { ConfirmDialog } from "../../components/dialogs";
 import { useDrawerStore } from "../../store/drawerStore";
 import { useDialogStore } from "../../store/dialogStore";
@@ -91,24 +92,16 @@ const getInitialDateFilter = (): {
   dateRangeShortcut: "all",
 });
 const DEFAULT_ICON_BY_TYPE = { income: "cash", expense: "cart" };
-const CATEGORY_FALLBACK_COLORS = [
-  "#22c55e",
-  "#ef4444",
-  "#3b82f6",
-  "#f59e0b",
-  "#8b5cf6",
-  "#06b6d4",
-  "#ec4899",
-  "#84cc16",
-];
 
-const formatCurrency = (value: number | string | null | undefined) => {
-  const numericValue = Number(value || 0);
-  const prefix = numericValue > 0 ? "+" : numericValue < 0 ? "-" : "";
-  return `${prefix}₹${Math.abs(numericValue).toLocaleString()}`;
-};
+import { useCurrencyFormatter } from "../../utils/currency";
+import { useDateFormatter, useDatePattern } from "../../utils/date";
 
 export default function Categories() {
+  const formatDate = useDateFormatter();
+  const datePattern = useDatePattern();
+  const formatAmount = useCurrencyFormatter();
+  const formatCurrency = (value: number | string | null | undefined) =>
+    formatAmount(value, undefined, { signDisplay: "exceptZero" });
   const theme = useTheme();
   const categoryTableRef = useRef<HTMLDivElement | null>(null);
   const [uiError, setUiError] = useState("");
@@ -401,8 +394,10 @@ export default function Categories() {
                   display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  backgroundColor: params.row.color || "rgba(15, 23, 42, 0.08)",
-                  color: params.row.color ? "#ffffff" : "text.primary",
+                  backgroundColor: params.row.color || "action.hover",
+                  color: params.row.color
+                    ? theme.palette.getContrastText(params.row.color)
+                    : "text.primary",
                   flexShrink: 0,
                 }}
               >
@@ -465,7 +460,7 @@ export default function Categories() {
         flex: 1,
         minWidth: 150,
         valueFormatter: (value) =>
-          value ? new Date(String(value)).toLocaleDateString() : "No activity",
+          formatDate(value ? String(value) : null, "No activity"),
       },
       {
         field: "createdAt",
@@ -473,7 +468,7 @@ export default function Categories() {
         flex: 0.9,
         minWidth: 140,
         valueFormatter: (value) =>
-          value ? new Date(String(value)).toLocaleDateString() : "-",
+          formatDate(value ? String(value) : null),
       },
       {
         field: "actions",
@@ -524,7 +519,7 @@ export default function Categories() {
         },
       },
     ],
-    [openEditDrawer],
+    [openEditDrawer, theme, formatCurrency, formatDate],
   );
 
   return (
@@ -881,7 +876,7 @@ export default function Categories() {
                       <Box sx={{ color: "text.secondary", fontSize: 12 }}>
                         {category.count} transactions
                         {category.lastActivity
-                          ? ` • Last used ${new Date(category.lastActivity).toLocaleDateString()}`
+                          ? ` • Last used ${formatDate(category.lastActivity)}`
                           : " • No recent activity"}
                       </Box>
                     </Box>
@@ -950,6 +945,7 @@ export default function Categories() {
                   <LocalizationProvider dateAdapter={AdapterDayjs}>
                     <DatePicker
                       label="From"
+                      format={datePattern}
                       value={dateRange[0]}
                       onChange={(value) => {
                         setDateRange([value, dateRange[1]]);
@@ -964,6 +960,7 @@ export default function Categories() {
                   <LocalizationProvider dateAdapter={AdapterDayjs}>
                     <DatePicker
                       label="To"
+                      format={datePattern}
                       value={dateRange[1]}
                       onChange={(value) => {
                         setDateRange([dateRange[0], value]);

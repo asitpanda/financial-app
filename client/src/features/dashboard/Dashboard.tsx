@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
+import { Alert } from "@mui/material";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNotificationStore } from "../../store/notificationStore";
 import { useDashboard } from "./useDashboard";
@@ -351,7 +352,7 @@ export default function Dashboard({ onOpenTransactionsFromDashboard }) {
   return (
     <main className="flex-1 space-y-3 pb-2">
       {error && !hasOverlayOpen ? (
-        <div className="rounded-2xl bg-red-100 p-3 text-red-700">{error}</div>
+        <Alert severity="error">{error}</Alert>
       ) : null}
 
       <DashboardKpiStrip

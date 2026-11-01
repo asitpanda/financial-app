@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Box, Card, CardContent, Tabs, Tab, Typography } from "@mui/material";
+import { Alert, Box, Card, CardContent, Tabs, Tab, Typography } from "@mui/material";
 import { authApi } from "./auth.api";
 import { parseApiErrorMessages } from "../../utils/apiError";
 import { useAuth } from "./useAuth";
@@ -7,9 +7,12 @@ import type { LoginDto, RegisterDto } from "./auth.types";
 import AuthTabPanel from "./components/AuthTabPanel";
 import AuthLoginForm from "./components/AuthLoginForm";
 import AuthRegisterForm from "./components/AuthRegisterForm";
+import { IDLE_TIMEOUT_MS } from "../../constants/appConstants";
 
 export default function Login() {
   const setCredentials = useAuth((state) => state.setCredentials);
+  const logoutReason = useAuth((state) => state.logoutReason);
+  const clearLogoutReason = useAuth((state) => state.clearLogoutReason);
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(false);
   const [apiErrors, setApiErrors] = useState<string[]>([]);
@@ -17,6 +20,7 @@ export default function Login() {
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
     setApiErrors([]);
+    clearLogoutReason();
   };
 
   const handleLogin = async (values: LoginDto) => {
@@ -85,6 +89,12 @@ export default function Login() {
           >
             Track your expenses and reach your financial goals
           </Typography>
+
+          {logoutReason === "idle" && (
+            <Alert severity="info" onClose={clearLogoutReason} sx={{ mb: 2 }}>
+              You were signed out after {IDLE_TIMEOUT_MS / 60000} minutes of inactivity. Please sign in again.
+            </Alert>
+          )}
 
           <Tabs
             value={tabValue}

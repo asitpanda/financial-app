@@ -2,6 +2,7 @@ import type { TransactionRecord } from '../transaction.types';
 import type { Prisma } from '@prisma/client';
 import type { CreateTransactionDto } from '../dto/create-transaction.dto';
 import type { UpdateTransactionDto } from '../dto/update-transaction.dto';
+import type { TransactionListQuery, TransactionListResult } from '../transaction.types';
 
 export interface ITransactionDataSourcePort {
   findAll(userId: number): Promise<TransactionRecord[]>;
@@ -11,4 +12,11 @@ export interface ITransactionDataSourcePort {
   delete(id: number, userId: number): Promise<void>;
   findByDateRange(userId: number, startDate: Date, endDate: Date): Promise<TransactionRecord[]>;
   findByType(userId: number, type: string): Promise<TransactionRecord[]>;
+  findPage(userId: number, query: TransactionListQuery): Promise<TransactionListResult>;
+  findAllForAccount(userId: number, accountId: number): Promise<TransactionRecord[]>;
+  getPeriodTypeTotals(
+    userId: number,
+    fromDate?: string,
+    toDate?: string,
+  ): Promise<Array<{ type: string; amount: number; count: number }>>;
 }

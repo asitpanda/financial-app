@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useDateFormatter } from "../../../utils/date";
 import Icon from "@mdi/react";
 import {
   mdiCalendarClockOutline,
@@ -28,7 +29,6 @@ import TimeSeriesVisualization from "./TimeSeriesVisualization";
 import UpcomingMaturitiesBenefitsCard from "./UpcomingMaturitiesBenefitsCard";
 import InsurancePositionWidget from "./InsurancePositionWidget";
 import {
-  formatInvestmentDate,
   getInvestmentTypeLabel,
 } from "../../../utils/investmentHelpers";
 import { getProfitLossHexColor } from "../../../colors";
@@ -148,6 +148,7 @@ export default function InvestmentsDashboardView({
   sortModel = [],
   onSortModelChange,
 }: InvestmentDashboardViewProps) {
+  const formatInvestmentDate = useDateFormatter("Not set");
   const focusedSectionRef = useRef<HTMLDivElement | null>(null);
   const [focusedAssetTitle, setFocusedAssetTitle] = useState("All Assets");
   const [focusedAssetDescription, setFocusedAssetDescription] = useState(
@@ -207,14 +208,15 @@ export default function InvestmentsDashboardView({
     });
   }, [focusedAssetIds, focusedAssetTitle]);
 
-    if (
-      investments.length === 0 &&
-      !search.trim() &&
-      statusFilter === "all" &&
-      categoryFilter === "all" &&
-      treatmentFilter === "all" &&
-      !focusedAssetIds
-    ) {
+  const isFirstInvestmentSetup =
+    investments.length === 0 &&
+    !search.trim() &&
+    statusFilter === "all" &&
+    categoryFilter === "all" &&
+    treatmentFilter === "all" &&
+    !focusedAssetIds;
+
+  if (isFirstInvestmentSetup) {
     return (
       <Stack spacing={2}>
         <SectionCard
@@ -912,7 +914,7 @@ export default function InvestmentsDashboardView({
           categoryOptions={categoryOptions}
           onResetFilters={onResetFilters}
           onCreateInvestment={onCreateInvestment}
-          isFirstInvestmentSetup={investments.length === 0}
+          isFirstInvestmentSetup={isFirstInvestmentSetup}
           showSummaryCards={false}
           title={focusedAssetIds ? focusedAssetTitle : "Investment Assets"}
           subtitle={

@@ -1,5 +1,7 @@
 // @ts-nocheck
 import dayjs from 'dayjs';
+import { formatCurrency } from './currency';
+import { formatDate } from './date';
 import type {
   FrequencyCadenceOption,
   InvestmentAssetTypeConfig,
@@ -103,14 +105,11 @@ export const createEmptyInvestmentForm = () => ({
   notes: '',
 });
 
-export const formatInvestmentCurrency = (value, currency = 'INR') =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency }).format(Number(value) || 0);
+export const formatInvestmentCurrency = (value, currency = 'INR', currencyDisplay = 'symbol') =>
+  formatCurrency(value, currency, { minimumFractionDigits: undefined, maximumFractionDigits: undefined }, currencyDisplay);
 
-export const formatInvestmentDate = (value) => {
-  if (!value) return 'Not set';
-  const parsed = dayjs(value);
-  return parsed.isValid() ? parsed.format('DD MMM YYYY') : 'Not set';
-};
+export const formatInvestmentDate = (value, dateFormat = 'DD_MM_YYYY') =>
+  formatDate(value, dateFormat, 'Not set');
 
 export const getInvestmentStatusTone = (status) => {
   if (status === 'active') return 'success';
@@ -427,6 +426,8 @@ export const buildRecurringReviewState = ({
   drawerMode,
   selectedInvestmentId,
   selectedInvestment,
+  currencyDisplay = 'symbol',
+  dateFormat = 'DD_MM_YYYY',
 }) => {
   const recurringPayload = buildRecurringPayloadFromFormValues(formValues);
   const existingPlan = selectedInvestment?.activeContributionPlan;
@@ -473,11 +474,11 @@ export const buildRecurringReviewState = ({
         { label: "Status", value: nextInvestment?.status || "-" },
       ],
       valuation: [
-        { label: "Current value", value: formatInvestmentCurrency(nextInvestment?.currentValue) },
+        { label: "Current value", value: formatInvestmentCurrency(nextInvestment?.currentValue, nextInvestment?.currency, currencyDisplay) },
       ],
       recurring: [
-        { label: "Contribution", value: formatInvestmentCurrency(recurringPayload.amount) },
-        { label: "Anchor date", value: recurringPayload.anchorDate || "-" },
+        { label: "Contribution", value: formatInvestmentCurrency(recurringPayload.amount, nextInvestment?.currency, currencyDisplay) },
+        { label: "Anchor date", value: formatDate(recurringPayload.anchorDate, dateFormat) },
         { label: "Import mode", value: recurringPayload.historicalImportMode },
       ],
     },

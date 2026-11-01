@@ -40,6 +40,49 @@ export interface TransactionRecord extends Transaction {
   _id?: string;
 }
 
+export interface TransactionListQuery {
+  page: number;
+  limit: number;
+  search?: string;
+  accountId?: number;
+  type?: Transaction["type"];
+  categoryId?: number;
+  fromDate?: string;
+  toDate?: string;
+  sortBy?: "date" | "amount" | "createdAt";
+  sortDirection?: "asc" | "desc";
+}
+
+export interface TransactionListRow extends TransactionRecord {
+  debitAmount: number | null;
+  creditAmount: number | null;
+  balanceAfter: number | null;
+}
+
+export interface TransactionPageSummary {
+  totalIncome: number | null;
+  totalExpense: number | null;
+  net: number | null;
+  transactionCount: number;
+  openingBalance: number | null;
+  moneyIn: number | null;
+  moneyOut: number | null;
+  closingBalance: number | null;
+  multiCurrency: boolean;
+}
+
+export interface TransactionListResponse {
+  data: TransactionListRow[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+  };
+  summary: TransactionPageSummary;
+}
+
 export interface TransactionSavePayload {
   type?: "INCOME" | "EXPENSE" | "TRANSFER";
   amount?: number;

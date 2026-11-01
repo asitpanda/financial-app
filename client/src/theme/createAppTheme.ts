@@ -2,8 +2,17 @@ import { createTheme } from '@mui/material/styles';
 import type { AppThemeMode } from '../store/themeStore';
 import { themeColors } from '../colors';
 
+declare module '@mui/material/styles' {
+  interface Palette {
+    movement: { transfer: string; investment: string };
+  }
+
+  interface PaletteOptions {
+    movement?: { transfer: string; investment: string };
+  }
+}
+
 export function createAppTheme(mode: AppThemeMode) {
-  const isLight = mode === 'light';
   const palette = themeColors[mode];
 
   return createTheme({
@@ -27,6 +36,10 @@ export function createAppTheme(mode: AppThemeMode) {
       info: {
         main: palette.info,
       },
+      movement: {
+        transfer: palette.movementTransfer,
+        investment: palette.movementInvestment,
+      },
       background: {
         default: palette.background,
         paper: palette.surface,
@@ -41,7 +54,7 @@ export function createAppTheme(mode: AppThemeMode) {
         active: palette.actionActive,
         hover: palette.actionHover,
         selected: palette.actionSelected,
-        selectedOpacity: 1,
+        selectedOpacity: palette.actionSelectedOpacity,
         disabled: palette.actionDisabled,
         disabledBackground: palette.actionDisabledBackground,
       },
@@ -50,17 +63,28 @@ export function createAppTheme(mode: AppThemeMode) {
       borderRadius: 8,
     },
     typography: {
-      fontFamily: '"DM Sans", "Avenir Next", "Segoe UI", sans-serif',
+      fontFamily: '"Source Sans 3", "Segoe UI", sans-serif',
+      fontWeightRegular: 400,
+      fontWeightMedium: 500,
+      fontWeightBold: 600,
+      allVariants: {
+        fontVariantNumeric: 'tabular-nums',
+      },
       button: {
         textTransform: 'none',
-        fontWeight: 700,
+        fontWeight: 600,
       },
     },
     components: {
       MuiCssBaseline: {
         styleOverrides: {
+          ':root': {
+            '--app-primary': palette.primary,
+            '--app-surface': palette.surface,
+            '--app-text': palette.textPrimary,
+          },
           body: {
-            backgroundColor: isLight ? '#f6f8fc' : '#0b1220',
+            backgroundColor: palette.background,
           },
         },
       },
@@ -82,7 +106,7 @@ export function createAppTheme(mode: AppThemeMode) {
         styleOverrides: {
           root: {
             '&:hover .MuiOutlinedInput-notchedOutline': {
-              borderColor: isLight ? '#94a3b8' : '#64748b',
+              borderColor: palette.textSecondary,
             },
           },
         },

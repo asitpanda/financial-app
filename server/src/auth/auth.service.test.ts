@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../database/prisma.service';
 import { registeredUsers } from '../mockdata';
 import { AuthService } from './auth.service';
+import { UserPreferencesService } from '../user-preferences/user-preferences.service';
 
 vi.mock('bcrypt', () => ({
   compare: vi.fn(),
@@ -31,6 +32,10 @@ function createAuthService(provider: 'mock' | 'postgres' = 'postgres') {
     prisma as unknown as PrismaService,
     jwtService as unknown as JwtService,
     configService as unknown as ConfigService,
+    {
+      get: vi.fn().mockResolvedValue({ currencyDisplay: 'symbol' }),
+      update: vi.fn().mockResolvedValue({ currencyDisplay: 'symbol' }),
+    } as unknown as UserPreferencesService,
   );
 
   return { service, prisma, jwtService };
@@ -73,6 +78,7 @@ describe('AuthService', () => {
       ).resolves.toEqual({
         user: { id: 23, email: 'person@example.com', name: 'Ada' },
         token: 'signed-token',
+        preferences: { currencyDisplay: 'symbol' },
       });
       expect(prisma.user.findFirst).toHaveBeenCalledWith({
         where: {
@@ -91,6 +97,7 @@ describe('AuthService', () => {
           mobile: '+15555555555',
           password: 'hashed-password',
           name: 'Ada',
+          preferences: { create: {} },
         },
       });
       expect(jwtService.sign).toHaveBeenCalledWith({
@@ -127,6 +134,7 @@ describe('AuthService', () => {
       ).resolves.toEqual({
         user: { id: 3, email: 'new@example.com', name: 'New User' },
         token: 'signed-token',
+        preferences: { currencyDisplay: 'symbol' },
       });
       expect(registeredUsers[registeredUsers.length - 1]).toMatchObject({
         id: 3,
@@ -167,6 +175,7 @@ describe('AuthService', () => {
       ).resolves.toEqual({
         user: { id: 23, email: 'person@example.com', name: 'Ada' },
         token: 'signed-token',
+        preferences: { currencyDisplay: 'symbol' },
       });
       expect(prisma.user.findFirst).toHaveBeenCalledWith({
         where: {
@@ -215,6 +224,7 @@ describe('AuthService', () => {
         ).resolves.toEqual({
           user: { id: 1, email: 'demo@example.com', name: 'Demo User' },
           token: 'signed-token',
+          preferences: { currencyDisplay: 'symbol' },
         });
         expect(jwtService.sign).toHaveBeenCalledWith({
           sub: '1',
@@ -250,6 +260,7 @@ describe('AuthService', () => {
         id: 23,
         email: 'person@example.com',
         name: 'Ada',
+        preferences: { currencyDisplay: 'symbol' },
       });
       expect(prisma.user.findUnique).toHaveBeenCalledWith({
         where: { id: 23 },
@@ -273,6 +284,7 @@ describe('AuthService', () => {
         id: 1,
         email: 'demo@example.com',
         name: 'Demo User',
+        preferences: { currencyDisplay: 'symbol' },
       });
       expect(prisma.user.findUnique).not.toHaveBeenCalled();
     });

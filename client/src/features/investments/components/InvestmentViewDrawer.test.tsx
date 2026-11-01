@@ -9,6 +9,11 @@ vi.mock("../hooks/useInvestments", () => ({
 vi.mock("../hooks/useContributionPlans", () => ({
   useUpdateInvestmentContributionPlan: () => ({ mutateAsync: vi.fn() }),
   useDeleteInvestmentEvent: () => ({ mutateAsync: vi.fn() }),
+  useRecordInvestmentContribution: () => ({ mutateAsync: vi.fn() }),
+  useRecordInvestmentWithdrawal: () => ({ mutateAsync: vi.fn() }),
+  useRecordInvestmentIncomeCredit: () => ({ mutateAsync: vi.fn() }),
+  useUpdateInvestmentEvent: () => ({ mutateAsync: vi.fn() }),
+  useSkipCurrentInvestmentContribution: () => ({ mutateAsync: vi.fn() }),
 }));
 
 vi.mock("../hooks/useInvestmentSnapshots", () => ({
@@ -20,6 +25,9 @@ vi.mock("../hooks/useInvestmentBenefits", () => ({
   useInvestmentBenefitsByInvestment: () => ({ data: [] }),
   useDeleteInvestmentBenefit: () => ({ mutateAsync: vi.fn() }),
   useRealizeInvestmentBenefit: () => ({ mutateAsync: vi.fn() }),
+  useCreateInvestmentBenefit: () => ({ mutateAsync: vi.fn() }),
+  useUpdateInvestmentBenefit: () => ({ mutateAsync: vi.fn() }),
+  useQuickRealizeInvestmentBenefit: () => ({ mutateAsync: vi.fn() }),
 }));
 
 vi.mock("../../../store/notificationStore", () => ({
@@ -35,6 +43,10 @@ describe("InvestmentViewDrawer", () => {
       <InvestmentViewDrawer
         open
         onClose={onClose}
+        onEdit={vi.fn()}
+        onEditActivity={vi.fn()}
+        onRecordActivity={vi.fn()}
+        onRetryHistory={vi.fn()}
         investment={null}
         accounts={[]}
         taxonomyNodes={[]}

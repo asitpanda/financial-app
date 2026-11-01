@@ -2,6 +2,7 @@ import { SectionCard } from "../../../components/common";
 import type { DashboardAccountOverviewRow } from "../dashboard.types";
 import { getProfitLossHexColor } from "../../../colors";
 import { useTheme } from "@mui/material/styles";
+import { useCurrencyFormatter } from "../../../utils/currency";
 
 interface DashboardAccountsSectionProps {
   accountOverviewRows: DashboardAccountOverviewRow[];
@@ -9,15 +10,13 @@ interface DashboardAccountsSectionProps {
   onEditAccount: (accountName: string) => void;
 }
 
-const formatCurrency = (value: number) =>
-  `₹${Number(value || 0).toLocaleString("en-IN")}`;
-
 export default function DashboardAccountsSection({
   accountOverviewRows,
   onAddAccount,
   onEditAccount,
 }: DashboardAccountsSectionProps) {
   const theme = useTheme();
+  const formatCurrency = useCurrencyFormatter();
 
   return (
     <SectionCard
@@ -72,7 +71,7 @@ export default function DashboardAccountsSection({
                     }}
                   >
                     {isPositive ? "+" : "-"}
-                    {formatCurrency(Math.abs(bank.balance))}
+                    {formatCurrency(Math.abs(bank.balance), bank.currency)}
                   </div>
                 </div>
               </button>

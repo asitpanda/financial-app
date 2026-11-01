@@ -14,15 +14,15 @@ import {
 } from './dashboard.selectors';
 
 describe('dashboard selectors', () => {
-  it('sorts account rows by balance and then transaction count', () => {
+  it('sorts account rows by balance and transaction count while preserving currency', () => {
     expect(getDashboardAccountOverviewRows([
-      { id: 1, displayName: 'Savings', currentBalance: 100 },
-      { id: 2, name: 'Wallet', currentBalance: 100 },
-      { id: 3, name: 'Credit', currentBalance: -50 },
+      { id: 1, displayName: 'Savings', currentBalance: 100, currency: 'INR' },
+      { id: 2, name: 'Wallet', currentBalance: 100, currency: 'USD' },
+      { id: 3, name: 'Credit', currentBalance: -50, currency: 'EUR' },
     ], { 1: 1, 2: 3 })).toEqual([
-      { name: 'Wallet', balance: 100, transactions: 3 },
-      { name: 'Savings', balance: 100, transactions: 1 },
-      { name: 'Credit', balance: -50, transactions: 0 },
+      { name: 'Wallet', balance: 100, currency: 'USD', transactions: 3 },
+      { name: 'Savings', balance: 100, currency: 'INR', transactions: 1 },
+      { name: 'Credit', balance: -50, currency: 'EUR', transactions: 0 },
     ]);
   });
 

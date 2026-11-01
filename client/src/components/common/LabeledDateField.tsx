@@ -3,6 +3,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import type { Dayjs } from 'dayjs';
+import { useDatePattern } from '../../utils/date';
 
 type LabeledDateFieldProps = {
   labelText: string;
@@ -19,6 +20,7 @@ export default function LabeledDateField({
   errorMessage,
   helperText = '',
 }: LabeledDateFieldProps) {
+  const datePattern = useDatePattern();
   return (
     <Box
       className="drawer-form-field"
@@ -39,6 +41,7 @@ export default function LabeledDateField({
       </Typography>
       <LocalizationProvider dateAdapter={AdapterDayjs}>
         <DatePicker
+          format={datePattern}
           value={value}
           onChange={onChange}
           slotProps={{

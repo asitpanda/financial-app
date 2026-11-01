@@ -1,4 +1,5 @@
 import dayjs from 'dayjs';
+import { INSURANCE_CATEGORY_COLORS } from '../../colors';
 import {
   formatInvestmentDate,
   getInvestmentCategoryOptions,
@@ -488,6 +489,7 @@ export const getNormalizedInvestments = (
 
 export const getInvestmentContributionViewItems = (
   investments: Investment[],
+  formatDate: (value: string) => string = formatInvestmentDate,
 ): InvestmentContributionViewItem[] => {
   const todayStart = dayjs().startOf('day').valueOf();
 
@@ -540,7 +542,7 @@ export const getInvestmentContributionViewItems = (
             : dueTone === 'warning'
               ? `In ${dueDaysUntil}d`
               : dueDate
-                ? formatInvestmentDate(dueDate)
+                ? formatDate(dueDate)
                 : 'Not set',
       };
     });
@@ -1131,20 +1133,6 @@ const getDueUrgencyInfo = (dueDate?: string | null) => {
   return { daysUntilDue: days, dueUrgency: 'normal' as const };
 };
 
-const CATEGORY_COLOR_PALETTE: Record<string, string> = {
-  TERM_LIFE: '#0284c7', // Sky Blue
-  LIFE_INSURANCE: '#0284c7',
-  HEALTH: '#8b5cf6', // Violet
-  HEALTH_INSURANCE: '#8b5cf6',
-  SAVINGS: '#10b981', // Emerald
-  INSURANCE_SAVINGS: '#10b981',
-  ENDOWMENT: '#10b981',
-  ULIP: '#10b981',
-  MOTOR: '#f59e0b', // Amber
-  GENERAL: '#f59e0b',
-  OTHER: '#64748b', // Slate
-};
-
 export const getInsurancePositionData = (
   investments: Investment[],
   taxonomyNodes: InvestmentAssetTaxonomyNode[],
@@ -1315,8 +1303,10 @@ export const getInsurancePositionData = (
       const percentage = totalCover > 0 ? (row.insuranceCover / totalCover) * 100 : 0;
       const cleanKey = String(row.key || '').toUpperCase();
       const color =
-        CATEGORY_COLOR_PALETTE[cleanKey] ||
-        (row.treatment === 'PROTECTION_EXPENSE' ? '#0284c7' : '#10b981');
+        INSURANCE_CATEGORY_COLORS[cleanKey] ||
+        (row.treatment === 'PROTECTION_EXPENSE'
+          ? INSURANCE_CATEGORY_COLORS.TERM_LIFE
+          : INSURANCE_CATEGORY_COLORS.SAVINGS);
 
       return {
         key: row.key,

@@ -9,6 +9,9 @@ import AppButton from '../../../components/common/AppButton';
 import { useNotificationStore } from '../../../store/notificationStore';
 import { useSaveInvestmentSnapshot } from '../hooks/useInvestmentSnapshots';
 import { getRuntimeErrorMessage } from '../../../utils/errorMessage';
+import { useCurrencyFormatter } from '../../../utils/currency';
+import { useDateFormatter, useDatePattern } from '../../../utils/date';
+import { usePreferencesStore } from '../../../store/preferencesStore';
 
 const modalStyle = {
   position: 'absolute',
@@ -34,7 +37,15 @@ export default function RecordValuationModal({
   snapshot,
   totalInvested,
   currentValue,
+  currency = 'INR',
 }) {
+  const formatCurrency = useCurrencyFormatter();
+  const formatDate = useDateFormatter();
+  const datePattern = useDatePattern();
+  const currencyDisplay = usePreferencesStore((state) => state.preferences?.currencyDisplay ?? 'symbol');
+  const currencyMarker = new Intl.NumberFormat('en-IN', {
+    style: 'currency', currency, currencyDisplay,
+  }).formatToParts(0).find((part) => part.type === 'currency')?.value ?? currency;
   const getInitialFormData = React.useCallback(
     (currentSnapshot) => ({
       snapshotDate: currentSnapshot?.snapshotDate
@@ -119,8 +130,8 @@ export default function RecordValuationModal({
       
       pushNotification({
         message: snapshot?.id
-          ? `Valuation updated for ${dayjs(formData.snapshotDate).format('MMM DD, YYYY')}`
-          : `Valuation recorded for ${dayjs(formData.snapshotDate).format('MMM DD, YYYY')}`,
+          ? `Valuation updated for ${formatDate(formData.snapshotDate)}`
+          : `Valuation recorded for ${formatDate(formData.snapshotDate)}`,
         type: 'success'
       });
       
@@ -173,7 +184,7 @@ export default function RecordValuationModal({
                       Total Invested
                     </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                      ₹{Number(totalInvested).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      {formatCurrency(totalInvested, currency, { maximumFractionDigits: 0 })}
                     </Typography>
                   </Box>
                 )}
@@ -183,7 +194,7 @@ export default function RecordValuationModal({
                       Current Value
                     </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                      ₹{Number(currentValue).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      {formatCurrency(currentValue, currency, { maximumFractionDigits: 0 })}
                     </Typography>
                   </Box>
                 )}
@@ -219,7 +230,7 @@ export default function RecordValuationModal({
                 disabled={loading}
                 disableFuture
                 maxDate={todayDate}
-                format="DD MMM YYYY"
+                format={datePattern}
                 slotProps={{
                   textField: {
                     fullWidth: true,
@@ -240,7 +251,7 @@ export default function RecordValuationModal({
           {/* Current Value */}
           <Box>
             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.75 }}>
-              Total Asset Value On That Date (₹) *
+              Total Asset Value On That Date ({currencyMarker}) *
             </Typography>
             <TextField
               type="number"
@@ -290,7 +301,7 @@ export default function RecordValuationModal({
 
               <Box>
                 <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.75 }}>
-                  Price per Unit (₹) (Optional)
+                  Price per Unit ({currencyMarker}) (Optional)
                 </Typography>
                 <TextField
                   type="number"

@@ -47,7 +47,6 @@ import {
 } from "../../services/navigation";
 import { useGoalPageData, useRemoveGoal, useSaveGoal } from "./useGoals";
 import {
-  formatCurrency,
   getFilteredGoals,
   getGoalHealth,
   getGoalId,
@@ -58,6 +57,8 @@ import {
   getTableGoals,
 } from "./goals.selectors";
 import type { GoalProgressFilter } from "./goal.types";
+import { useCurrencyFormatter } from "../../utils/currency";
+import { useDateFormatter, useDatePattern } from "../../utils/date";
 
 const getInitialDateFilter = () => ({
   dateRange: [null, null],
@@ -65,6 +66,9 @@ const getInitialDateFilter = () => ({
 });
 
 export default function Goals() {
+  const formatDate = useDateFormatter("Not set");
+  const datePattern = useDatePattern();
+  const formatCurrency = useCurrencyFormatter();
   const theme = useTheme();
   const goalTableRef = useRef(null);
   const [uiError, setUiError] = useState("");
@@ -251,8 +255,13 @@ export default function Goals() {
       };
 
   const goalProgressChart = useMemo(
-    () => getGoalProgressChart(filteredGoals, goalInsights.totalGoals),
-    [filteredGoals, goalInsights.totalGoals],
+    () => getGoalProgressChart(filteredGoals, goalInsights.totalGoals, {
+      completed: theme.palette.success.main,
+      onTrack: theme.palette.primary.main,
+      atRisk: theme.palette.warning.main,
+      notStarted: theme.palette.secondary.main,
+    }),
+    [filteredGoals, goalInsights.totalGoals, theme],
   );
 
   const handleSubmitGoal = async (payload) => {
@@ -341,7 +350,7 @@ export default function Goals() {
         flex: 1,
         minWidth: 150,
         valueFormatter: (value) =>
-          value ? new Date(value).toLocaleDateString() : "Not set",
+          formatDate(value),
       },
       {
         field: "health",
@@ -418,7 +427,7 @@ export default function Goals() {
         },
       },
     ],
-    [openEditDrawer, openViewDrawer],
+    [openEditDrawer, openViewDrawer, formatCurrency, formatDate],
   );
 
   return (
@@ -710,7 +719,7 @@ export default function Goals() {
                         "border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease",
                       "&:hover": {
                         borderColor: "primary.main",
-                        boxShadow: "0 8px 24px rgba(15, 23, 42, 0.08)",
+                        boxShadow: 3,
                         transform: "translateY(-1px)",
                       },
                     }}
@@ -720,7 +729,7 @@ export default function Goals() {
                         {goal.name || "Untitled Goal"}
                       </Box>
                       <Box sx={{ color: "text.secondary", fontSize: 12 }}>
-                        {new Date(goal.deadline).toLocaleDateString()}
+                        {formatDate(goal.deadline)}
                       </Box>
                     </Box>
                     <StatusChip
@@ -782,6 +791,7 @@ export default function Goals() {
                   <LocalizationProvider dateAdapter={AdapterDayjs}>
                     <DatePicker
                       label="From"
+                      format={datePattern}
                       value={dateRange[0]}
                       onChange={(value) => {
                         setDateRange([value, dateRange[1]]);
@@ -794,6 +804,7 @@ export default function Goals() {
                   <LocalizationProvider dateAdapter={AdapterDayjs}>
                     <DatePicker
                       label="To"
+                      format={datePattern}
                       value={dateRange[1]}
                       onChange={(value) => {
                         setDateRange([dateRange[0], value]);

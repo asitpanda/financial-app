@@ -7,9 +7,12 @@ import { ITransactionDataSourcePort } from './transaction.datasource.port';
 import { CreateTransactionDto } from '../dto/create-transaction.dto';
 import { UpdateTransactionDto } from '../dto/update-transaction.dto';
 import { parseRequiredDateInput } from '../../common/utils/date-input';
+import { getListOffset } from '../../common/listing/listing.utils';
 import type {
   TransactionCreateData,
   TransactionGoalDeltaSource,
+  TransactionListQuery,
+  TransactionListResult,
   TransactionPersistedWriteData,
   TransactionReferenceCheckInput,
   TransactionUpdateData,
@@ -142,6 +145,125 @@ export class TransactionPrismaRepository implements ITransactionDataSourcePort {
 
   async findAll(userId: number): Promise<TransactionRecord[]> {
     return this.findTransactionsWithInvestmentContext(userId, {});
+  }
+
+  async findPage(userId: number, query: TransactionListQuery): Promise<TransactionListResult> {
+    const conditions: Prisma.TransactionWhereInput[] = [];
+    if (query.accountId) {
+      conditions.push({
+        OR: [
+          { sourceAccountId: query.accountId },
+          { destinationAccountId: query.accountId },
+        ],
+      });
+    }
+    if (query.type) conditions.push({ type: query.type });
+    if (query.categoryId) conditions.push({ categoryId: query.categoryId });
+    if (query.fromDate || query.toDate) {
+      conditions.push({
+        date: {
+          ...(query.fromDate ? { gte: new Date(query.fromDate) } : {}),
+          ...(query.toDate ? { lte: new Date(query.toDate) } : {}),
+        },
+      });
+    }
+    const search = query.search?.trim();
+    if (search) {
+      conditions.push({
+        OR: [
+          { notes: { contains: search, mode: 'insensitive' } },
+          { categoryLabelSnapshot: { contains: search, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    const where: Prisma.TransactionWhereInput = {
+      userId,
+      ...(conditions.length ? { AND: conditions } : {}),
+    };
+    const sortBy = query.sortBy ?? 'date';
+    const sortDirection = query.sortDirection ?? 'desc';
+    const [transactions, total] = await this.prisma.$transaction([
+      this.prisma.transaction.findMany({
+        where,
+        orderBy: [{ [sortBy]: sortDirection }, { id: sortDirection }],
+        skip: getListOffset(query),
+        take: query.limit,
+        include: {
+          linkedInvestmentEvents: {
+            take: 1,
+            where: { investment: { userId } },
+            select: {
+              eventType: true,
+              investment: {
+                select: { id: true, name: true, institutionName: true },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.transaction.count({ where }),
+    ]);
+
+    return {
+      items: transactions.map(({ linkedInvestmentEvents, ...transaction }) => ({
+        ...transaction,
+        investment: linkedInvestmentEvents[0]?.investment ?? null,
+        investmentEventType: linkedInvestmentEvents[0]?.eventType ?? null,
+      })),
+      total,
+    };
+  }
+
+  async findAllForAccount(userId: number, accountId: number): Promise<TransactionRecord[]> {
+    return this.findTransactionsWithInvestmentContext(userId, {
+      OR: [{ sourceAccountId: accountId }, { destinationAccountId: accountId }],
+    }).then((transactions) => transactions.sort(
+      (left, right) => new Date(left.date).getTime() - new Date(right.date).getTime() || left.id - right.id,
+    ));
+  }
+
+  async getPeriodTypeTotals(userId: number, fromDate?: string, toDate?: string) {
+    const dateFilter = fromDate || toDate
+      ? {
+          date: {
+            ...(fromDate ? { gte: new Date(fromDate) } : {}),
+            ...(toDate ? { lte: new Date(toDate) } : {}),
+          },
+        }
+      : {};
+    const [groups, incomeExcludingInvestmentWithdrawals] = await Promise.all([
+      this.prisma.transaction.groupBy({
+        by: ['type'],
+        where: {
+          userId,
+          ...dateFilter,
+        },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: {
+          userId,
+          type: 'INCOME',
+          ...dateFilter,
+          linkedInvestmentEvents: {
+            none: {
+              eventType: 'WITHDRAWAL_PRINCIPAL',
+              investment: { userId },
+            },
+          },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
+    return groups.map((group) => ({
+      type: group.type,
+      amount: group.type === 'INCOME'
+        ? incomeExcludingInvestmentWithdrawals._sum.amount ?? 0
+        : group._sum.amount ?? 0,
+      count: group._count._all,
+    }));
   }
 
   async findOne(id: number, userId: number): Promise<TransactionRecord | null> {

@@ -8,14 +8,14 @@ interface DashboardMonthlySummarySectionProps {
   selectedPeriodLabel: string;
 }
 
-const formatCurrency = (value: number) =>
-  `₹${Number(value || 0).toLocaleString("en-IN")}`;
+import { useCurrencyFormatter } from "../../../utils/currency";
 
 export default function DashboardMonthlySummarySection({
   summary,
   selectedPeriodLabel,
 }: DashboardMonthlySummarySectionProps) {
   const theme = useTheme();
+  const formatCurrency = useCurrencyFormatter();
 
   return (
     <SectionCard

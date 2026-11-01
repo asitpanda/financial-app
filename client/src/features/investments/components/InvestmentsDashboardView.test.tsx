@@ -10,6 +10,8 @@ describe("InvestmentsDashboardView", () => {
     renderWithProviders(
       <InvestmentsDashboardView
         investments={[]}
+        pagination={{ page: 1, limit: 20, total: 0, totalPages: 0, hasNextPage: false }}
+        onPageChange={vi.fn()}
         portfolioGrowthData={[]}
         timeSeriesData={[]}
         isDrillMode={false}

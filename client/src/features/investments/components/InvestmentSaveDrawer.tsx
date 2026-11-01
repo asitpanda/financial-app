@@ -14,6 +14,7 @@ import { useInvestmentReferenceData, useSaveInvestment } from "../hooks/useInves
 import type { CreateInvestmentDto, InvestmentDrawerData } from "../types/investment.types";
 import InvestmentFormDrawer from "./InvestmentFormDrawer";
 import RecurringOccurrencesReviewDialog from "./RecurringOccurrencesReviewDialog";
+import { usePreferencesStore } from "../../../store/preferencesStore";
 
 interface InvestmentSaveDrawerProps {
   onClose: () => void;
@@ -26,6 +27,8 @@ export default function InvestmentSaveDrawer({
   onSaved,
   initialValues = null,
 }: InvestmentSaveDrawerProps) {
+  const currencyDisplay = usePreferencesStore((state) => state.preferences?.currencyDisplay ?? "symbol");
+  const dateFormat = usePreferencesStore((state) => state.preferences?.dateFormat ?? "DD_MM_YYYY");
   const referenceData = useInvestmentReferenceData();
   const saveInvestment = useSaveInvestment();
   const pushNotification = useNotificationStore((state) => state.pushNotification);
@@ -59,6 +62,8 @@ export default function InvestmentSaveDrawer({
         drawerMode: editing ? "edit" : "create",
         selectedInvestmentId,
         selectedInvestment: initialValues,
+        currencyDisplay,
+        dateFormat,
       }));
       return null;
     }

@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderWithProviders, screen, userEvent } from '../../../test/test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderWithProviders, screen, userEvent, waitFor } from '../../../test/test-utils';
 import { useNotificationStore } from '../../../store/notificationStore';
 import RecordInvestmentActivityModal from './RecordInvestmentActivityModal';
 
@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   updateInvestmentEvent: vi.fn(),
   createInvestmentBenefit: vi.fn(),
   updateInvestmentBenefit: vi.fn(),
+  realizeInvestmentBenefit: vi.fn(),
+  quickRealizeInvestmentBenefit: vi.fn(),
   skipContribution: vi.fn(),
 }));
 
@@ -24,6 +26,8 @@ vi.mock('../hooks/useContributionPlans', () => ({
 vi.mock('../hooks/useInvestmentBenefits', () => ({
   useCreateInvestmentBenefit: () => ({ mutateAsync: mocks.createInvestmentBenefit }),
   useUpdateInvestmentBenefit: () => ({ mutateAsync: mocks.updateInvestmentBenefit }),
+  useRealizeInvestmentBenefit: () => ({ mutateAsync: mocks.realizeInvestmentBenefit }),
+  useQuickRealizeInvestmentBenefit: () => ({ mutateAsync: mocks.quickRealizeInvestmentBenefit }),
 }));
 
 const investment = {
@@ -67,8 +71,12 @@ beforeEach(() => {
   mocks.updateInvestmentEvent.mockResolvedValue({ id: 'event-4' });
   mocks.createInvestmentBenefit.mockResolvedValue({ id: 'benefit-1' });
   mocks.updateInvestmentBenefit.mockResolvedValue({ id: 'benefit-2' });
+  mocks.realizeInvestmentBenefit.mockResolvedValue({});
+  mocks.quickRealizeInvestmentBenefit.mockResolvedValue({});
   mocks.skipContribution.mockResolvedValue({});
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('RecordInvestmentActivityModal', () => {
   it('renders the contribution context and rejects an empty amount', async () => {
@@ -94,17 +102,18 @@ describe('RecordInvestmentActivityModal', () => {
     await user.click(screen.getByRole('button', { name: 'Record Contribution' }));
 
     expect(mocks.recordContribution).toHaveBeenCalledWith({
+      requestId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
       investmentId: 'investment-1',
       contributionPlanId: 'plan-1',
       amount: 125,
       transactionDate: expect.any(String),
       notes: 'Contribution for Secure Future Policy',
     });
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(pushNotification).toHaveBeenCalledWith({
       type: 'success',
       message: 'Contribution recorded successfully',
     });
-    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('prevents recording a contribution that exceeds the linked account balance', () => {

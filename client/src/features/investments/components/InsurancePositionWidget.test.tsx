@@ -60,6 +60,7 @@ describe("InsurancePositionWidget", () => {
     const user = userEvent.setup();
     const policy = insurance({
       activeContributionPlan: {
+        id: "plan-1",
         status: "active",
         cadenceUnit: "month",
         cadenceInterval: 1,

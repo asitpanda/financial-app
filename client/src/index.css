@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: "Source Sans 3";
+  src: url("/fonts/SourceSans3VF-Upright.ttf") format("truetype");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 body {
   margin: 0;
   -webkit-font-smoothing: antialiased;

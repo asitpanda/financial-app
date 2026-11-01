@@ -91,6 +91,25 @@ This guarantees API contract consistency regardless of provider mode.
 
 ## Sync Checklist For Schema Changes
 
+`User.preferences` is an optional one-to-one relation to `UserPreferences`
+(`user_preferences`). The preferences row uses `userId` as its primary/foreign
+key, cascades on user deletion, and stores typed `CurrencyDisplay` (`symbol` or
+`code`, default `symbol`), `ThemeMode` (`light` or `dark`, default `light`), and
+`DateFormat` (`DD_MM_YYYY`, `MM_DD_YYYY`, `YYYY_MM_DD`, or `DD_MMM_YYYY`, default
+`DD_MM_YYYY`) enums. Existing users are backfilled by `server/prisma/sql/add_user_preferences.sql`;
+apply `server/prisma/sql/add_theme_preferences.sql` afterward to add the theme
+column with its default. Then apply
+`server/prisma/sql/add_user_preferences_timestamps.sql` to add timezone-aware
+`createdAt` and `updatedAt` columns. Both default to `now()`; Prisma maintains
+`updatedAt` on writes, while direct SQL updates must set it explicitly. Existing
+rows receive the timestamp upgrade time, not reconstructed historical times.
+Apply `server/prisma/sql/add_date_format_preferences.sql` to add `dateFormat`
+with its default for existing users. This field controls UI formatting only;
+financial date values, API serialization, and scheduling remain unchanged.
+Fresh baseline schemas already include all these fields. The
+service also resolves defaults when a legacy user has no row. These values never
+alter ledger currency or amounts.
+
 When changing schema:
 
 1. Update server/prisma/schema.prisma.

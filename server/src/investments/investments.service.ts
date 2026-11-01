@@ -517,14 +517,8 @@ export class InvestmentsService {
   private buildResolvedAnalyticsRecord(
     investment: SummaryInvestment,
     snapshots: SnapshotLike[] = [],
-    events: EventLike[] = [],
   ): ResolvedAnalyticsRecord {
-    const resolvedCurrentValue = this.analyticsEngine.resolveInvestmentValueAtDate(
-      investment,
-      snapshots,
-      new Date(),
-      events,
-    );
+    const currentValue = this.getEffectiveCurrentValue(investment);
     const investedAmount = Number(investment?.totalInvested || 0);
 
     return {
@@ -533,8 +527,8 @@ export class InvestmentsService {
       category: this.getCategoryKey(investment),
       accountingTreatment: investment.accountingTreatment ?? 'INVESTMENT',
       investedAmount,
-      currentValue: resolvedCurrentValue.value,
-      returnAmount: resolvedCurrentValue.value - investedAmount,
+      currentValue,
+      returnAmount: currentValue - investedAmount,
       timelineStartDate: this.getTimelineStartDate(investment, snapshots),
       snapshots,
     };
@@ -1606,7 +1600,6 @@ export class InvestmentsService {
       this.buildResolvedAnalyticsRecord(
         investment,
         snapshotsByInvestment.get(String(investment.id)) ?? [],
-        confirmedEvents.filter((event) => String(event.investmentId) === String(investment.id)),
       ),
     );
     // Growth/allocation/timeline analytics include INVESTMENT + INSURANCE_SAVINGS (valued), exclude PROTECTION_EXPENSE.

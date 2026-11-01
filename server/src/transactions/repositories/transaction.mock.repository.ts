@@ -6,7 +6,11 @@ import { UpdateTransactionDto } from '../dto/update-transaction.dto';
 import { mockTransactionsStore as mockTransactions } from '../../mockdata/transactions';
 import { mockGoalsStore } from '../../mockdata/goals';
 import type { TransactionRecord } from '../transaction.types';
-import type { TransactionGoalDeltaSource } from '../transaction.types';
+import type {
+  TransactionGoalDeltaSource,
+  TransactionListQuery,
+  TransactionListResult,
+} from '../transaction.types';
 
 const nextTransactionId = () => (mockTransactions.length ? Math.max(...mockTransactions.map((transaction) => transaction.id)) + 1 : 1);
 const normalizeNullableNumber = (value?: string | number | null) =>
@@ -30,6 +34,65 @@ const applyGoalDelta = (goalId: number | null | undefined, delta: number, userId
 export class TransactionMockRepository implements ITransactionDataSourcePort {
   async findAll(userId: number): Promise<TransactionRecord[]> {
     return mockTransactions.filter((t) => t.userId === userId);
+  }
+
+  async findPage(userId: number, query: TransactionListQuery): Promise<TransactionListResult> {
+    const search = query.search?.trim().toLowerCase();
+    const fromDate = query.fromDate ? new Date(query.fromDate).getTime() : null;
+    const toDate = query.toDate ? new Date(query.toDate).getTime() : null;
+    const matching = mockTransactions.filter((transaction) => {
+      const timestamp = new Date(transaction.date).getTime();
+      if (transaction.userId !== userId) return false;
+      if (
+        query.accountId &&
+        transaction.sourceAccountId !== query.accountId &&
+        transaction.destinationAccountId !== query.accountId
+      ) return false;
+      if (query.type && transaction.type !== query.type) return false;
+      if (query.categoryId && transaction.categoryId !== query.categoryId) return false;
+      if (fromDate !== null && timestamp < fromDate) return false;
+      if (toDate !== null && timestamp > toDate) return false;
+      if (search && !`${transaction.notes || ''} ${transaction.categoryLabelSnapshot || ''}`.toLowerCase().includes(search)) return false;
+      return true;
+    });
+    const sortBy = query.sortBy ?? 'date';
+    const direction = query.sortDirection === 'asc' ? 1 : -1;
+    matching.sort((left, right) => {
+      const leftValue = sortBy === 'date' || sortBy === 'createdAt'
+        ? new Date(left[sortBy]).getTime()
+        : Number(left.amount);
+      const rightValue = sortBy === 'date' || sortBy === 'createdAt'
+        ? new Date(right[sortBy]).getTime()
+        : Number(right.amount);
+      return (leftValue - rightValue) * direction || (left.id - right.id) * direction;
+    });
+    const offset = (query.page - 1) * query.limit;
+    return { items: matching.slice(offset, offset + query.limit), total: matching.length };
+  }
+
+  async findAllForAccount(userId: number, accountId: number): Promise<TransactionRecord[]> {
+    return mockTransactions
+      .filter((transaction) => transaction.userId === userId && (
+        transaction.sourceAccountId === accountId || transaction.destinationAccountId === accountId
+      ))
+      .sort((left, right) => new Date(left.date).getTime() - new Date(right.date).getTime() || left.id - right.id);
+  }
+
+  async getPeriodTypeTotals(userId: number, fromDate?: string, toDate?: string) {
+    const from = fromDate ? new Date(fromDate).getTime() : null;
+    const to = toDate ? new Date(toDate).getTime() : null;
+    const totals = new Map<string, { type: string; amount: number; count: number }>();
+    for (const transaction of mockTransactions) {
+      const timestamp = new Date(transaction.date).getTime();
+      if (transaction.userId !== userId || (from !== null && timestamp < from) || (to !== null && timestamp > to)) continue;
+      const existing = totals.get(transaction.type) ?? { type: transaction.type, amount: 0, count: 0 };
+      if (!(transaction.type === 'INCOME' && transaction.investmentEventType === 'WITHDRAWAL_PRINCIPAL')) {
+        existing.amount += Number(transaction.amount || 0);
+      }
+      existing.count += 1;
+      totals.set(transaction.type, existing);
+    }
+    return [...totals.values()];
   }
 
   async findOne(id: number, userId: number): Promise<TransactionRecord | null> {

@@ -1,18 +1,17 @@
 // @ts-nocheck
 import React, { useMemo } from "react";
-import { Box, Typography } from "@mui/material";
+import { alpha, Box, Typography } from "@mui/material";
 import Icon from "@mdi/react";
 import { mdiCheckBold } from "@mdi/js";
 import dayjs from "dayjs";
 import Button from "../../../components/common/AppButton";
 import { EmptyState, ProgressBar, SectionCard, StatusChip } from "../../../components/common";
 import AppDrawer from "../../../components/drawers/AppDrawer";
+import { useCurrencyFormatter } from "../../../utils/currency";
+import { useDateFormatter } from "../../../utils/date";
 
 const getGoalId = (goal) => goal?._id || goal?.id;
 
-const formatCurrency = (value) => `₹${Number(value || 0).toLocaleString()}`;
-
-const formatGoalDate = (value) => (value ? dayjs(value).format("MMM D, YYYY") : "Not set");
 
 const getGoalStartDate = (goal) => goal?.startDate || goal?.createdAt;
 
@@ -64,6 +63,8 @@ export function GoalViewDrawer({
   onCreateGoal,
   onViewAllTransactions,
 }) {
+  const formatCurrency = useCurrencyFormatter();
+  const formatGoalDate = useDateFormatter("Not set");
   const contributionSummary = useMemo(() => {
     if (!goal) {
       return { items: [], totalAmount: 0, totalCount: 0 };
@@ -138,15 +139,23 @@ export function GoalViewDrawer({
                   py: 3,
                   textAlign: "center",
                   background: (theme) =>
-                    `linear-gradient(180deg, ${theme.palette.success.main}18 0%, ${theme.palette.background.paper} 100%)`,
+                    `linear-gradient(180deg, ${alpha(theme.palette.success.main, 0.1)} 0%, ${theme.palette.background.paper} 100%)`,
                 }}
               >
                 <Box
                   sx={{
                     position: "absolute",
                     inset: 0,
-                    backgroundImage:
-                      "radial-gradient(circle at 12% 22%, rgba(96, 165, 250, 0.4) 0, rgba(96, 165, 250, 0.4) 3px, transparent 4px), radial-gradient(circle at 84% 18%, rgba(251, 191, 36, 0.45) 0, rgba(251, 191, 36, 0.45) 3px, transparent 4px), radial-gradient(circle at 20% 78%, rgba(248, 113, 113, 0.35) 0, rgba(248, 113, 113, 0.35) 3px, transparent 4px), radial-gradient(circle at 76% 74%, rgba(167, 139, 250, 0.35) 0, rgba(167, 139, 250, 0.35) 3px, transparent 4px), radial-gradient(circle at 92% 58%, rgba(74, 222, 128, 0.35) 0, rgba(74, 222, 128, 0.35) 3px, transparent 4px), radial-gradient(circle at 36% 14%, rgba(244, 114, 182, 0.3) 0, rgba(244, 114, 182, 0.3) 3px, transparent 4px)",
+                    backgroundImage: (theme) => [
+                      { position: "12% 22%", color: theme.palette.info.main },
+                      { position: "84% 18%", color: theme.palette.warning.main },
+                      { position: "20% 78%", color: theme.palette.error.main },
+                      { position: "76% 74%", color: theme.palette.primary.main },
+                      { position: "92% 58%", color: theme.palette.success.main },
+                      { position: "36% 14%", color: theme.palette.secondary.main },
+                    ].map(({ position, color }) =>
+                      `radial-gradient(circle at ${position}, ${alpha(color, 0.35)} 0, ${alpha(color, 0.35)} 3px, transparent 4px)`,
+                    ).join(", "),
                     opacity: 0.9,
                     pointerEvents: "none",
                   }}
@@ -160,7 +169,7 @@ export function GoalViewDrawer({
                       borderRadius: "50%",
                       display: "grid",
                       placeItems: "center",
-                      backgroundColor: "rgba(34, 197, 94, 0.12)",
+                      backgroundColor: (theme) => alpha(theme.palette.success.main, 0.12),
                     }}
                   >
                     <Box
@@ -172,8 +181,9 @@ export function GoalViewDrawer({
                         placeItems: "center",
                         background: (theme) =>
                           `linear-gradient(180deg, ${theme.palette.success.light} 0%, ${theme.palette.success.main} 100%)`,
+                        color: "success.contrastText",
                         boxShadow: (theme) =>
-                          `0 14px 32px ${theme.palette.success.main}47`,
+                          `0 14px 32px ${alpha(theme.palette.success.main, 0.28)}`,
                       }}
                     >
                       <Icon path={mdiCheckBold} size={1.2} color="currentColor" />

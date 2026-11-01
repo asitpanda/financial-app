@@ -1,7 +1,19 @@
 import { fireEvent } from '@testing-library/react';
+import type { ComponentProps, ComponentType } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { GoalViewDrawer } from './GoalViewDrawer';
+import { GoalViewDrawer as GoalViewDrawerComponent } from './GoalViewDrawer';
 import { renderWithProviders, screen } from '../../../test/test-utils';
+
+const transactions = [
+  { id: 'tx-1', goalId: 'goal-1', amount: 100, type: 'income', date: '2026-02-01' },
+  { id: 'tx-2', goalId: 'goal-1', amount: 25, type: 'expense', date: '2026-02-02' },
+];
+
+const GoalViewDrawer = GoalViewDrawerComponent as ComponentType<
+  Omit<ComponentProps<typeof GoalViewDrawerComponent>, 'transactions'> & {
+    transactions?: typeof transactions;
+  }
+>;
 
 const goal = {
   id: 'goal-1',
@@ -18,7 +30,18 @@ const goal = {
 describe('GoalViewDrawer', () => {
   it('shows a not-found state when the goal is missing', () => {
     const onClose = vi.fn();
-    renderWithProviders(<GoalViewDrawer open onClose={onClose} />);
+    renderWithProviders(
+      <GoalViewDrawer
+        open
+        goal={null}
+        onClose={onClose}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onAddTransaction={vi.fn()}
+        onCreateGoal={vi.fn()}
+        onViewAllTransactions={vi.fn()}
+      />,
+    );
 
     expect(screen.getByText('Goal not found')).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[0]);
@@ -39,11 +62,9 @@ describe('GoalViewDrawer', () => {
         onEdit={onEdit}
         onDelete={onDelete}
         onAddTransaction={onAddTransaction}
+        onCreateGoal={vi.fn()}
         onViewAllTransactions={onViewAllTransactions}
-        transactions={[
-          { id: 'tx-1', goalId: 'goal-1', amount: 100, type: 'income', date: '2026-02-01' },
-          { id: 'tx-2', goalId: 'goal-1', amount: 25, type: 'expense', date: '2026-02-02' },
-        ]}
+        transactions={transactions}
       />,
     );
 

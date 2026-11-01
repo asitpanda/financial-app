@@ -29,7 +29,7 @@ const createWrapper = (queryClient = createQueryClient()) =>
 
 afterEach(() => vi.restoreAllMocks());
 
-describe('investment React Query hooks', () => {
+describe('useInvestments', () => {
   it('normalizes malformed list data and reports load failures', async () => {
     vi.spyOn(investmentApi, 'getAll').mockResolvedValue(null as never);
     const first = renderHook(() => useInvestmentSummaryPageData(), { wrapper: createWrapper() });
@@ -58,8 +58,8 @@ describe('investment React Query hooks', () => {
     const queryClient = createQueryClient();
     const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
     const removeQueries = vi.spyOn(queryClient, 'removeQueries');
-    vi.spyOn(investmentApi, 'create').mockResolvedValue({ id: 'created' } as never);
-    vi.spyOn(investmentApi, 'update').mockResolvedValue({ id: 'updated' } as never);
+    vi.spyOn(investmentApi, 'create').mockResolvedValue({ id: 101 } as never);
+    vi.spyOn(investmentApi, 'update').mockResolvedValue({ id: 102 } as never);
     vi.spyOn(investmentApi, 'delete').mockResolvedValue(undefined);
     const wrapper = createWrapper(queryClient);
 
@@ -74,24 +74,25 @@ describe('investment React Query hooks', () => {
     });
     const updateHook = renderHook(() => useUpdateInvestment(), { wrapper });
     await act(async () => {
-      await updateHook.result.current.mutateAsync({ id: 'updated', data: { name: 'Updated' } });
+      await updateHook.result.current.mutateAsync({ id: '102', data: { name: 'Updated' } });
     });
     const deleteHook = renderHook(() => useDeleteInvestment(), { wrapper });
     await act(async () => {
-      await deleteHook.result.current.mutateAsync('updated');
+      await deleteHook.result.current.mutateAsync('102');
     });
 
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['investments'] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['investment', 'updated'] });
-    expect(removeQueries).toHaveBeenCalledWith({ queryKey: ['investment', 'updated'], exact: true });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['investment', 101] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['investment', 102] });
+    expect(removeQueries).toHaveBeenCalledWith({ queryKey: ['investment', 102] });
   });
 
   it('keeps benefit detail queries disabled until both IDs are available', async () => {
     const getByInvestmentId = vi.spyOn(investmentBenefitsApi, 'getByInvestmentId');
     const getById = vi.spyOn(investmentBenefitsApi, 'getById');
     const first = renderHook(() => useInvestmentBenefitsByInvestment('', true), { wrapper: createWrapper() });
-    const second = renderHook(() => useInvestmentBenefitsByInvestment('investment-1', false), { wrapper: createWrapper() });
+    const second = renderHook(() => useInvestmentBenefitsByInvestment('7', false), { wrapper: createWrapper() });
     await waitFor(() => expect(first.result.current.fetchStatus).toBe('idle'));
     await waitFor(() => expect(second.result.current.fetchStatus).toBe('idle'));
     expect(getByInvestmentId).not.toHaveBeenCalled();
@@ -106,14 +107,14 @@ describe('investment React Query hooks', () => {
 
     await act(async () => {
       await result.current.mutateAsync({
-        investmentId: 'investment-1',
+        investmentId: '7',
         payload: { benefitType: 'BONUS', amount: 50, benefitDate: '2026-12-01' },
       });
     });
 
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['investments'] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['investment', 'investment-1'] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['investment', 7] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['investment-events'] });
   });
 });

@@ -12,6 +12,9 @@ import type {
   CreateTransactionDto,
   UpdateTransactionDto,
   TransactionRecord,
+  TransactionListQuery,
+  TransactionListResponse,
+  TransactionPageSummary,
   TransactionSavePayload,
 } from "./transaction.types";
 
@@ -34,8 +37,7 @@ interface TransactionGoalRecord extends Goal {
   _id?: string;
 }
 
-interface TransactionPageData {
-  transactions: TransactionRecord[];
+interface TransactionReferenceData {
   categories: Array<{
     id: string;
     name: string;
@@ -44,6 +46,18 @@ interface TransactionPageData {
   goals: TransactionGoalRecord[];
   accounts: FinancialAccountRecord[];
 }
+
+const emptyPageSummary: TransactionPageSummary = {
+  totalIncome: 0,
+  totalExpense: 0,
+  net: 0,
+  transactionCount: 0,
+  openingBalance: null,
+  moneyIn: null,
+  moneyOut: null,
+  closingBalance: null,
+  multiCurrency: false,
+};
 
 export const useTransactions = () => {
   return useQuery({
@@ -136,54 +150,65 @@ export const useTransactionsByDateRange = (
 export const useTransactionPageData = (
   hasPrefetched: boolean,
   prefetchedTransactions: TransactionRecord[] = [],
+  listQuery: TransactionListQuery = { page: 1, limit: 25 },
 ) => {
   const pushNotification = useNotificationStore(
     (state) => state.pushNotification,
   );
 
-  const query = useQuery<TransactionPageData>({
-    queryKey: ["transactions", "page-data"],
+  const referenceQuery = useQuery<TransactionReferenceData>({
+    queryKey: ["transactions", "reference-data"],
     queryFn: async () => {
-      const [tx, cs, gs, ac] = await Promise.all([
-        transactionApi.getAll(),
+      const [cs, gs, ac] = await Promise.all([
         getCategories(),
         getGoals(),
         getFinancialAccounts(),
       ]);
 
       return {
-        transactions: Array.isArray(tx)
-          ? tx.map((item: TransactionRecord) =>
-              toApplicationTransactionModel(item),
-            )
-          : [],
         categories: Array.isArray(cs) ? cs : [],
         goals: Array.isArray(gs) ? gs : [],
         accounts: Array.isArray(ac) ? ac : [],
       };
     },
+  });
+
+  const listQueryResult = useQuery<TransactionListResponse>({
+    queryKey: ["transactions", "list", listQuery],
+    queryFn: () => transactionApi.getPage(listQuery),
     initialData: hasPrefetched
       ? {
-          transactions: prefetchedTransactions,
-          categories: [],
-          goals: [],
-          accounts: [],
+          data: prefetchedTransactions.map(toApplicationTransactionModel) as TransactionListResponse["data"],
+          pagination: {
+            page: listQuery.page,
+            limit: listQuery.limit,
+            total: prefetchedTransactions.length,
+            totalPages: Math.ceil(prefetchedTransactions.length / listQuery.limit),
+            hasNextPage: false,
+          },
+          summary: emptyPageSummary,
         }
       : undefined,
   });
 
   useEffect(() => {
-    if (!query.error) return;
+    if (!referenceQuery.error && !listQueryResult.error) return;
     pushNotification({ type: "error", message: "Failed to load transactions" });
-  }, [query.error, pushNotification]);
+  }, [referenceQuery.error, listQueryResult.error, pushNotification]);
+
+  const reload = async () => {
+    await Promise.all([referenceQuery.refetch(), listQueryResult.refetch()]);
+  };
 
   return {
-    transactions: query.data?.transactions || [],
-    categories: query.data?.categories || [],
-    goals: query.data?.goals || [],
-    accounts: query.data?.accounts || [],
-    loading: query.isLoading,
-    error: query.error,
-    reload: query.refetch,
+    transactions: listQueryResult.data?.data || [],
+    pagination: listQueryResult.data?.pagination,
+    summary: listQueryResult.data?.summary || emptyPageSummary,
+    categories: referenceQuery.data?.categories || [],
+    goals: referenceQuery.data?.goals || [],
+    accounts: referenceQuery.data?.accounts || [],
+    loading: listQueryResult.isLoading || referenceQuery.isLoading,
+    error: referenceQuery.error || listQueryResult.error,
+    reload,
   };
 };

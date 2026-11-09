@@ -229,4 +229,56 @@ describe('Investment Benefits API', () => {
       ).resolves.toMatchObject({ status: 404 });
     });
   });
+
+  describe('POST /api/investments/:investmentId/benefits/:benefitId/realize', () => {
+    it('records realization components and marks the expected benefit received', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/investments/5/benefits/101/realize')
+        .set('Authorization', `Bearer ${userOneToken}`)
+        .send({
+          components: [{ eventType: 'BENEFIT_RECEIPT', amount: 50000 }],
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body).toMatchObject({
+        benefit: {
+          id: 101,
+          investmentId: 5,
+          status: InvestmentBenefitStatus.RECEIVED,
+        },
+        events: [
+          expect.objectContaining({
+            investmentId: 5,
+            linkedBenefitId: 101,
+            eventType: 'BENEFIT_RECEIPT',
+            amount: 50000,
+          }),
+        ],
+      });
+    });
+  });
+
+  describe('POST /api/investments/:investmentId/benefits/quick-realize', () => {
+    it('creates and realizes a benefit in one request', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/investments/5/benefits/quick-realize')
+        .set('Authorization', `Bearer ${userOneToken}`)
+        .send({
+          benefitType: InvestmentBenefitType.OTHER,
+          eventType: 'BENEFIT_RECEIPT',
+          amount: 125,
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body).toMatchObject({
+        benefit: {
+          investmentId: 5,
+          benefitType: InvestmentBenefitType.OTHER,
+          amount: 125,
+          status: InvestmentBenefitStatus.RECEIVED,
+        },
+        events: [expect.objectContaining({ eventType: 'BENEFIT_RECEIPT', amount: 125 })],
+      });
+    });
+  });
 });

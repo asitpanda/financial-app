@@ -98,6 +98,15 @@ describe('InvestmentEventsService', () => {
       expect(repository.create).not.toHaveBeenCalled();
     });
 
+    it('allows an owned investment when its status is absent', async () => {
+      const data = createInput();
+      repository.create.mockResolvedValue(event());
+      investmentRepository.findOne.mockResolvedValue({});
+
+      await expect(service.create(data as never, 42)).resolves.toEqual(event());
+      expect(repository.create).toHaveBeenCalledWith(data, undefined);
+    });
+
     it.each(['linkedTransactionId', 'linkedBenefitId'] as const)(
       'requires linked activity through its financial command when %s is supplied without a transaction',
       async (field) => {
@@ -142,6 +151,18 @@ describe('InvestmentEventsService', () => {
         'Income credit must be recorded as a confirmed event.',
       );
       expect(repository.create).not.toHaveBeenCalled();
+    });
+
+    it('creates a confirmed income credit without a transaction link', async () => {
+      const data = createInput({
+        eventType: InvestmentEventType.INCOME_CREDIT,
+        status: InvestmentEventStatus.CONFIRMED,
+      });
+      const savedEvent = event({ eventType: InvestmentEventType.INCOME_CREDIT });
+      repository.create.mockResolvedValue(savedEvent);
+
+      await expect(service.create(data as never)).resolves.toBe(savedEvent);
+      expect(repository.create).toHaveBeenCalledWith(data, undefined);
     });
   });
 
@@ -197,6 +218,13 @@ describe('InvestmentEventsService', () => {
       expect(investmentRepository.findOne).toHaveBeenCalledWith(7, 42);
     });
 
+    it('does not expose an event when its investment is not owned by the user', async () => {
+      repository.findOne.mockResolvedValue(event());
+      investmentRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.findOne('3', 42)).rejects.toThrow('Investment 7 not found');
+    });
+
     it('returns an event without an ownership lookup when no user is supplied', async () => {
       const savedEvent = event();
       repository.findOne.mockResolvedValue(savedEvent);
@@ -236,21 +264,97 @@ describe('InvestmentEventsService', () => {
       expect(repository.update).not.toHaveBeenCalled();
     });
 
-    it('validates a replacement investment before moving the event', async () => {
+    it.each([
+      ['not finite', Number.NaN],
+      ['zero', 0],
+    ])('rejects an amount that is %s', async (_label, amount) => {
       repository.findOne.mockResolvedValue(event());
-      investmentRepository.findOne
-        .mockResolvedValueOnce({ status: 'active' })
-        .mockResolvedValueOnce({ status: 'active' })
-        .mockResolvedValueOnce(null);
 
-      await expect(service.update('3', { investmentId: '8' }, 42)).rejects.toBeInstanceOf(NotFoundException);
-      expect(investmentRepository.findOne).toHaveBeenNthCalledWith(1, 7, 42);
-      expect(investmentRepository.findOne).toHaveBeenNthCalledWith(2, 7, 42);
-      expect(investmentRepository.findOne).toHaveBeenNthCalledWith(3, 8, 42);
+      await expect(service.update('3', { amount })).rejects.toThrow('Activity amount must be positive.');
       expect(repository.update).not.toHaveBeenCalled();
     });
 
-    it('rejects an update that makes an event an unconfirmed income credit', async () => {
+    it('rejects changing the amount of a recurring contribution', async () => {
+      repository.findOne.mockResolvedValue(event({ recurringPlanId: 11, amount: 100 }));
+
+      await expect(service.update('3', { amount: 125 })).rejects.toThrow(
+        'Recurring contribution amounts can only be changed from investment edit.',
+      );
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects changing the net amount of a recurring premium', async () => {
+      repository.findOne.mockResolvedValue(event({
+        eventType: InvestmentEventType.PREMIUM,
+        recurringPlanId: 11,
+        amount: 100,
+        netAmount: null,
+      }));
+
+      await expect(service.update('3', { netAmount: 90 })).rejects.toThrow(
+        'Recurring contribution amounts can only be changed from investment edit.',
+      );
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('allows unchanged recurring contribution amounts', async () => {
+      const existingEvent = event({ recurringPlanId: 11, amount: 100, netAmount: 95 });
+      repository.findOne.mockResolvedValue(existingEvent);
+      repository.update.mockResolvedValue(existingEvent);
+
+      await expect(service.update('3', { amount: 100, netAmount: 95 })).resolves.toBe(existingEvent);
+      expect(repository.update).toHaveBeenCalledWith('3', { amount: 100, netAmount: 95 });
+    });
+
+    it('defaults net amount to the new amount when only amount is edited', async () => {
+      const updatedEvent = event({ amount: 125, netAmount: 125 });
+      repository.findOne.mockResolvedValue(event());
+      repository.update.mockResolvedValue(updatedEvent);
+
+      await expect(service.update('3', { amount: 125 })).resolves.toBe(updatedEvent);
+      expect(repository.update).toHaveBeenCalledWith('3', { amount: 125, netAmount: 125 });
+    });
+
+    it('permits an update that retains the event investment', async () => {
+      const updatedEvent = event({ notes: 'retained investment' });
+      repository.findOne.mockResolvedValue(event());
+      repository.update.mockResolvedValue(updatedEvent);
+
+      await expect(service.update('3', { investmentId: '7', notes: updatedEvent.notes }, 42)).resolves.toBe(updatedEvent);
+      expect(investmentRepository.findOne).toHaveBeenCalledTimes(3);
+      expect(investmentRepository.findOne).toHaveBeenNthCalledWith(3, 7, 42);
+    });
+
+    it('rejects editing an activity owned by another workflow', async () => {
+      repository.findOne.mockResolvedValue(event({ eventType: InvestmentEventType.BENEFIT_RECEIPT }));
+
+      await expect(service.update('3', { notes: 'manual change' })).rejects.toThrow(
+        'This activity must be managed through its owning workflow.',
+      );
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('allows notes-only edits to a confirmed income credit', async () => {
+      const incomeEvent = event({ eventType: InvestmentEventType.INCOME_CREDIT });
+      repository.findOne.mockResolvedValue(incomeEvent);
+      repository.update.mockResolvedValue(incomeEvent);
+
+      await expect(service.update('3', { notes: 'confirmed credit' })).resolves.toBe(incomeEvent);
+      expect(repository.update).toHaveBeenCalledWith('3', { notes: 'confirmed credit' });
+    });
+
+    it('rejects moving an event to a different investment', async () => {
+      repository.findOne.mockResolvedValue(event());
+
+      await expect(service.update('3', { investmentId: '8' }, 42)).rejects.toThrow(
+        'Activity cannot be moved to another investment.',
+      );
+      expect(investmentRepository.findOne).toHaveBeenCalledOnce();
+      expect(investmentRepository.findOne).toHaveBeenCalledWith(7, 42);
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects updates that change an event type or status', async () => {
       repository.findOne.mockResolvedValue(event());
 
       await expect(
@@ -258,7 +362,7 @@ describe('InvestmentEventsService', () => {
           eventType: InvestmentEventType.INCOME_CREDIT,
           status: InvestmentEventStatus.PENDING,
         }, 42),
-      ).rejects.toThrow('Income credit must be recorded as a confirmed event.');
+      ).rejects.toThrow('Only the activity amount, date, and notes can be edited.');
       expect(repository.update).not.toHaveBeenCalled();
     });
 
@@ -296,6 +400,15 @@ describe('InvestmentEventsService', () => {
       investmentRepository.findOne.mockResolvedValue({ status: 'closed' });
 
       await expect(service.remove('3', 42)).rejects.toThrow('Closed investments cannot be modified.');
+      expect(repository.delete).not.toHaveBeenCalled();
+    });
+
+    it('rejects deleting an activity managed by another workflow', async () => {
+      repository.findOne.mockResolvedValue(event({ eventType: InvestmentEventType.BENEFIT_RECEIPT }));
+
+      await expect(service.remove('3')).rejects.toThrow(
+        'This activity must be managed through its owning workflow.',
+      );
       expect(repository.delete).not.toHaveBeenCalled();
     });
 

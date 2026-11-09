@@ -5,7 +5,6 @@ import { InvestmentEventsService } from '../investment-events/investment-events.
 import { ValuationSnapshotsService } from '../valuation-snapshots/valuation-snapshots.service';
 import { CreateInvestmentDto } from './dto/create-investment.dto';
 import {
-  InvestmentDashboardCategoryPerformanceRowDto,
   InvestmentDashboardSummaryDto,
   InvestmentValueSourceSummaryDto,
 } from './dto/dashboard-analytics-response.dto';

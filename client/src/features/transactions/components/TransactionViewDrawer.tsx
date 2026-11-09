@@ -1,4 +1,6 @@
-import { Box, Divider, Stack, Typography } from "@mui/material";
+import { Alert, AlertTitle, Box, Divider, Stack, Tooltip, Typography } from "@mui/material";
+import Icon from "@mdi/react";
+import { mdiOpenInNew } from "@mdi/js";
 import Button from "../../../components/common/AppButton";
 import { SectionCard, StatusChip } from "../../../components/common";
 import AppDrawer from "../../../components/drawers/AppDrawer";
@@ -12,6 +14,7 @@ interface TransactionViewDrawerProps {
   accountNameById?: Record<number, string>;
   onDelete?: (transaction: TransactionRecord) => void;
   onEdit?: (transaction: TransactionRecord) => void;
+  onViewInvestment?: (investmentId: string) => void;
 }
 
 import { useCurrencyFormatter } from "../../../utils/currency";
@@ -25,15 +28,19 @@ export function TransactionViewDrawer({
   accountNameById = {},
   onDelete,
   onEdit,
+  onViewInvestment,
 }: TransactionViewDrawerProps) {
   const formatCurrency = useCurrencyFormatter();
   const formatDate = useDateFormatter();
+  const isInvestmentLinked = transaction?.investment?.id != null;
+  const restriction = "Linked investment activity cannot be edited or deleted separately.";
   const footer = (
     <Box
       sx={{
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
+        flexWrap: "wrap",
         gap: 1.5,
       }}
     >
@@ -41,25 +48,35 @@ export function TransactionViewDrawer({
         Close
       </Button>
       {transaction ? (
-        <Box sx={{ display: "flex", gap: 1 }}>
+        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
           {onDelete ? (
-            <Button
-              type="button"
-              color="error"
-              variant="outlined"
-              onClick={() => onDelete(transaction)}
-            >
-              Delete
-            </Button>
+            <Tooltip title={isInvestmentLinked ? restriction : ""}>
+              <span>
+                <Button
+                  type="button"
+                  color="error"
+                  variant="outlined"
+                  disabled={isInvestmentLinked}
+                  onClick={() => onDelete(transaction)}
+                >
+                  Delete
+                </Button>
+              </span>
+            </Tooltip>
           ) : null}
           {onEdit ? (
-            <Button
-              type="button"
-              variant="contained"
-              onClick={() => onEdit(transaction)}
-            >
-              Edit Transaction
-            </Button>
+            <Tooltip title={isInvestmentLinked ? restriction : ""}>
+              <span>
+                <Button
+                  type="button"
+                  variant="contained"
+                  disabled={isInvestmentLinked}
+                  onClick={() => onEdit(transaction)}
+                >
+                  Edit Transaction
+                </Button>
+              </span>
+            </Tooltip>
           ) : null}
         </Box>
       ) : null}
@@ -97,6 +114,24 @@ export function TransactionViewDrawer({
         </SectionCard>
       ) : (
         <Stack spacing={2}>
+          {isInvestmentLinked ? (
+            <Alert severity="info" sx={{ overflowWrap: "anywhere" }}>
+              <AlertTitle>Linked investment transaction</AlertTitle>
+              This transaction was recorded as part of investment activity for{" "}
+              <strong>{transaction.investment?.name}</strong> and cannot be edited or deleted separately.
+              {onViewInvestment && transaction.investment ? (
+                <Box sx={{ mt: 1 }}>
+                  <Button
+                    size="small"
+                    startIcon={<Icon path={mdiOpenInNew} size={0.7} />}
+                    onClick={() => onViewInvestment(String(transaction.investment!.id))}
+                  >
+                    View Investment
+                  </Button>
+                </Box>
+              ) : null}
+            </Alert>
+          ) : null}
           <SectionCard>
             <Box
               sx={{

@@ -120,6 +120,13 @@ describe('GoalPrismaRepository', () => {
       await expect(repository.update(7, {}, 42)).resolves.toBeNull();
       expect(prisma.goal.update).not.toHaveBeenCalled();
     });
+
+    it('rejects a malformed deadline before issuing an update', async () => {
+      prisma.goal.findFirst.mockResolvedValue(goalRow());
+
+      await expect(repository.update(7, { deadline: 'not-a-date' } as never, 42)).rejects.toThrow();
+      expect(prisma.goal.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('delete', () => {

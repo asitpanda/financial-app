@@ -9,8 +9,8 @@ import { AuthService } from './auth.service';
 import { UserPreferencesService } from '../user-preferences/user-preferences.service';
 
 vi.mock('bcrypt', () => ({
-  compare: vi.fn(),
-  hash: vi.fn(),
+  compare: vi.fn<(data: string, encrypted: string) => Promise<boolean>>(),
+  hash: vi.fn<(data: string, saltOrRounds: number | string) => Promise<string>>(),
 }));
 
 const initialUsers = registeredUsers.map((user) => ({ ...user }));
@@ -56,8 +56,8 @@ beforeEach(() => {
     registeredUsers.length,
     ...initialUsers.map((user) => ({ ...user })),
   );
-  vi.mocked(bcrypt.hash).mockResolvedValue('hashed-password');
-  vi.mocked(bcrypt.compare).mockResolvedValue(true);
+  vi.mocked(bcrypt.hash).mockResolvedValue('hashed-password' as never);
+  vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
 });
 
 describe('AuthService', () => {
@@ -106,6 +106,32 @@ describe('AuthService', () => {
       });
     });
 
+    it('stores null for omitted optional identifiers and blank profile fields', async () => {
+      const { service, prisma } = createAuthService();
+      prisma.user.findFirst.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue({ ...databaseUser, name: null });
+
+      await service.register({
+        email: ' person@example.com ',
+        password: 'secret',
+        name: '   ',
+        userId: '   ',
+        mobile: '   ',
+      });
+
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: { OR: [{ email: 'person@example.com' }] },
+      });
+      expect(prisma.user.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          email: 'person@example.com',
+          userId: null,
+          mobile: null,
+          name: null,
+        }),
+      });
+    });
+
     it.each([
       ['email', { email: 'person@example.com' }, 'Email already exists'],
       ['user ID', { userId: 'ada23' }, 'User ID already taken'],
@@ -122,6 +148,25 @@ describe('AuthService', () => {
           password: 'secret',
         }),
       ).rejects.toThrow(new ConflictException(message));
+      expect(bcrypt.hash).not.toHaveBeenCalled();
+      expect(prisma.user.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a conflicting registration when the existing row matches no normalized identifier', async () => {
+      const { service, prisma } = createAuthService();
+      prisma.user.findFirst.mockResolvedValue({
+        ...databaseUser,
+        email: 'different@example.com',
+        userId: 'different-id',
+        mobile: '+19999999999',
+      });
+
+      await expect(service.register({
+        email: 'person@example.com',
+        password: 'secret',
+        userId: 'ada23',
+        mobile: '+15555555555',
+      })).rejects.toThrow(new ConflictException('A user with provided credentials already exists'));
       expect(bcrypt.hash).not.toHaveBeenCalled();
       expect(prisma.user.create).not.toHaveBeenCalled();
     });
@@ -206,7 +251,7 @@ describe('AuthService', () => {
     it('rejects an incorrect database password', async () => {
       const { service, prisma, jwtService } = createAuthService();
       prisma.user.findFirst.mockResolvedValue(databaseUser);
-      vi.mocked(bcrypt.compare).mockResolvedValue(false);
+      vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
 
       await expect(
         service.login({ identifier: 'person@example.com', password: 'wrong' }),

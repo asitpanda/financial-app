@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CategoryMockRepository } from './category.mock.repository';
 
 describe('CategoryMockRepository', () => {
@@ -23,6 +23,24 @@ describe('CategoryMockRepository', () => {
       expect(created.createdAt).toBeInstanceOf(Date);
       expect(created.updatedAt).toBeInstanceOf(Date);
       await expect(repository.findAll(9102)).resolves.toEqual([]);
+    });
+
+    it('starts category IDs at one when the mock store is empty', async () => {
+      vi.doMock('../../mockdata', () => ({ mockCategoriesData: [] }));
+      vi.resetModules();
+
+      try {
+        const { CategoryMockRepository: EmptyStoreRepository } = await import('./category.mock.repository');
+        const created = await new EmptyStoreRepository().create({
+          name: 'First category',
+          type: 'expense',
+        } as never, 42);
+
+        expect(created.id).toBe(1);
+      } finally {
+        vi.doUnmock('../../mockdata');
+        vi.resetModules();
+      }
     });
   });
 

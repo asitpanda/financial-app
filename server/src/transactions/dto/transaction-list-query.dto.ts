@@ -32,8 +32,10 @@ export class TransactionListQueryDto
   type?: TransactionType;
 
   @IsOptional()
-  @Transform(({ value }) => (value === '' ? undefined : value))
-  @Type(() => Number)
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) return value === '' ? undefined : value;
+    return Number(value);
+  })
   @IsInt()
   @Min(1)
   categoryId?: number;

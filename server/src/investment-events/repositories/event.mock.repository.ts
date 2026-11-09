@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InvestmentEventType } from '@prisma/client';
 import type { InvestmentEventRecord } from '../investment-event.types';
 import { CreateInvestmentEventDto } from '../dto/create-investment-event.dto';
@@ -121,6 +121,10 @@ export class EventMockRepository implements IEventDataSourcePort {
     const index = mockInvestmentEvents.findIndex((event) => event.id === Number(id));
     if (index === -1) return null;
 
+    if (mockInvestmentEvents[index].linkedTransactionId != null) {
+      throw new BadRequestException('Linked activity corrections require the database provider.');
+    }
+
     mockInvestmentEvents[index] = {
       ...mockInvestmentEvents[index],
       ...data,
@@ -158,6 +162,9 @@ export class EventMockRepository implements IEventDataSourcePort {
 
   async delete(id: string): Promise<void> {
     const existing = mockInvestmentEvents.find((event) => event.id === Number(id));
+    if (existing?.linkedTransactionId != null) {
+      throw new BadRequestException('Linked activity corrections require the database provider.');
+    }
     mockInvestmentEvents = mockInvestmentEvents.filter((event) => event.id !== Number(id));
     if (existing?.investmentId) {
       syncInvestmentDerivedValues(existing.investmentId);

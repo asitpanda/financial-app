@@ -70,6 +70,27 @@ describe('RecurringScheduleCalculator', () => {
       ).toEqual([]);
     });
 
+    it('returns no dates when the cutoff precedes the anchor even without an end date', () => {
+      expect(calculator.calculateDueDates({
+        anchorDate: '2026-01-04',
+        cadenceUnit: 'day',
+        cadenceInterval: 1,
+        cutoffDate: '2026-01-03',
+      })).toEqual([]);
+    });
+
+    it('uses the cutoff when it comes before the plan end date', () => {
+      const result = calculator.calculateDueDates({
+        anchorDate: '2026-01-01',
+        cadenceUnit: 'day',
+        cadenceInterval: 1,
+        cutoffDate: '2026-01-03',
+        endDate: '2026-01-05',
+      });
+
+      expect(dates(result)).toEqual(['2026-01-01', '2026-01-02', '2026-01-03']);
+    });
+
     it.each([0, -1, 1.5])('rejects cadence interval %s', (cadenceInterval) => {
       expect(() =>
         calculator.calculateDueDates({
@@ -90,6 +111,22 @@ describe('RecurringScheduleCalculator', () => {
           cutoffDate: '2026-01-10',
         }),
       ).toThrow('Invalid date value');
+    });
+
+    it('rejects a malformed cutoff or end date', () => {
+      const params = {
+        anchorDate: '2026-01-01',
+        cadenceUnit: 'day' as const,
+        cadenceInterval: 1,
+        cutoffDate: '2026-01-10',
+      };
+
+      expect(() => calculator.calculateDueDates({ ...params, cutoffDate: 'not-a-date' })).toThrow(
+        'Invalid date value',
+      );
+      expect(() => calculator.calculateDueDates({ ...params, endDate: 'not-a-date' })).toThrow(
+        'Invalid date value',
+      );
     });
   });
 
@@ -126,6 +163,37 @@ describe('RecurringScheduleCalculator', () => {
       });
 
       expect(result?.toISOString()).toBe('2026-01-01T00:00:00.000Z');
+    });
+
+    it('returns null when the plan end date precedes the anchor and reference date', () => {
+      const result = calculator.firstDueDateOnOrAfter({
+        anchorDate: '2026-01-10',
+        cadenceUnit: 'day',
+        cadenceInterval: 1,
+        referenceDate: '2026-01-05',
+        endDate: '2026-01-09',
+      });
+
+      expect(result).toBeNull();
+    });
+
+    it('rejects invalid intervals and malformed reference or end dates', () => {
+      const params = {
+        anchorDate: '2026-01-01',
+        cadenceUnit: 'day' as const,
+        cadenceInterval: 1,
+        referenceDate: '2026-01-10',
+      };
+
+      expect(() => calculator.firstDueDateOnOrAfter({ ...params, cadenceInterval: 0 })).toThrow(
+        'cadenceInterval must be an integer greater than 0',
+      );
+      expect(() => calculator.firstDueDateOnOrAfter({ ...params, referenceDate: 'not-a-date' })).toThrow(
+        'Invalid date value',
+      );
+      expect(() => calculator.firstDueDateOnOrAfter({ ...params, endDate: 'not-a-date' })).toThrow(
+        'Invalid date value',
+      );
     });
   });
 });

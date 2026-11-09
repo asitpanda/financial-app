@@ -51,6 +51,17 @@ describe('LockerMockRepository', () => {
   });
 
   describe('createRecord', () => {
+    it('creates a record beneath an entity owned by the requester', async () => {
+      await repository.createEntity(entityData('entity-a'), 42);
+
+      await expect(repository.createRecord(recordData('record-a', 'entity-a'), 42)).resolves.toMatchObject({
+        uid: 'record-a',
+        entityUid: 'entity-a',
+        values: { 'field-entity-a': 'value' },
+      });
+      await expect(repository.findRecords('entity-a', 42)).resolves.toMatchObject([{ uid: 'record-a' }]);
+    });
+
     it('refuses to attach a record to an entity the user does not own', async () => {
       await repository.createEntity(entityData('entity-a'), 7);
 
@@ -88,6 +99,17 @@ describe('LockerMockRepository', () => {
       await expect(repository.findEntities(42)).resolves.toEqual([]);
       await expect(repository.findRecords(undefined, 42)).resolves.toEqual([]);
       await expect(repository.findRecords(undefined, 7)).resolves.toMatchObject([{ uid: 'record-b' }]);
+    });
+
+    it('does nothing when the entity is missing or not owned by the requester', async () => {
+      await repository.createEntity(entityData('entity-a'), 7);
+      await repository.createRecord(recordData('record-a', 'entity-a'), 7);
+
+      await repository.deleteEntity('missing', 42);
+      await repository.deleteEntity('entity-a', 42);
+
+      await expect(repository.findEntities(7)).resolves.toMatchObject([{ uid: 'entity-a' }]);
+      await expect(repository.findRecords(undefined, 7)).resolves.toMatchObject([{ uid: 'record-a' }]);
     });
   });
 

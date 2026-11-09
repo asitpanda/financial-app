@@ -4,7 +4,7 @@ import type {
   DashboardInvestmentSummary,
   DashboardPageData,
 } from "../dashboard.types";
-import { getStableSeriesColorMap } from "../../../colors";
+import { getChipColors, getStableSeriesColorMap } from "../../../colors";
 import { useTheme } from "@mui/material/styles";
 import { useCurrencyFormatter } from "../../../utils/currency";
 import { useDateFormatter } from "../../../utils/date";
@@ -140,16 +140,17 @@ export default function DashboardInvestmentsSection({
               {investmentSummary.actionItemsTotalCount === 0 ? (
                 <span
                   className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
-                  style={{ backgroundColor: theme.palette.success.light, color: theme.palette.success.dark }}
+                  style={getChipColors(theme.palette.mode, "success")}
                 >
                   ✓ All caught up
                 </span>
               ) : (
                 <span
                   className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
-                  style={investmentSummary.actionItems[0]?.kind === "overdue"
-                    ? { backgroundColor: theme.palette.error.light, color: theme.palette.error.dark }
-                    : { backgroundColor: theme.palette.warning.light, color: theme.palette.warning.dark }}
+                  style={getChipColors(
+                    theme.palette.mode,
+                    investmentSummary.actionItems[0]?.kind === "overdue" ? "error" : "warning",
+                  )}
                 >
                   ⚠ {investmentSummary.actionItemsTotalCount} need
                   {investmentSummary.actionItemsTotalCount === 1 ? "s" : ""}{" "}
@@ -172,11 +173,10 @@ export default function DashboardInvestmentsSection({
                       <div className="mt-0.5 flex items-center gap-1.5">
                         <span
                           className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
-                          style={item.kind === "overdue"
-                            ? { backgroundColor: theme.palette.error.light, color: theme.palette.error.dark }
-                            : item.kind === "due"
-                              ? { backgroundColor: theme.palette.warning.light, color: theme.palette.warning.dark }
-                              : { backgroundColor: theme.palette.info.light, color: theme.palette.info.dark }}
+                          style={getChipColors(
+                            theme.palette.mode,
+                            item.kind === "overdue" ? "error" : item.kind === "due" ? "warning" : "info",
+                          )}
                         >
                           {ACTION_TAG_LABELS[item.kind]}
                         </span>

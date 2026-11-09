@@ -29,6 +29,33 @@ describe('BenefitMockRepository', () => {
         notes: null,
       });
     });
+
+    it('starts benefit and event IDs at one when all mock stores are empty', async () => {
+      vi.doMock('../../mockdata/investments', () => ({
+        mockInvestmentsData: [{ id: 5, userId: 1, status: 'active', currentValue: 100 }],
+      }));
+      vi.doMock('../../mockdata/investmentBenefits', () => ({ mockInvestmentBenefitsData: [] }));
+      vi.doMock('../../mockdata', () => ({ mockInvestmentEventsData: [] }));
+      vi.resetModules();
+
+      try {
+        const { BenefitMockRepository: EmptyRepository } = await import('./benefit.mock.repository');
+        const emptyRepository = new EmptyRepository();
+        const created = await emptyRepository.quickRealize('5', 1, {
+          benefitType: InvestmentBenefitType.OTHER,
+          eventType: InvestmentEventType.BENEFIT_RECEIPT,
+          amount: 25,
+        } as never);
+
+        expect(created.benefit.id).toBe(1);
+        expect(created.events[0].id).toBe(1);
+      } finally {
+        vi.doUnmock('../../mockdata/investments');
+        vi.doUnmock('../../mockdata/investmentBenefits');
+        vi.doUnmock('../../mockdata');
+        vi.resetModules();
+      }
+    });
   });
 
   describe('findAll', () => {
@@ -86,6 +113,26 @@ describe('BenefitMockRepository', () => {
       expect(updated).toMatchObject({ amount: 51000, status: InvestmentBenefitStatus.CANCELLED });
       await expect(repository.update('987654', { amount: 1 })).resolves.toBeNull();
     });
+
+    it('applies supplied fields and clears nullable destination and notes', async () => {
+      const updated = await repository.update('101', {
+        benefitType: InvestmentBenefitType.OTHER,
+        amount: 12,
+        benefitDate: '2027-01-02T00:00:00.000Z',
+        status: InvestmentBenefitStatus.CANCELLED,
+        destinationAccountId: null,
+        notes: null,
+      });
+
+      expect(updated).toMatchObject({
+        benefitType: InvestmentBenefitType.OTHER,
+        amount: 12,
+        benefitDate: new Date('2027-01-02T00:00:00.000Z'),
+        status: InvestmentBenefitStatus.CANCELLED,
+        destinationAccountId: null,
+        notes: null,
+      });
+    });
   });
 
   describe('delete', () => {
@@ -111,6 +158,36 @@ describe('BenefitMockRepository', () => {
         eventType: InvestmentEventType.BENEFIT_RECEIPT,
       });
       await expect(repository.findOne('101')).resolves.toMatchObject({ status: InvestmentBenefitStatus.RECEIVED });
+    });
+
+    it('uses component event metadata and closes the investment when requested', async () => {
+      const eventDate = '2026-11-01T00:00:00.000Z';
+      const result = await repository.realize('101', '5', 1, {
+        components: [{
+          eventType: InvestmentEventType.BENEFIT_RECEIPT,
+          amount: 50000,
+          eventDate,
+          notes: 'Coupon paid',
+        }],
+        closesInvestment: true,
+      });
+
+      expect(result.events[0]).toMatchObject({
+        eventDate: new Date(eventDate),
+        notes: 'Coupon paid',
+      });
+      const { mockInvestmentsData } = await import('../../mockdata/investments');
+      expect(mockInvestmentsData.find(({ id }) => id === 5)).toMatchObject({ status: 'closed', currentValue: 0 });
+    });
+
+    it('rejects realizing a benefit that is missing or already received', async () => {
+      const data = { components: [{ eventType: InvestmentEventType.BENEFIT_RECEIPT, amount: 1 }] };
+
+      await expect(repository.realize('987654', '5', 1, data)).rejects.toThrow('Investment benefit not found');
+      await expect(repository.realize('101', '5', 1, data)).resolves.toMatchObject({
+        benefit: { status: InvestmentBenefitStatus.RECEIVED },
+      });
+      await expect(repository.realize('101', '5', 1, data)).rejects.toThrow('Investment benefit was already realized');
     });
 
     it('rejects realization when the benefit is not owned by the user', async () => {

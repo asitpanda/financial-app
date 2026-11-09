@@ -20,6 +20,7 @@ const invalidateInvestmentContributionQueries = (
   queryClient.invalidateQueries({ queryKey: ['investments', 'dashboard'] });
   queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   queryClient.invalidateQueries({ queryKey: ['investment-events'] });
+  queryClient.invalidateQueries({ queryKey: ['transactions'] });
   queryClient.invalidateQueries({ queryKey: ['investment', Number(investmentId)] });
 };
 

@@ -1,11 +1,11 @@
 import { Box, Typography } from '@mui/material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { DatePicker, type DatePickerProps } from '@mui/x-date-pickers/DatePicker';
 import type { Dayjs } from 'dayjs';
 import { useDatePattern } from '../../utils/date';
 
-type LabeledDateFieldProps = {
+type LabeledDateFieldProps = Pick<DatePickerProps, 'disabled' | 'readOnly' | 'disableFuture' | 'minDate' | 'maxDate'> & {
   labelText: string;
   value: Dayjs | null;
   onChange: (value: Dayjs | null) => void;
@@ -19,6 +19,7 @@ export default function LabeledDateField({
   onChange,
   errorMessage,
   helperText = '',
+  ...datePickerProps
 }: LabeledDateFieldProps) {
   const datePattern = useDatePattern();
   return (
@@ -41,6 +42,7 @@ export default function LabeledDateField({
       </Typography>
       <LocalizationProvider dateAdapter={AdapterDayjs}>
         <DatePicker
+          {...datePickerProps}
           format={datePattern}
           value={value}
           onChange={onChange}

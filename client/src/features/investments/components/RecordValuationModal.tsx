@@ -1,17 +1,16 @@
 // @ts-nocheck
 import React, { useState } from 'react';
-import { Alert, Box, Divider, Modal, Stack, TextField, Typography, Button, CircularProgress } from '@mui/material';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { Alert, Box, Divider, Modal, Stack, Typography, Button, CircularProgress } from '@mui/material';
 import dayjs from 'dayjs';
 import AppButton from '../../../components/common/AppButton';
+import LabelCurrencyField from '../../../components/common/LabelCurrencyField';
+import LabeledDateField from '../../../components/common/LabeledDateField';
+import LabeledTextField from '../../../components/common/LabeledTextField';
 import { useNotificationStore } from '../../../store/notificationStore';
 import { useSaveInvestmentSnapshot } from '../hooks/useInvestmentSnapshots';
 import { getRuntimeErrorMessage } from '../../../utils/errorMessage';
 import { useCurrencyFormatter } from '../../../utils/currency';
-import { useDateFormatter, useDatePattern } from '../../../utils/date';
-import { usePreferencesStore } from '../../../store/preferencesStore';
+import { useDateFormatter } from '../../../utils/date';
 
 const modalStyle = {
   position: 'absolute',
@@ -41,11 +40,6 @@ export default function RecordValuationModal({
 }) {
   const formatCurrency = useCurrencyFormatter();
   const formatDate = useDateFormatter();
-  const datePattern = useDatePattern();
-  const currencyDisplay = usePreferencesStore((state) => state.preferences?.currencyDisplay ?? 'symbol');
-  const currencyMarker = new Intl.NumberFormat('en-IN', {
-    style: 'currency', currency, currencyDisplay,
-  }).formatToParts(0).find((part) => part.type === 'currency')?.value ?? currency;
   const getInitialFormData = React.useCallback(
     (currentSnapshot) => ({
       snapshotDate: currentSnapshot?.snapshotDate
@@ -213,60 +207,31 @@ export default function RecordValuationModal({
             recurring contribution.
           </Alert>
 
-          {/* Snapshot Date */}
-          <Box>
-            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.75 }}>
-              Snapshot Date *
-            </Typography>
-            <LocalizationProvider dateAdapter={AdapterDayjs}>
-              <DatePicker
-                value={formData.snapshotDate ? dayjs(formData.snapshotDate) : null}
-                onChange={(value) =>
-                  handleInputChange(
-                    'snapshotDate',
-                    value && value.isValid() ? value.format('YYYY-MM-DD') : '',
-                  )
-                }
-                disabled={loading}
-                disableFuture
-                maxDate={todayDate}
-                format={datePattern}
-                slotProps={{
-                  textField: {
-                    fullWidth: true,
-                    size: 'small',
-                    placeholder: 'Select snapshot date',
-                    inputProps: {
-                      readOnly: true,
-                    },
-                  },
-                }}
-              />
-            </LocalizationProvider>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-              Future dates are not allowed for valuation snapshots.
-            </Typography>
-          </Box>
+          <LabeledDateField
+            labelText="Snapshot Date *"
+            value={formData.snapshotDate ? dayjs(formData.snapshotDate) : null}
+            onChange={(value) =>
+              handleInputChange(
+                'snapshotDate',
+                value && value.isValid() ? value.format('YYYY-MM-DD') : '',
+              )
+            }
+            disabled={loading}
+            disableFuture
+            maxDate={todayDate}
+            helperText="Future dates are not allowed for valuation snapshots."
+          />
 
           {/* Current Value */}
-          <Box>
-            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.75 }}>
-              Total Asset Value On That Date ({currencyMarker}) *
-            </Typography>
-            <TextField
-              type="number"
-              fullWidth
-              placeholder="e.g., 458000"
-              value={formData.marketValue}
-              onChange={(e) => handleInputChange('marketValue', e.target.value)}
-              disabled={loading}
-              size="small"
-              inputProps={{ step: '1', min: '0' }}
-            />
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block', lineHeight: 1.5 }}>
-              Enter the investment’s total value on the selected date, including principal and any interest, profit, or market gains. This is recorded as a valuation snapshot and does not affect your contribution history.
-            </Typography>
-          </Box>
+          <LabelCurrencyField
+            labelText="Total Asset Value On That Date *"
+            currencyCode={currency}
+            placeholder="e.g., 458000"
+            value={formData.marketValue}
+            onValueChange={(value) => handleInputChange('marketValue', value)}
+            disabled={loading}
+            helperText="Enter the investment's total value on the selected date, including principal and any interest, profit, or market gains. This is recorded as a valuation snapshot and does not affect your contribution history."
+          />
 
           <Box>
             <Button
@@ -283,37 +248,24 @@ export default function RecordValuationModal({
 
           {showAdvancedFields ? (
             <>
-              <Box>
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.75 }}>
-                  Units (Optional)
-                </Typography>
-                <TextField
-                  type="number"
-                  fullWidth
-                  placeholder="e.g., 100"
-                  value={formData.units}
-                  onChange={(e) => handleInputChange('units', e.target.value)}
-                  disabled={loading}
-                  size="small"
-                  inputProps={{ step: '0.01', min: '0' }}
-                />
-              </Box>
+              <LabeledTextField
+                labelText="Units (Optional)"
+                type="number"
+                placeholder="e.g., 100"
+                value={formData.units}
+                onChange={(event) => handleInputChange('units', event.target.value)}
+                disabled={loading}
+                slotProps={{ htmlInput: { step: '0.01', min: '0' } }}
+              />
 
-              <Box>
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.75 }}>
-                  Price per Unit ({currencyMarker}) (Optional)
-                </Typography>
-                <TextField
-                  type="number"
-                  fullWidth
-                  placeholder="e.g., 4580"
-                  value={formData.price}
-                  onChange={(e) => handleInputChange('price', e.target.value)}
-                  disabled={loading}
-                  size="small"
-                  inputProps={{ step: '0.01', min: '0' }}
-                />
-              </Box>
+              <LabelCurrencyField
+                labelText="Price per Unit (Optional)"
+                currencyCode={currency}
+                placeholder="e.g., 4580"
+                value={formData.price}
+                onValueChange={(value) => handleInputChange('price', value)}
+                disabled={loading}
+              />
             </>
           ) : null}
         </Stack>

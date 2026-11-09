@@ -53,6 +53,13 @@ describe('CategoriesService', () => {
       await expect(service.findAll(12)).resolves.toBe(categories);
       expect(repository.findAll).toHaveBeenCalledWith(12);
     });
+
+    it('returns the categories provided by the repository unchanged', async () => {
+      const categories = [{ id: 4, userId: 12, name: 'Food', type: 'expense' }] as never[];
+      repository.findAll.mockResolvedValue(categories);
+
+      await expect(service.findAll(12)).resolves.toBe(categories);
+    });
   });
 
   describe('findOne', () => {
@@ -61,6 +68,13 @@ describe('CategoriesService', () => {
 
       await expect(service.findOne(404, 12)).resolves.toBeNull();
       expect(repository.findOne).toHaveBeenCalledWith(404, 12);
+    });
+
+    it('returns the category provided by the repository', async () => {
+      const category = { id: 4, userId: 12, name: 'Food' };
+      repository.findOne.mockResolvedValue(category);
+
+      await expect(service.findOne(4, 12)).resolves.toBe(category);
     });
   });
 

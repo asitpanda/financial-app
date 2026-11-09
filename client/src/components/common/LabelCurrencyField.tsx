@@ -62,6 +62,7 @@ export default function LabelCurrencyField({
         {labelText}
       </Typography>
       <NumericFormat
+        {...textFieldProps}
         customInput={TextField}
         value={value ?? ''}
         thousandSeparator
@@ -80,6 +81,10 @@ export default function LabelCurrencyField({
         helperText={errorMessage || helperText}
         slotProps={{
           ...textFieldProps.slotProps,
+          htmlInput: {
+            'aria-label': labelText,
+            ...textFieldProps.slotProps?.htmlInput,
+          },
           formHelperText: {
             ...textFieldProps.slotProps?.formHelperText,
             ...helperSlotProps,
@@ -93,7 +98,6 @@ export default function LabelCurrencyField({
           },
           ...sx,
         }}
-        {...textFieldProps}
       />
     </Box>
   );

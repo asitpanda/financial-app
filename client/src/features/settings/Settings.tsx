@@ -77,7 +77,6 @@ export default function Settings() {
                 "&.Mui-selected": {
                   bgcolor: "primary.main", color: "primary.contrastText",
                   "&:hover": { bgcolor: "primary.dark" },
-                  "&.Mui-disabled": { bgcolor: "action.disabledBackground", color: "text.disabled" },
                 },
               },
             }}

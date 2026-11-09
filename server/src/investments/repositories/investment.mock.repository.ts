@@ -134,7 +134,7 @@ export class InvestmentMockRepository implements IInvestmentDataSourcePort {
     ownedInvestments.sort((left, right) => {
       const leftValue = left[sortField as keyof InvestmentRecord];
       const rightValue = right[sortField as keyof InvestmentRecord];
-      if (leftValue == null) return rightValue == null ? 0 : 1;
+      if (leftValue == null) return rightValue == null ? left.id - right.id : 1;
       if (rightValue == null) return -1;
       const comparison = leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
       return comparison === 0 ? left.id - right.id : comparison * sortDirection;

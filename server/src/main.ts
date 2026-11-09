@@ -1,3 +1,4 @@
+import { basename } from 'node:path';
 import { NestFactory } from '@nestjs/core';
 import { BadRequestException, ValidationPipe, ValidationError } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -66,7 +67,7 @@ function sanitizeBody(body: unknown): unknown {
   return sanitized;
 }
 
-async function bootstrap() {
+export async function bootstrap() {
   const { dbProvider } = validateRuntimeConfig();
   const app = await NestFactory.create(AppModule);
   const isJsonLogFormat = String(process.env.LOG_FORMAT || '').toLowerCase() === 'json';
@@ -222,4 +223,7 @@ async function bootstrap() {
   console.log(`📚 Swagger docs available at http://localhost:${port}/api/docs`);
 }
 
-bootstrap();
+const entryFile = basename(process.argv[1] ?? '');
+if (entryFile === 'main.js' || entryFile === 'main.ts') {
+  void bootstrap();
+}

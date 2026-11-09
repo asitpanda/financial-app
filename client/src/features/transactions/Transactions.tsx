@@ -7,7 +7,7 @@ import {
   mdiSwapHorizontal,
   mdiTrendingUp,
 } from "@mdi/js";
-import { Alert, Box, IconButton, Typography } from "@mui/material";
+import { Alert, Box, IconButton, Tooltip, Typography } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs, { type Dayjs } from "dayjs";
@@ -38,6 +38,7 @@ import { useNotificationStore } from "../../store/notificationStore";
 import {
   closeDialog,
   closeDrawer,
+  navigateTo,
   openDialog,
   openDrawer,
 } from "../../services/navigation";
@@ -359,10 +360,13 @@ export default function Transactions({
   const isTransactionFormDrawerOpen =
     drawerOpen &&
     drawerType === "transaction" &&
-    (drawerMode === "create" || drawerMode === "edit");
+    (drawerMode === "create" || drawerMode === "edit") &&
+    !(drawerMode === "edit" && selectedTransaction?.investment?.id != null);
 
   const isTransactionViewDrawerOpen =
-    drawerOpen && drawerType === "transaction" && drawerMode === "view";
+    drawerOpen && drawerType === "transaction" &&
+    (drawerMode === "view" ||
+      (drawerMode === "edit" && selectedTransaction?.investment?.id != null));
   const isStatementView = accountFilter !== "all";
 
   const createTransactionInitialValues = useMemo(() => {
@@ -475,7 +479,7 @@ export default function Transactions({
   const openEditDrawer = useCallback((transaction: TransactionRecord) => {
     openDrawer({
       type: "transaction",
-      mode: "edit",
+      mode: transaction.investment?.id != null ? "view" : "edit",
       entityId: getTransactionId(transaction),
       step: "form",
     });
@@ -666,6 +670,8 @@ export default function Transactions({
         renderCell: (params) => {
           const row = params.row as TransactionTableRow;
           const transactionName = row.category || "transaction";
+          const isInvestmentLinked = row.tx.investment?.id != null;
+          const restriction = "Linked investment activity cannot be edited or deleted separately.";
 
           return (
             <Box
@@ -685,30 +691,38 @@ export default function Transactions({
               >
                 <Icon path={mdiEyeOutline} size={0.8} />
               </IconButton>
-              <IconButton
-                size="small"
-                title={`Edit ${transactionName}`}
-                aria-label={`Edit ${transactionName}`}
-                onClick={() => openEditDrawer(row.tx)}
-                sx={{ minWidth: 36, width: 36, height: 36, p: 0 }}
-              >
-                <Icon path={mdiPencilOutline} size={0.8} />
-              </IconButton>
-              <IconButton
-                size="small"
-                color="error"
-                title={`Delete ${transactionName}`}
-                aria-label={`Delete ${transactionName}`}
-                onClick={() =>
-                  openDialog("confirmDelete", {
-                    entity: "transaction",
-                    id: row.id,
-                  })
-                }
-                sx={{ minWidth: 36, width: 36, height: 36, p: 0 }}
-              >
-                <Icon path={mdiDeleteOutline} size={0.8} />
-              </IconButton>
+              <Tooltip title={isInvestmentLinked ? restriction : `Edit ${transactionName}`}>
+                <span>
+                  <IconButton
+                    size="small"
+                    disabled={isInvestmentLinked}
+                    aria-label={`Edit ${transactionName}`}
+                    onClick={() => openEditDrawer(row.tx)}
+                    sx={{ minWidth: 36, width: 36, height: 36, p: 0 }}
+                  >
+                    <Icon path={mdiPencilOutline} size={0.8} />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <Tooltip title={isInvestmentLinked ? restriction : `Delete ${transactionName}`}>
+                <span>
+                  <IconButton
+                    size="small"
+                    color="error"
+                    disabled={isInvestmentLinked}
+                    aria-label={`Delete ${transactionName}`}
+                    onClick={() =>
+                      openDialog("confirmDelete", {
+                        entity: "transaction",
+                        id: row.id,
+                      })
+                    }
+                    sx={{ minWidth: 36, width: 36, height: 36, p: 0 }}
+                  >
+                    <Icon path={mdiDeleteOutline} size={0.8} />
+                  </IconButton>
+                </span>
+              </Tooltip>
             </Box>
           );
         },
@@ -1041,6 +1055,10 @@ export default function Transactions({
           transaction={selectedTransaction}
           goalName={selectedTransactionGoalName}
           accountNameById={accountNameById}
+          onViewInvestment={(investmentId) => {
+            closeDrawer();
+            navigateTo("investments", `?investmentId=${encodeURIComponent(investmentId)}`);
+          }}
           onEdit={(transaction) => {
             openEditDrawer(transaction);
           }}

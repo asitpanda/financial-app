@@ -937,7 +937,7 @@ export default function InvestmentFormDrawer({
                   ? "System-calculated from confirmed historical events."
                   : oneTimeAmountHelperText
               }
-              disabled={isRecurring || Boolean(initialValues)}
+              slotProps={{ input: { readOnly: isRecurring || Boolean(initialValues) } }}
             />
             <LabelCurrencyField
               currencyCode={currencyCode}
@@ -951,7 +951,7 @@ export default function InvestmentFormDrawer({
                     ? "Optional policy value; excluded from portfolio return totals."
                     : "Enter the observed value for the opening valuation snapshot."
               }
-              disabled={Boolean(initialValues) || (isRecurring && !isInsuranceSavings)}
+              slotProps={{ input: { readOnly: Boolean(initialValues) || (isRecurring && !isInsuranceSavings) } }}
             />
             <LabeledDateField
               labelText={isInsurance ? "Policy Term End Date (Optional)" : "Maturity Date (Optional)"}

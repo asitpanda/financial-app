@@ -62,6 +62,31 @@ describe('ValuationSnapshotPrismaRepository', () => {
   });
 
   describe('create', () => {
+    it('stores null units and price when the optional values are omitted', async () => {
+      prisma.$transaction.mockImplementation(async (callback: (transaction: unknown) => Promise<unknown>) => {
+        prisma.valuationSnapshot.create.mockResolvedValue(snapshotRow());
+        return callback(prisma);
+      });
+
+      await expect(repository.create({
+        userId: '42',
+        investmentId: '12',
+        snapshotDate: '2026-02-01T00:00:00.000Z',
+        marketValue: 150,
+      } as never)).resolves.toMatchObject({ units: null, price: null });
+
+      expect(prisma.valuationSnapshot.create).toHaveBeenCalledWith({
+        data: {
+          userId: 42,
+          investmentId: 12,
+          snapshotDate: new Date('2026-02-01T00:00:00.000Z'),
+          marketValue: 150,
+          units: null,
+          price: null,
+        },
+      });
+    });
+
     it('normalizes persisted fields and synchronizes derived values in a serializable transaction', async () => {
       const snapshotDate = '2026-02-01T00:00:00.000Z';
       const input = {
@@ -111,10 +136,11 @@ describe('ValuationSnapshotPrismaRepository', () => {
   describe('update', () => {
     it('normalizes changed values and synchronizes both investments in one transaction', async () => {
       const snapshotDate = '2026-03-01T00:00:00.000Z';
-      const input = { investmentId: '13', snapshotDate, units: '2.5', price: '' };
+      const input = { userId: '43', investmentId: '13', snapshotDate, units: '2.5', price: '' };
       prisma.$transaction.mockImplementation(async (callback: (transaction: unknown) => Promise<unknown>) => {
         prisma.valuationSnapshot.findUnique.mockResolvedValue(snapshotRow());
         prisma.valuationSnapshot.update.mockResolvedValue(snapshotRow({
+          userId: 43,
           investmentId: 13,
           snapshotDate: new Date(snapshotDate),
           units: 2.5,
@@ -127,11 +153,34 @@ describe('ValuationSnapshotPrismaRepository', () => {
 
       expect(prisma.valuationSnapshot.update).toHaveBeenCalledWith({
         where: { id: 7 },
-        data: { ...input, investmentId: 13, snapshotDate: new Date(snapshotDate), units: 2.5, price: null, userId: undefined },
+        data: { ...input, userId: 43, investmentId: 13, snapshotDate: new Date(snapshotDate), units: 2.5, price: null },
       });
       expect(syncInvestmentDerivedValues).toHaveBeenNthCalledWith(1, prisma, 12, false);
       expect(syncInvestmentDerivedValues).toHaveBeenNthCalledWith(2, prisma, 13, false);
       expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: 'Serializable' });
+    });
+
+    it('omits unchanged optional fields and synchronizes once for the same investment', async () => {
+      prisma.$transaction.mockImplementation(async (callback: (transaction: unknown) => Promise<unknown>) => {
+        prisma.valuationSnapshot.findUnique.mockResolvedValue(snapshotRow());
+        prisma.valuationSnapshot.update.mockResolvedValue(snapshotRow({ marketValue: 200 }));
+        return callback(prisma);
+      });
+
+      await expect(repository.update('7', { marketValue: 200 })).resolves.toMatchObject({ marketValue: 200 });
+
+      expect(prisma.valuationSnapshot.update).toHaveBeenCalledWith({
+        where: { id: 7 },
+        data: {
+          marketValue: 200,
+          userId: undefined,
+          investmentId: undefined,
+          snapshotDate: undefined,
+          units: undefined,
+          price: undefined,
+        },
+      });
+      expect(syncInvestmentDerivedValues).toHaveBeenCalledExactlyOnceWith(prisma, 12, false);
     });
 
     it('returns null without updating or synchronizing when the snapshot is missing', async () => {

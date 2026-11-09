@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { InvestmentEventSource, InvestmentEventStatus, InvestmentEventType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { InvestmentEventRecord } from '../investment-event.types';
@@ -169,12 +169,33 @@ export class EventPrismaRepository implements IEventDataSourcePort {
         data: updateData,
       });
 
+      if (existing?.linkedTransactionId != null) {
+        const linkedTransaction = await tx.transaction.update({
+          where: { id: existing.linkedTransactionId },
+          data: {
+            amount: data.amount !== undefined ? Number(updated.amount) : undefined,
+            date: data.eventDate !== undefined ? parseRequiredDateInput(data.eventDate, 'eventDate') : undefined,
+            notes: data.notes,
+          },
+        });
+        if (linkedTransaction.goalId != null) {
+          throw new BadRequestException('Goal-linked activity must be managed through its owning workflow.');
+        }
+        if (Number(updated.amount) > Number(existing.amount) && linkedTransaction.sourceAccountId != null) {
+          await this.assertAccountBalance(tx, linkedTransaction.sourceAccountId);
+        }
+        if (Number(updated.amount) < Number(existing.amount) && linkedTransaction.destinationAccountId != null) {
+          await this.assertAccountBalance(tx, linkedTransaction.destinationAccountId);
+        }
+      }
+
       const investmentIds = new Set<number>();
       if (existing?.investmentId) investmentIds.add(existing.investmentId);
       if (updated.investmentId) investmentIds.add(updated.investmentId);
 
       for (const investmentId of investmentIds) {
         await syncInvestmentDerivedValues(tx, investmentId);
+        await this.assertPrincipalBalance(tx, investmentId);
       }
 
       const linkedBenefitId =
@@ -183,7 +204,7 @@ export class EventPrismaRepository implements IEventDataSourcePort {
           : (existing as { linkedBenefitId?: number | null } | null)?.linkedBenefitId ?? null;
 
       return mapEventOutput({ ...updated, linkedBenefitId });
-    });
+    }, { isolationLevel: 'Serializable' });
   }
 
   async delete(id: string): Promise<void> {
@@ -196,9 +217,45 @@ export class EventPrismaRepository implements IEventDataSourcePort {
         where: { id: Number(id) },
       });
 
+      if (existing?.linkedTransactionId != null) {
+        const linkedTransaction = await tx.transaction.delete({ where: { id: existing.linkedTransactionId } });
+        if (linkedTransaction.goalId != null) {
+          throw new BadRequestException('Goal-linked activity must be managed through its owning workflow.');
+        }
+        if (linkedTransaction.destinationAccountId != null) {
+          await this.assertAccountBalance(tx, linkedTransaction.destinationAccountId);
+        }
+      }
+
       if (existing?.investmentId) {
         await syncInvestmentDerivedValues(tx, existing.investmentId);
+        await this.assertPrincipalBalance(tx, existing.investmentId);
       }
-    });
+    }, { isolationLevel: 'Serializable' });
+  }
+
+  private async assertPrincipalBalance(tx: Prisma.TransactionClient, investmentId: number) {
+    const investment = await tx.investment.findUnique({ where: { id: investmentId } });
+    if (Number(investment?.totalInvested ?? 0) < 0) {
+      throw new BadRequestException('This correction would leave withdrawals greater than invested principal.');
+    }
+  }
+
+  private async assertAccountBalance(tx: Prisma.TransactionClient, accountId: number) {
+    const [account, incoming, outgoing] = await Promise.all([
+      tx.financialAccount.findUnique({ where: { id: accountId } }),
+      tx.transaction.aggregate({
+        where: { destinationAccountId: accountId, type: { in: ['INCOME', 'TRANSFER', 'INVESTMENT'] } },
+        _sum: { amount: true },
+      }),
+      tx.transaction.aggregate({
+        where: { sourceAccountId: accountId, type: { in: ['EXPENSE', 'TRANSFER', 'INVESTMENT'] } },
+        _sum: { amount: true },
+      }),
+    ]);
+    const balance = Number(account?.openingBalance ?? 0) + Number(incoming._sum.amount ?? 0) - Number(outgoing._sum.amount ?? 0);
+    if (!account || balance < -0.005) {
+      throw new BadRequestException('This correction would leave the linked account with insufficient funds.');
+    }
   }
 }

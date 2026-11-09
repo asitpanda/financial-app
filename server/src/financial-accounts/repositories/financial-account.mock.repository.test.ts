@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { FinancialAccountMockRepository } from './financial-account.mock.repository';
 
 describe('FinancialAccountMockRepository', () => {
@@ -33,6 +33,29 @@ describe('FinancialAccountMockRepository', () => {
         expect(created.createdAt).toBeInstanceOf(Date);
       } finally {
         await repository.delete(String(created.id), String(userId));
+      }
+    });
+
+    it('starts account IDs at one when the mock stores are empty', async () => {
+      vi.doMock('../../mockdata', () => ({
+        mockFinancialAccountsData: [],
+        mockTransactionsStore: [],
+      }));
+      vi.resetModules();
+
+      try {
+        const { FinancialAccountMockRepository: EmptyStoreRepository } = await import('./financial-account.mock.repository');
+        const created = await new EmptyStoreRepository().create({
+          name: 'first',
+          displayName: 'First account',
+          accountType: 'cash',
+          currency: 'USD',
+        } as never, '42');
+
+        expect(created.id).toBe(1);
+      } finally {
+        vi.doUnmock('../../mockdata');
+        vi.resetModules();
       }
     });
   });

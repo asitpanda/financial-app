@@ -15,6 +15,11 @@ describe('User Preferences API', () => {
   let app: INestApplication;
   let token: string;
   let otherToken: string;
+  const defaultPreferences = {
+    currencyDisplay: 'symbol',
+    themeMode: 'light',
+    dateFormat: 'DD_MM_YYYY',
+  } as const;
 
   beforeAll(async () => {
     const config: Record<string, string> = {
@@ -35,7 +40,7 @@ describe('User Preferences API', () => {
   });
 
   beforeEach(async () => {
-    await app.get(UserPreferencesService).update(1, { currencyDisplay: 'symbol' });
+    await app.get(UserPreferencesService).update(1, defaultPreferences);
   });
 
   afterAll(async () => { if (app) await app.close(); });
@@ -50,7 +55,7 @@ describe('User Preferences API', () => {
       const response = await request(app.getHttpServer()).get('/api/users/me/preferences')
         .set('Authorization', `Bearer ${otherToken}`);
       expect(response.status).toBe(200);
-      expect(response.body).toEqual({ currencyDisplay: 'symbol' });
+      expect(response.body).toEqual(defaultPreferences);
     });
   });
 
@@ -65,17 +70,17 @@ describe('User Preferences API', () => {
       const saved = await request(app.getHttpServer()).patch('/api/users/me/preferences')
         .set('Authorization', `Bearer ${token}`).send({ currencyDisplay: 'code' });
       expect(saved.status).toBe(200);
-      expect(saved.body).toEqual({ currencyDisplay: 'code' });
+      expect(saved.body).toEqual({ ...defaultPreferences, currencyDisplay: 'code' });
       const profile = await request(app.getHttpServer()).get('/api/auth/me')
         .set('Authorization', `Bearer ${token}`);
-      expect(profile.body.preferences).toEqual({ currencyDisplay: 'code' });
+      expect(profile.body.preferences).toEqual({ ...defaultPreferences, currencyDisplay: 'code' });
       const login = await request(app.getHttpServer()).post('/api/auth/login')
         .send({ identifier: 'demo@example.com', password: '123456' });
-      expect(login.body.preferences).toEqual({ currencyDisplay: 'code' });
+      expect(login.body.preferences).toEqual({ ...defaultPreferences, currencyDisplay: 'code' });
       const other = await request(app.getHttpServer()).get('/api/users/me/preferences')
         .set('Authorization', `Bearer ${otherToken}`);
       expect(other.status).toBe(200);
-      expect(other.body).toEqual({ currencyDisplay: 'symbol' });
+      expect(other.body).toEqual(defaultPreferences);
     });
 
     it.each([
@@ -87,15 +92,20 @@ describe('User Preferences API', () => {
       const response = await request(app.getHttpServer()).patch('/api/users/me/preferences')
         .set('Authorization', `Bearer ${token}`).send(payload);
       expect(response.status).toBe(400);
-      expect(await app.get(UserPreferencesService).get(1)).toEqual({ currencyDisplay: 'symbol' });
+      expect(await app.get(UserPreferencesService).get(1)).toEqual(defaultPreferences);
     });
 
     it('preserves the saved choice for an empty patch', async () => {
-      await app.get(UserPreferencesService).update(1, { currencyDisplay: 'code' });
+      const savedPreferences = {
+        currencyDisplay: 'code',
+        themeMode: 'dark',
+        dateFormat: 'YYYY_MM_DD',
+      } as const;
+      await app.get(UserPreferencesService).update(1, savedPreferences);
       const response = await request(app.getHttpServer()).patch('/api/users/me/preferences')
         .set('Authorization', `Bearer ${token}`).send({});
       expect(response.status).toBe(200);
-      expect(response.body).toEqual({ currencyDisplay: 'code' });
+      expect(response.body).toEqual(savedPreferences);
     });
   });
 });

@@ -1,6 +1,7 @@
 import { createTheme } from '@mui/material/styles';
+import type {} from '@mui/x-date-pickers/themeAugmentation';
 import type { AppThemeMode } from '../store/themeStore';
-import { themeColors } from '../colors';
+import { getChipColors, themeColors } from '../colors';
 
 declare module '@mui/material/styles' {
   interface Palette {
@@ -14,6 +15,29 @@ declare module '@mui/material/styles' {
 
 export function createAppTheme(mode: AppThemeMode) {
   const palette = themeColors[mode];
+  const outlinedFieldStateStyles = {
+    '&:hover fieldset': {
+      borderColor: palette.textSecondary,
+    },
+    '&.Mui-readOnly:not(.Mui-disabled)': {
+      backgroundColor: palette.actionHover,
+      '& input, & textarea': { caretColor: 'transparent' },
+      '&:not(.Mui-error) fieldset': {
+        borderColor: palette.divider,
+        borderWidth: 1,
+      },
+      '&.Mui-focused': {
+        outline: `2px solid ${palette.primary}`,
+        outlineOffset: 2,
+      },
+    },
+    '&.Mui-disabled': {
+      backgroundColor: palette.actionDisabledBackground,
+      color: palette.textDisabled,
+      '& input, & textarea': { WebkitTextFillColor: palette.textDisabled },
+      '& fieldset': { borderColor: palette.actionDisabled },
+    },
+  };
 
   return createTheme({
     palette: {
@@ -76,6 +100,31 @@ export function createAppTheme(mode: AppThemeMode) {
       },
     },
     components: {
+      MuiChip: {
+        styleOverrides: {
+          root: ({ ownerState }) => {
+            const chip = getChipColors(mode, ownerState.color ?? 'default');
+            return {
+              ...chip,
+              borderColor: chip.color,
+              fontWeight: 600,
+              '& .MuiChip-icon, & .MuiChip-deleteIcon': {
+                color: 'inherit',
+              },
+              '& .MuiChip-deleteIcon:hover': {
+                color: 'inherit',
+              },
+              '&.MuiChip-clickable:hover, &.MuiChip-clickable.Mui-focusVisible': {
+                backgroundColor: chip.backgroundColor,
+              },
+              '&.Mui-focusVisible': {
+                outline: `2px solid ${chip.color}`,
+                outlineOffset: 2,
+              },
+            };
+          },
+        },
+      },
       MuiCssBaseline: {
         styleOverrides: {
           ':root': {
@@ -104,9 +153,20 @@ export function createAppTheme(mode: AppThemeMode) {
       },
       MuiOutlinedInput: {
         styleOverrides: {
+          root: outlinedFieldStateStyles,
+        },
+      },
+      MuiPickersOutlinedInput: {
+        styleOverrides: {
+          root: outlinedFieldStateStyles,
+        },
+      },
+      MuiToggleButton: {
+        styleOverrides: {
           root: {
-            '&:hover .MuiOutlinedInput-notchedOutline': {
-              borderColor: palette.textSecondary,
+            '&.Mui-disabled, &.Mui-selected.Mui-disabled': {
+              backgroundColor: palette.actionDisabledBackground,
+              color: palette.textDisabled,
             },
           },
         },

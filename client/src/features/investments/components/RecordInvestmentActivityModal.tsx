@@ -126,6 +126,11 @@ export default function RecordInvestmentActivityModal({
   const formatCurrency = (value) => formatAmount(value, investment?.currency || 'INR', { minimumFractionDigits: undefined, maximumFractionDigits: undefined });
   const activityRequest = useRef({ signature: '', requestId: '' });
   const isEditing = Boolean(editingEvent?.id);
+  const editingMode = editingEvent?.eventType === INVESTMENT_EVENT_TYPES.WITHDRAWAL_PRINCIPAL
+    ? 'withdrawal'
+    : [INVESTMENT_EVENT_TYPES.CONTRIBUTION, INVESTMENT_EVENT_TYPES.PREMIUM, INVESTMENT_EVENT_TYPES.OPENING_BALANCE].includes(editingEvent?.eventType)
+      ? 'contribution'
+      : 'income_credit';
   const isEditingBenefit = Boolean(editingBenefit?.id);
   const isRealizingBenefit = Boolean(realizationBenefit?.id);
   const [mode, setMode] = useState(isEditingBenefit || isRealizingBenefit || closeMode ? 'benefit' : isEditing ? 'income_credit' : initialMode);
@@ -149,6 +154,10 @@ export default function RecordInvestmentActivityModal({
   const pushNotification = useNotificationStore((state) => state.pushNotification);
   const pending = Boolean(action);
   const modeConfig = MODES[mode];
+  const recurringContributionPlan = contributionPlan ?? investment?.activeContributionPlan;
+  const isRecurringContributionAmountLocked = mode === 'contribution' && (
+    isEditing ? Boolean(editingEvent?.recurringPlanId) : Boolean(recurringContributionPlan?.id)
+  );
   const resolvedAccountId =
     investment?.accountId != null && investment?.accountId !== ''
       ? String(investment.accountId)
@@ -164,7 +173,7 @@ export default function RecordInvestmentActivityModal({
   const availableBalance = Number(linkedAccount?.currentBalance ?? 0);
   const requestedContributionAmount = Number(amount);
   const hasInsufficientContributionBalance =
-    mode === 'contribution' &&
+    mode === 'contribution' && !isEditing &&
     requestedContributionAmount > 0 &&
     requestedContributionAmount > availableBalance;
   const hasLinkedAccount = Boolean(resolvedAccountId);
@@ -226,7 +235,7 @@ export default function RecordInvestmentActivityModal({
       return;
     }
     if (isEditing) {
-      setMode('income_credit');
+      setMode(editingMode);
       setDate(editingEvent?.eventDate ? dayjs(editingEvent.eventDate).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'));
       setAmount(editingEvent?.amount != null ? String(editingEvent.amount) : '');
       setNotes(editingEvent?.notes || '');
@@ -237,19 +246,19 @@ export default function RecordInvestmentActivityModal({
     }
     setMode(initialMode);
     setDate(dayjs().format('YYYY-MM-DD'));
-    setAmount(contributionPlan?.amount && initialMode === 'contribution' ? String(contributionPlan.amount) : '');
+    setAmount(recurringContributionPlan?.amount && initialMode === 'contribution' ? String(recurringContributionPlan.amount) : '');
     setBenefitType('MATURITY');
     setDestinationAccountId(resolvedAccountId);
     setNotes('');
     setError('');
     setAction(null);
     setConfirmationOpen(false);
-  }, [open, investment?.id, contributionPlan?.id, contributionPlan?.amount, initialMode, isEditing, editingEvent, isEditingBenefit, editingBenefit, isRealizingBenefit, realizationBenefit, closeMode, currentValue, resolvedAccountId]);
+  }, [open, investment?.id, contributionPlan?.id, contributionPlan?.amount, recurringContributionPlan?.id, recurringContributionPlan?.amount, initialMode, isEditing, editingEvent, isEditingBenefit, editingBenefit, isRealizingBenefit, realizationBenefit, closeMode, currentValue, resolvedAccountId]);
 
   const handleModeChange = (_event, nextMode) => {
     if (!nextMode || pending || isEditing) return;
     setMode(nextMode);
-    setAmount(nextMode === 'contribution' && contributionPlan?.amount ? String(contributionPlan.amount) : '');
+    setAmount(nextMode === 'contribution' && recurringContributionPlan?.amount ? String(recurringContributionPlan.amount) : '');
     setError('');
   };
 
@@ -260,12 +269,12 @@ export default function RecordInvestmentActivityModal({
       return;
     }
 
-    if (mode === 'contribution' && numericAmount > availableBalance) {
+    if (mode === 'contribution' && !isEditing && numericAmount > availableBalance) {
       setError(`Insufficient balance in ${accountLabel}. Available: ${formatCurrency(availableBalance)}.`);
       return;
     }
 
-    if (mode === 'withdrawal' && numericAmount > Number(investment?.totalInvested || 0)) {
+    if (mode === 'withdrawal' && numericAmount > Number(investment?.totalInvested || 0) + (isEditing ? Number(editingEvent?.amount || 0) : 0)) {
       setError('Withdrawal cannot exceed invested principal.');
       return;
     }
@@ -357,7 +366,7 @@ export default function RecordInvestmentActivityModal({
             eventDate: date,
             amount: numericAmount,
             netAmount: numericAmount,
-            notes: notes || undefined,
+            notes,
           },
         });
       } else if (mode === 'contribution') {
@@ -404,7 +413,7 @@ export default function RecordInvestmentActivityModal({
       }
 
       activityRequest.current = { signature: '', requestId: '' };
-      pushNotification({ type: 'success', message: isRealizingBenefit || closeMode ? 'Investment benefit realized and investment closed successfully' : isEditingBenefit ? 'Investment benefit updated successfully' : isEditing ? 'Income credit updated successfully' : `${modeConfig.label} recorded successfully` });
+      pushNotification({ type: 'success', message: isRealizingBenefit || closeMode ? 'Investment benefit realized and investment closed successfully' : isEditingBenefit ? 'Investment benefit updated successfully' : isEditing ? 'Investment activity updated successfully' : `${modeConfig.label} recorded successfully` });
       onClose();
     } catch (requestError) {
       setError(requestError?.response?.data?.message || requestError?.message || `Failed to record ${modeConfig.label.toLowerCase()}`);
@@ -459,7 +468,7 @@ export default function RecordInvestmentActivityModal({
         >
           <Box sx={{ minWidth: 0 }}>
             <Typography id="record-investment-activity-modal" variant="h6" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>
-              {isRealizingBenefit ? 'Realize Investment Benefit' : closeMode ? 'Close Investment' : isEditingBenefit ? 'Edit Investment Benefit' : isEditing ? 'Edit Income Credit' : 'Record Investment Activity'}
+              {isRealizingBenefit ? 'Realize Investment Benefit' : closeMode ? 'Close Investment' : isEditingBenefit ? 'Edit Investment Benefit' : isEditing ? `Edit ${modeConfig.label}` : 'Record Investment Activity'}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               {investment?.name}
@@ -589,6 +598,7 @@ export default function RecordInvestmentActivityModal({
             currencyCode={investment?.currency || 'INR'}
             value={amount}
             onValueChange={setAmount}
+            slotProps={{ input: { readOnly: isRecurringContributionAmountLocked } }}
           />
           {hasInsufficientContributionBalance ? (
             <Alert severity="error">

@@ -1147,12 +1147,16 @@ export function InvestmentViewDrawer({
       minWidth: 116,
       renderCell: ({ row }) => {
         const editableEventTypes = [
+          INVESTMENT_EVENT_TYPES.CONTRIBUTION,
+          INVESTMENT_EVENT_TYPES.PREMIUM,
+          INVESTMENT_EVENT_TYPES.WITHDRAWAL_PRINCIPAL,
+          INVESTMENT_EVENT_TYPES.OPENING_BALANCE,
           INVESTMENT_EVENT_TYPES.INCOME_CREDIT,
           INVESTMENT_EVENT_TYPES.OPENING_INCOME_CREDIT,
         ];
         const isEditable =
           !isClosed &&
-          !row.linkedTransactionId &&
+          !row.event?.linkedBenefitId &&
           editableEventTypes.includes(row.event?.eventType);
 
         if (!isEditable) {
@@ -3196,7 +3200,7 @@ export function InvestmentViewDrawer({
         title="Delete activity"
         description={
           deleteEventTarget
-            ? `Remove the ${getContributionEventLabel(deleteEventTarget.eventType).toLowerCase()} from ${formatInvestmentDate(deleteEventTarget.eventDate)}? Invested principal and current value will be recalculated.`
+            ? `Remove the ${getContributionEventLabel(deleteEventTarget.eventType).toLowerCase()} from ${formatInvestmentDate(deleteEventTarget.eventDate)}? ${deleteEventTarget.linkedTransactionId ? 'The linked transaction will also be deleted. ' : ''}Invested principal and current value will be recalculated.`
             : ""
         }
         confirmLabel="Delete"

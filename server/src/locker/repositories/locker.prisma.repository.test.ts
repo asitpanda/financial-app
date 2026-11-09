@@ -117,6 +117,20 @@ describe('LockerPrismaRepository', () => {
       await expect(repository.updateEntity('entity-uid', {}, 42)).resolves.toBeNull();
       expect(prisma.lockerEntity.update).not.toHaveBeenCalled();
     });
+
+    it('updates only fields when the label is omitted', async () => {
+      const updatedFields: LockerField[] = [{ uid: 'field-uid', label: 'Email', type: 'text', masked: false }];
+      prisma.lockerEntity.findFirst.mockResolvedValue(entityRow());
+      prisma.lockerEntity.update.mockResolvedValue(entityRow({ fields: updatedFields }));
+
+      await expect(repository.updateEntity('entity-uid', { fields: updatedFields }, 42)).resolves.toMatchObject({
+        fields: updatedFields,
+      });
+      expect(prisma.lockerEntity.update).toHaveBeenCalledWith({
+        where: { uid: 'entity-uid' },
+        data: { fields: updatedFields },
+      });
+    });
   });
 
   describe('deleteEntity', () => {
@@ -197,6 +211,15 @@ describe('LockerPrismaRepository', () => {
         where: { uid: 'record-uid', entity: { userId: 42 } },
       });
     });
+
+    it('returns null when the record is not owned by the requested user', async () => {
+      prisma.lockerRecord.findFirst.mockResolvedValue(null);
+
+      await expect(repository.findRecord('record-uid', 7)).resolves.toBeNull();
+      expect(prisma.lockerRecord.findFirst).toHaveBeenCalledWith({
+        where: { uid: 'record-uid', entity: { userId: 7 } },
+      });
+    });
   });
 
   describe('updateRecord', () => {
@@ -218,6 +241,18 @@ describe('LockerPrismaRepository', () => {
 
       await expect(repository.updateRecord('record-uid', {}, 42)).resolves.toBeNull();
       expect(prisma.lockerRecord.update).not.toHaveBeenCalled();
+    });
+
+    it('updates only values when the label is omitted', async () => {
+      const values = { 'field-uid': 'updated' };
+      prisma.lockerRecord.findFirst.mockResolvedValue(recordRow());
+      prisma.lockerRecord.update.mockResolvedValue(recordRow({ values }));
+
+      await expect(repository.updateRecord('record-uid', { values }, 42)).resolves.toMatchObject({ values });
+      expect(prisma.lockerRecord.update).toHaveBeenCalledWith({
+        where: { uid: 'record-uid' },
+        data: { values },
+      });
     });
   });
 

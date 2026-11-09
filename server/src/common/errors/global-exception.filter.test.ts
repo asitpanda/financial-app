@@ -156,6 +156,71 @@ describe('GlobalExceptionFilter', () => {
     );
   });
 
+  it.each([
+    [HttpStatus.FORBIDDEN, 'FORBIDDEN'],
+    [HttpStatus.CONFLICT, 'CONFLICT'],
+    [HttpStatus.TOO_MANY_REQUESTS, 'BAD_REQUEST'],
+    [HttpStatus.SERVICE_UNAVAILABLE, 'INTERNAL_ERROR'],
+  ])('maps HTTP status %s to its API error code', (status, code) => {
+    const { host, response } = createHttpHost();
+
+    new GlobalExceptionFilter().catch(new HttpException('Request rejected', status), host);
+
+    expect(response.status).toHaveBeenCalledWith(status);
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({ statusCode: status, code, message: 'Request rejected' }),
+    );
+  });
+
+  it('uses a stable validation message when an HTTP validation body has no messages', () => {
+    const { host, response } = createHttpHost();
+
+    new GlobalExceptionFilter().catch(
+      new BadRequestException({ message: [] }),
+      host,
+    );
+
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'VALIDATION_ERROR',
+        message: 'Validation failed',
+        details: [],
+      }),
+    );
+  });
+
+  it('uses the HTTP error field when the structured message is empty', () => {
+    const { host, response } = createHttpHost();
+
+    new GlobalExceptionFilter().catch(
+      new HttpException({ message: '', error: 'Payment required' }, HttpStatus.PAYMENT_REQUIRED),
+      host,
+    );
+
+    expect(response.status).toHaveBeenCalledWith(HttpStatus.PAYMENT_REQUIRED);
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'BAD_REQUEST', message: 'Payment required' }),
+    );
+  });
+
+  it('uses a safe fallback for an empty HTTP exception body', () => {
+    const { host, response } = createHttpHost();
+
+    new GlobalExceptionFilter().catch(
+      new HttpException(null as never, HttpStatus.FORBIDDEN),
+      host,
+    );
+
+    expect(response.status).toHaveBeenCalledWith(HttpStatus.FORBIDDEN);
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: HttpStatus.FORBIDDEN,
+        code: 'FORBIDDEN',
+        message: 'Request failed',
+      }),
+    );
+  });
+
   it('returns a generic internal error for unexpected exceptions', () => {
     const { host, response } = createHttpHost();
 

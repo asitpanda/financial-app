@@ -108,6 +108,13 @@ describe('InvestmentBenefitsService', () => {
       expect(repository.create).not.toHaveBeenCalled();
     });
 
+    it.each([Number.NaN, Number.POSITIVE_INFINITY])('rejects non-finite amounts (%s)', async (amount) => {
+      await expect(service.create('7', { amount } as never, 42)).rejects.toThrow(
+        'Benefit amount must be a non-negative number.',
+      );
+      expect(repository.create).not.toHaveBeenCalled();
+    });
+
     it('rejects modifications to a closed investment', async () => {
       investmentRepository.findOne.mockResolvedValue(investment({ status: ' Closed ' }));
 
@@ -124,6 +131,14 @@ describe('InvestmentBenefitsService', () => {
         service.create('7', { amount: 10, destinationAccountId: 55 } as never, 42),
       ).rejects.toThrow('Destination account was not found for the current user.');
       expect(repository.create).not.toHaveBeenCalled();
+    });
+
+    it('allows an omitted destination account', async () => {
+      const data = { amount: 10 };
+      repository.create.mockResolvedValue(benefit({ amount: 10 }));
+
+      await expect(service.create('7', data as never, 42)).resolves.toMatchObject({ amount: 10 });
+      expect(financialAccountsService.findOne).not.toHaveBeenCalled();
     });
   });
 
@@ -152,6 +167,25 @@ describe('InvestmentBenefitsService', () => {
       await expect(service.findOneWithDetails('3', '7', 42)).resolves.toBe(savedBenefit);
       expect(repository.findOneWithDetails).toHaveBeenCalledWith('3');
     });
+
+    it.each([
+      ['missing', null],
+      ['for another investment', { ...benefit(), investmentId: 8, realizedEvents: [] }],
+    ])('returns not found when the detailed benefit is %s', async (_reason, result) => {
+      repository.findOneWithDetails.mockResolvedValue(result);
+
+      await expect(service.findOneWithDetails('3', '7', 42)).rejects.toThrow(
+        'Investment benefit 3 not found',
+      );
+      expect(investmentRepository.findOne).not.toHaveBeenCalled();
+    });
+
+    it('returns not found when the requested investment is not owned', async () => {
+      repository.findOneWithDetails.mockResolvedValue({ ...benefit(), realizedEvents: [] });
+      investmentRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.findOneWithDetails('3', '7', 42)).rejects.toBeInstanceOf(NotFoundException);
+    });
   });
 
   describe('update', () => {
@@ -172,6 +206,43 @@ describe('InvestmentBenefitsService', () => {
       ).rejects.toThrow('Only expected benefits can change status.');
       expect(repository.update).not.toHaveBeenCalled();
     });
+
+    it('rejects marking an expected benefit pending', async () => {
+      repository.findOne.mockResolvedValue(benefit());
+
+      await expect(
+        service.update('3', '7', { status: 'PENDING' as unknown as InvestmentBenefitStatus }, 42),
+      ).rejects.toThrow('Expected benefits can only be marked received or cancelled.');
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it.each([Number.NaN, -1])('rejects an invalid updated amount (%s)', async (amount) => {
+      repository.findOne.mockResolvedValue(benefit());
+
+      await expect(service.update('3', '7', { amount }, 42)).rejects.toThrow(
+        'Benefit amount must be a non-negative number.',
+      );
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects an unavailable destination account', async () => {
+      repository.findOne.mockResolvedValue(benefit());
+      financialAccountsService.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.update('3', '7', { destinationAccountId: 55 }, 42),
+      ).rejects.toThrow('Destination account was not found for the current user.');
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('allows an expected benefit to be cancelled', async () => {
+      const data = { status: InvestmentBenefitStatus.CANCELLED };
+      repository.findOne.mockResolvedValue(benefit());
+      repository.update.mockResolvedValue(benefit(data));
+
+      await expect(service.update('3', '7', data, 42)).resolves.toMatchObject(data);
+      expect(repository.update).toHaveBeenCalledWith('3', data);
+    });
   });
 
   describe('remove', () => {
@@ -181,6 +252,14 @@ describe('InvestmentBenefitsService', () => {
 
       await expect(service.remove('3', '7', 42)).resolves.toBeUndefined();
       expect(repository.delete).toHaveBeenCalledWith('3');
+    });
+
+    it('does not delete a benefit when the investment is not owned', async () => {
+      repository.findOne.mockResolvedValue(benefit());
+      investmentRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.remove('3', '7', 42)).rejects.toBeInstanceOf(NotFoundException);
+      expect(repository.delete).not.toHaveBeenCalled();
     });
   });
 
@@ -230,6 +309,65 @@ describe('InvestmentBenefitsService', () => {
       ).rejects.toThrow('Benefit cash accounts must use the investment currency.');
       expect(repository.realize).not.toHaveBeenCalled();
     });
+
+    it('rejects a benefit that is not expected', async () => {
+      repository.findOne.mockResolvedValue(benefit({ status: InvestmentBenefitStatus.RECEIVED }));
+
+      await expect(service.realize('3', '7', {
+        components: [{ eventType: InvestmentEventType.BENEFIT_RECEIPT, amount: 100 }],
+      }, 42)).rejects.toThrow('Only expected benefits can be realized.');
+      expect(repository.realize).not.toHaveBeenCalled();
+    });
+
+    it('rejects realization without components', async () => {
+      repository.findOne.mockResolvedValue(benefit());
+
+      await expect(service.realize('3', '7', { components: [] }, 42)).rejects.toThrow(
+        'At least one realization component is required.',
+      );
+      expect(repository.realize).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-finite total or a benefit amount that does not match components', async () => {
+      repository.findOne.mockResolvedValue(benefit());
+
+      await expect(service.realize('3', '7', {
+        components: [{ eventType: InvestmentEventType.BENEFIT_RECEIPT, amount: Number.NaN }],
+      }, 42)).rejects.toThrow('Realization component amounts must equal the benefit amount.');
+      await expect(service.realize('3', '7', {
+        benefitAmount: 101,
+        components: [{ eventType: InvestmentEventType.BENEFIT_RECEIPT, amount: 100 }],
+      }, 42)).rejects.toThrow('Realization component amounts must equal the benefit amount.');
+      expect(repository.realize).not.toHaveBeenCalled();
+    });
+
+    it('checks component transaction accounts and the investment account before realizing', async () => {
+      repository.findOne.mockResolvedValue(benefit());
+      const data = {
+        components: [{
+          eventType: InvestmentEventType.BENEFIT_RECEIPT,
+          amount: 100,
+          transaction: { sourceAccountId: 11, destinationAccountId: 12 },
+        }],
+      };
+      repository.realize.mockResolvedValue({ benefit: benefit(), events: [] });
+
+      await service.realize('3', '7', data as never, 42);
+
+      expect(financialAccountsService.findOne).toHaveBeenNthCalledWith(1, 11, 42);
+      expect(financialAccountsService.findOne).toHaveBeenNthCalledWith(2, 12, 42);
+      expect(financialAccountsService.findOne).toHaveBeenNthCalledWith(3, 10, 42);
+    });
+
+    it('rejects when the investment cash account is unavailable', async () => {
+      repository.findOne.mockResolvedValue(benefit());
+      financialAccountsService.findOne.mockResolvedValueOnce(null);
+
+      await expect(service.realize('3', '7', {
+        components: [{ eventType: InvestmentEventType.BENEFIT_RECEIPT, amount: 100 }],
+      }, 42)).rejects.toThrow('Destination account was not found for the current user.');
+      expect(repository.realize).not.toHaveBeenCalled();
+    });
   });
 
   describe('quickRealize', () => {
@@ -246,6 +384,31 @@ describe('InvestmentBenefitsService', () => {
         service.quickRealize('7', { eventType: InvestmentEventType.BENEFIT_RECEIPT, amount: Number.NaN } as never, 42),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(repository.quickRealize).not.toHaveBeenCalled();
+    });
+
+    it('rejects realization when the investment is closed', async () => {
+      investmentRepository.findOne.mockResolvedValue(investment({ status: ' CLOSED ' }));
+
+      await expect(service.quickRealize('7', {
+        eventType: InvestmentEventType.BENEFIT_RECEIPT,
+        amount: 25,
+      } as never, 42)).rejects.toThrow('Closed investments cannot be modified.');
+      expect(repository.quickRealize).not.toHaveBeenCalled();
+    });
+
+    it('validates quick-realization transaction accounts', async () => {
+      const data = {
+        eventType: InvestmentEventType.BENEFIT_RECEIPT,
+        amount: 25,
+        transaction: { sourceAccountId: 11, destinationAccountId: 12 },
+      };
+      repository.quickRealize.mockResolvedValue(benefit({ amount: 25 }));
+
+      await service.quickRealize('7', data as never, 42);
+
+      expect(financialAccountsService.findOne).toHaveBeenNthCalledWith(1, 11, 42);
+      expect(financialAccountsService.findOne).toHaveBeenNthCalledWith(2, 12, 42);
+      expect(financialAccountsService.findOne).toHaveBeenNthCalledWith(3, 10, 42);
     });
   });
 });

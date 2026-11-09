@@ -1,4 +1,6 @@
 import { Chip } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import { getChipColors } from '../../colors';
 
 type StatusTone = 'success' | 'error' | 'warning' | 'info' | 'default' | 'transfer' | 'investment';
 
@@ -8,7 +10,7 @@ interface StatusChipProps {
 }
 
 export default function StatusChip({ label, tone = 'default' }: StatusChipProps) {
-  const movementTone = tone === 'transfer' || tone === 'investment' ? tone : undefined;
+  const theme = useTheme();
 
   return (
     <Chip
@@ -19,7 +21,8 @@ export default function StatusChip({ label, tone = 'default' }: StatusChipProps)
       sx={{
         textTransform: 'capitalize',
         fontWeight: 600,
-        ...(movementTone ? { color: `movement.${movementTone}`, borderColor: `movement.${movementTone}` } : {}),
+        ...getChipColors(theme.palette.mode, tone),
+        borderColor: getChipColors(theme.palette.mode, tone).color,
       }}
     />
   );

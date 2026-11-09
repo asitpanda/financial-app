@@ -11,6 +11,17 @@ vi.mock('../../investments/repositories/investment-valuation', () => ({
 
 function createRepository() {
   const prisma = {
+    investment: {
+      findUnique: vi.fn().mockResolvedValue({ totalInvested: 0 }),
+    },
+    transaction: {
+      update: vi.fn(),
+      delete: vi.fn(),
+      aggregate: vi.fn().mockResolvedValue({ _sum: { amount: 0 } }),
+    },
+    financialAccount: {
+      findUnique: vi.fn().mockResolvedValue({ openingBalance: 0 }),
+    },
     investmentEvent: {
       create: vi.fn(),
       findMany: vi.fn(),
@@ -276,6 +287,58 @@ describe('EventPrismaRepository', () => {
       expect(syncInvestmentDerivedValues).toHaveBeenNthCalledWith(1, prisma, 7);
       expect(syncInvestmentDerivedValues).toHaveBeenNthCalledWith(2, prisma, 8);
     });
+
+    it('synchronizes linked transaction amounts and checks the affected source balance', async () => {
+      prisma.$transaction.mockImplementation(async (callback: (transaction: unknown) => Promise<unknown>) =>
+        callback(prisma),
+      );
+      prisma.investmentEvent.findUnique.mockResolvedValue(eventRow({ linkedTransactionId: 31 }));
+      prisma.investmentEvent.update.mockResolvedValue(eventRow({ amount: new Prisma.Decimal(150) }));
+      prisma.transaction.update.mockResolvedValue({
+        goalId: null,
+        sourceAccountId: 4,
+        destinationAccountId: null,
+      });
+      prisma.transaction.aggregate.mockResolvedValue({ _sum: { amount: new Prisma.Decimal(200) } });
+
+      await repository.update('3', { amount: 150 } as never);
+
+      expect(prisma.transaction.update).toHaveBeenCalledWith({
+        where: { id: 31 },
+        data: { amount: 150, date: undefined, notes: undefined },
+      });
+      expect(prisma.financialAccount.findUnique).toHaveBeenCalledWith({ where: { id: 4 } });
+      expect(prisma.transaction.aggregate).toHaveBeenCalledWith(expect.objectContaining({
+        where: { sourceAccountId: 4, type: { in: ['EXPENSE', 'TRANSFER', 'INVESTMENT'] } },
+      }));
+    });
+
+    it('rejects a linked transaction correction that would leave principal below zero', async () => {
+      prisma.$transaction.mockImplementation(async (callback: (transaction: unknown) => Promise<unknown>) =>
+        callback(prisma),
+      );
+      prisma.investmentEvent.findUnique.mockResolvedValue(eventRow());
+      prisma.investmentEvent.update.mockResolvedValue(eventRow({ investmentId: 7 }));
+      prisma.investment.findUnique.mockResolvedValue({ totalInvested: -1 });
+
+      await expect(repository.update('3', { amount: 100 } as never)).rejects.toThrow(
+        'This correction would leave withdrawals greater than invested principal.',
+      );
+    });
+
+    it('rejects edits to a linked transaction that belongs to a goal workflow', async () => {
+      prisma.$transaction.mockImplementation(async (callback: (transaction: unknown) => Promise<unknown>) =>
+        callback(prisma),
+      );
+      prisma.investmentEvent.findUnique.mockResolvedValue(eventRow({ linkedTransactionId: 31 }));
+      prisma.investmentEvent.update.mockResolvedValue(eventRow());
+      prisma.transaction.update.mockResolvedValue({ goalId: 5, sourceAccountId: null, destinationAccountId: null });
+
+      await expect(repository.update('3', { notes: 'updated' } as never)).rejects.toThrow(
+        'Goal-linked activity must be managed through its owning workflow.',
+      );
+      expect(prisma.transaction.aggregate).not.toHaveBeenCalled();
+    });
   });
 
   describe('delete', () => {
@@ -302,6 +365,30 @@ describe('EventPrismaRepository', () => {
 
       expect(syncInvestmentDerivedValues).not.toHaveBeenCalled();
       expect(prisma.investmentEvent.delete).toHaveBeenCalledWith({ where: { id: 3 } });
+    });
+
+    it('deletes a linked transaction and rejects goal-owned activity', async () => {
+      prisma.$transaction.mockImplementation(async (callback: (transaction: unknown) => Promise<unknown>) =>
+        callback(prisma),
+      );
+      prisma.investmentEvent.findUnique.mockResolvedValue(eventRow({ linkedTransactionId: 31 }));
+      prisma.transaction.delete.mockResolvedValue({
+        goalId: null,
+        destinationAccountId: 4,
+      });
+      prisma.transaction.aggregate.mockResolvedValue({ _sum: { amount: 10 } });
+
+      await repository.delete('3');
+
+      expect(prisma.transaction.delete).toHaveBeenCalledWith({ where: { id: 31 } });
+      expect(prisma.financialAccount.findUnique).toHaveBeenCalledWith({ where: { id: 4 } });
+      expect(prisma.transaction.aggregate).toHaveBeenCalledTimes(2);
+
+      prisma.investmentEvent.findUnique.mockResolvedValue(eventRow({ linkedTransactionId: 32 }));
+      prisma.transaction.delete.mockResolvedValue({ goalId: 5, destinationAccountId: null });
+      await expect(repository.delete('3')).rejects.toThrow(
+        'Goal-linked activity must be managed through its owning workflow.',
+      );
     });
   });
 });

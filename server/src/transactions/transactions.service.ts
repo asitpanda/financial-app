@@ -209,6 +209,9 @@ export class TransactionsService {
       if (contributionPlanId != null && !contributionPlan) {
         throw new BadRequestException('The contribution plan is no longer active. Refresh and try again.');
       }
+      if (contributionPlan && Number(recordContributionDto.amount) !== Number(contributionPlan.amount)) {
+        throw new BadRequestException('Recurring contribution amounts can only be changed from investment edit. Refresh to use the current plan amount.');
+      }
       await this.assertMatchingAccountCurrency(sourceAccountId, investment.currency, userId, transactionClient);
 
       // 1. Create Transaction

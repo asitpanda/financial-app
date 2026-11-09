@@ -25,7 +25,7 @@ Do not stop after a coverage matrix, branch inventory, recommendations, pseudoco
 
 For every requested subject:
 
-1. Inspect the implementation, types, dependencies, neighboring tests, fixtures, and relevant setup.
+1. Inspect the implementation, types, dependencies, neighboring tests, fixtures, and relevant setup, and apply the production-usage guard before generating tests.
 2. Identify the owning public subject and correct test type.
 3. Identify meaningful business/user contracts and distinct behavior paths.
 4. Build a behavior inventory before editing complex subjects.
@@ -33,13 +33,24 @@ For every requested subject:
 6. Map every applicable inventory item to an executable test or explicit justified status.
 7. Create or update the correctly colocated test file.
 8. Finish the complete planned test implementation for ALL files requested in the task.
-9. Only then run the focused tests covering the changed test files.
+9. Only then, when explicitly authorized by the user, run focused tests with coverage covering the changed test files and requested production scope.
 10. Repair failures caused by test defects and rerun after those fixes.
 11. Reconcile implemented tests against the inventory and report residual blockers or production defects.
 
 Minimize duplication, not meaningful coverage.
 
 "Focused" and "maintainable" do not permit omitting distinct business rules, meaningful negative paths, boundaries, state transitions, failures, or user workflows.
+
+## Production-Usage Guard
+
+Before generating client, server unit, or API contract tests for each function, method, component, hook, or endpoint:
+
+- Trace production references and call sites using symbol references and targeted searches. Follow imports, re-exports, registrations, and callers far enough to establish a reachable production entry point. References only from tests, mocks, fixtures, generated output, or coverage reports do not establish production usage.
+- Check indirect usage before classifying code as unused: NestJS routes, dependency injection, decorators and lifecycle hooks; React rendering, routing and lazy loading; callbacks, event handlers, registries, dynamic dispatch, and documented external/public consumers. An export alone is not proof of use, and no direct call sites alone is not proof of dead code.
+- A `void` return type does not imply dead code. Check observable side effects and reachable behavior.
+- If no production usage is found, or the code appears unreachable or obsolete, notify the user before writing tests for it. Identify the file and symbol, summarize the reference/entry-point evidence and uncertainty, and recommend reviewing it for removal or cleanup.
+- Defer tests for suspected unused/dead subjects pending the user's decision to remove them or retain and test them. Mark their inventory items `BLOCKED` with the usage evidence and required decision; continue independently with confirmed-used subjects. If usage remains uncertain, report that uncertainty instead of asserting the code is dead.
+- Do not delete or refactor production code without authorization. Do not add tests solely to make dead code count toward coverage, silently exclude flagged code, or claim the 95% floor is met while in-scope coverage remains unverified or below target. Report the unresolved scope and coverage impact until the user decides.
 
 ## Test Ownership
 
@@ -162,7 +173,15 @@ True cross-feature/system E2E journeys may use a dedicated repository E2E locati
 
 ## Coverage Workflow
 
-Select cases from business/user behavior and distinct implementation paths, not percentage targets.
+For client, server unit, and API contract tests, require a minimum of **95% statements, branches, functions, and lines**, with **100% preferred**. Both the numeric floor and business-risk coverage are required; neither replaces the other.
+
+Define the requested production scope before generation. Measure each requested production file and the scope aggregate, not just a repository-wide average that can hide gaps. Include unexecuted in-scope production files in the coverage report. Respect layer ownership: API coverage targets the HTTP boundary, not the complete business-rule matrix owned by server unit tests. Do not silently narrow the scope to reach the target.
+
+Select cases from business/user behavior and distinct implementation paths first, then use measured coverage gaps to identify missing meaningful cases. Do not stop at 95% if any major business rule or high-impact path remains unprotected. Prioritize financial correctness, authorization and ownership, data integrity, persistence and rollback, critical user workflows, and meaningful failure/recovery behavior at the owning layer.
+
+After authorized coverage measurement, add meaningful tests for uncovered paths and remeasure until every metric meets the floor and all major business/high-impact inventory items are protected, or report a concrete blocker. Aim for 100% where useful tests can achieve it. Never inflate coverage with assertion-free tests, excessive implementation mocking, skipped tests, coverage-ignore directives, new exclusions, reduced thresholds, or unrelated production changes.
+
+Do not claim the target is met without measured evidence. If execution is not authorized, reporting is unavailable, or a target cannot be reached without low-value framework/implementation tests, report the unverified metrics or measured shortfall and the exact blocker. Do not silently waive the floor.
 
 Do not attempt meaningless Cartesian-product coverage.
 
@@ -295,6 +314,8 @@ Never change expected values merely to make a failing test pass. First establish
 
 Test generation and execution are separate phases.
 
+Repository execution restrictions take precedence: run tests and coverage only when the user explicitly authorizes them. A request to write tests or meet a coverage target alone is not permission to execute tests. Without authorization, finish generation and inventory reconciliation, then report tests and coverage as unvalidated.
+
 ### Generation Phase
 
 For all files requested in the current task:
@@ -314,7 +335,7 @@ During this phase:
 
 After test code is complete for ALL requested files:
 
-1. Run the narrowest configured command covering all changed/requested test files.
+1. When explicitly authorized, run the narrowest configured coverage command covering all changed/requested test files and the defined production scope.
 2. Review all failures together.
 3. Classify each failure as a test defect, production defect, environment/configuration issue, or incorrect expectation.
 4. Fix test defects together.
@@ -323,7 +344,7 @@ After test code is complete for ALL requested files:
 
 Do not rerun an already-passing focused suite without a concrete reason.
 
-A test-writing task is not complete until generated tests have been executed at least once, unless execution is technically blocked.
+A validated test-writing task requires generated tests to have been executed and coverage measured against the required floor. If execution is unauthorized or technically blocked, report generation as complete but validation and coverage as pending.
 
 If blocked:
 
@@ -348,10 +369,13 @@ Report concisely:
 - business/user/public contracts covered;
 - meaningful states, boundaries, and failure/recovery behavior covered;
 - focused commands run and results;
+- measured statements, branches, functions, and lines for each requested production file and the scope aggregate, the 95% floor result, and remaining gaps toward 100%, or explicitly state that coverage is unverified;
 - production defects discovered;
 - intentionally omitted duplicate/low-value cases when relevant;
 - inventory reconciliation;
 - genuine residual gaps or blockers.
+
+Include any unused/dead-code candidates with file/symbol references, usage evidence, cleanup recommendations, and pending user decisions. Explicitly identify tests deferred by the production-usage guard.
 
 Do not use test count or coverage percentage alone as evidence of test quality.
 

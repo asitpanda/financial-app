@@ -52,6 +52,34 @@ describe('AssetTaxonomyPrismaRepository', () => {
   });
 
   describe('create', () => {
+    it('applies null classification defaults when no metadata is selected', async () => {
+      prisma.investmentAssetTaxonomy.create.mockResolvedValue(createRecord());
+
+      await expect(repository.create({
+        userId: 12,
+        label: 'Cash',
+        nodeType: 'CATEGORY',
+        level: 1,
+      })).resolves.toMatchObject({
+        defaultAssetTypeMetaId: null,
+        defaultAssetCategoryMetaId: null,
+        defaultAssetType: null,
+        defaultAssetCategory: null,
+        sortOrder: 0,
+        isActive: true,
+      });
+      expect(prisma.appMetaConfigRef.findFirst).not.toHaveBeenCalled();
+      expect(prisma.investmentAssetTaxonomy.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          parentId: null,
+          defaultAssetTypeMetaId: null,
+          defaultAssetCategoryMetaId: null,
+          sortOrder: 0,
+          isActive: true,
+        }),
+      }));
+    });
+
     it('resolves classification metadata and normalizes persisted values', async () => {
       const typeMeta = { id: 21, code: 'STOCK' };
       const categoryMeta = { id: 34, code: 'COMMON_STOCK', parentId: 21 };
@@ -130,6 +158,34 @@ describe('AssetTaxonomyPrismaRepository', () => {
       );
       expect(prisma.investmentAssetTaxonomy.create).not.toHaveBeenCalled();
     });
+
+    it.each([
+      ['type', { defaultAssetType: 'STOCK' }, 'Default investment asset type metadata not found'],
+      ['category', { defaultAssetCategory: 'COMMON_STOCK' }, 'Default investment asset category metadata not found'],
+    ] as const)('rejects a missing default asset %s metadata entry', async (_field, metadata, message) => {
+      await expect(repository.create({
+        userId: 12,
+        label: 'Equities',
+        nodeType: 'CATEGORY',
+        level: 1,
+        ...metadata,
+      })).rejects.toThrow(message);
+
+      expect(prisma.investmentAssetTaxonomy.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a parent that is not owned by the requested user', async () => {
+      prisma.investmentAssetTaxonomy.findFirst.mockResolvedValue(null);
+
+      await expect(repository.create({
+        userId: 12,
+        label: 'Equities',
+        nodeType: 'CATEGORY',
+        parentId: 99,
+        level: 2,
+      })).rejects.toThrow('Parent taxonomy node not found for user');
+      expect(prisma.investmentAssetTaxonomy.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('findAll', () => {
@@ -164,6 +220,24 @@ describe('AssetTaxonomyPrismaRepository', () => {
   });
 
   describe('findOne', () => {
+    it('maps an owned node and normalizes missing metadata references to null', async () => {
+      prisma.investmentAssetTaxonomy.findFirst.mockResolvedValue(createRecord({
+        defaultAssetTypeMetaId: undefined,
+        defaultAssetCategoryMetaId: undefined,
+        defaultAssetTypeRef: undefined,
+        defaultAssetCategoryRef: undefined,
+      }));
+
+      await expect(repository.findOne(7, 12)).resolves.toMatchObject({
+        id: 7,
+        userId: 12,
+        defaultAssetTypeMetaId: null,
+        defaultAssetCategoryMetaId: null,
+        defaultAssetType: null,
+        defaultAssetCategory: null,
+      });
+    });
+
     it('returns null when no node matches both ID and owner', async () => {
       prisma.investmentAssetTaxonomy.findFirst.mockResolvedValue(null);
 
@@ -230,6 +304,69 @@ describe('AssetTaxonomyPrismaRepository', () => {
         },
       });
     });
+
+    it('clears a parent and applies supplied numeric and classification fields', async () => {
+      const currentRecord = createRecord({ defaultAssetTypeRef: null });
+      const updatedRecord = createRecord({
+        parentId: null,
+        level: 3,
+        sortOrder: 8,
+        isActive: false,
+        defaultAssetTypeMetaId: 45,
+        defaultAssetTypeRef: { code: 'BOND' },
+      });
+      prisma.investmentAssetTaxonomy.findFirst
+        .mockResolvedValueOnce({ id: 7 })
+        .mockResolvedValueOnce(currentRecord);
+      prisma.appMetaConfigRef.findFirst.mockResolvedValue({ id: 45, code: 'BOND' });
+      prisma.investmentAssetTaxonomy.update.mockResolvedValue(updatedRecord);
+
+      await expect(repository.update(7, 12, {
+        parentId: '' as never,
+        level: '3' as never,
+        sortOrder: '8' as never,
+        isActive: false,
+        defaultAssetType: 'BOND',
+      })).resolves.toMatchObject({
+        parentId: null,
+        level: 3,
+        sortOrder: 8,
+        isActive: false,
+        defaultAssetType: 'BOND',
+      });
+      expect(prisma.investmentAssetTaxonomy.update).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 7 },
+        data: expect.objectContaining({
+          parentId: null,
+          level: 3,
+          sortOrder: 8,
+          isActive: false,
+          defaultAssetTypeMetaId: 45,
+        }),
+      }));
+    });
+
+    it('rejects a new parent that is not owned by the requested user', async () => {
+      prisma.investmentAssetTaxonomy.findFirst
+        .mockResolvedValueOnce({ id: 7 })
+        .mockResolvedValueOnce(null);
+
+      await expect(repository.update(7, 12, { parentId: 99 })).rejects.toThrow(
+        'Parent taxonomy node not found for user',
+      );
+      expect(prisma.investmentAssetTaxonomy.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects an update when the node disappears after its ownership check', async () => {
+      prisma.investmentAssetTaxonomy.findFirst
+        .mockResolvedValueOnce({ id: 7 })
+        .mockResolvedValueOnce(null);
+
+      await expect(repository.update(7, 12, { label: 'Renamed' })).rejects.toThrow(
+        'Taxonomy node not found for user',
+      );
+      expect(prisma.investmentAssetTaxonomy.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('updateLevelsForDescendants', () => {
@@ -278,6 +415,13 @@ describe('AssetTaxonomyPrismaRepository', () => {
       expect(prisma.investmentAssetTaxonomy.delete).toHaveBeenCalledWith({
         where: { id: 7 },
       });
+    });
+
+    it('does not delete a node that is not owned by the requested user', async () => {
+      prisma.investmentAssetTaxonomy.findFirst.mockResolvedValue(null);
+
+      await expect(repository.delete(7, 12)).rejects.toThrow('Taxonomy node not found for user');
+      expect(prisma.investmentAssetTaxonomy.delete).not.toHaveBeenCalled();
     });
   });
 });

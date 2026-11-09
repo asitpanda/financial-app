@@ -153,16 +153,41 @@ cd client
 npm start
 ```
 
-## Backend Scripts
+## Server Scripts
 
-From server:
+Run these commands from `server/`:
 
-- `npm run build`
-- `npm run start:dev`
-- `npm run prisma:generate`
-- `npm run prisma:push`
-- `npm run prisma:migrate`
-- `npm run prisma:studio`
+| Script | Description |
+| --- | --- |
+| `npm run build` | Compile the NestJS server. |
+| `npm run test` | Run all unit and API tests once with Vitest. |
+| `npm run test:unit` | Run unit tests, excluding controller and API tests. |
+| `npm run test:api` | Run controller and API tests. |
+| `npm run test:coverage` | Run all tests and generate coverage reports. |
+| `npm run test:unit:coverage` | Run unit tests and generate unit coverage reports. |
+| `npm run test:api:coverage` | Run controller and API tests and generate API coverage reports. |
+| `npm run start` | Start the NestJS server. |
+| `npm run start:dev` | Start the server in watch mode. |
+| `npm run start:debug` | Start the server in debug and watch mode. |
+| `npm run start:prod` | Run the compiled server from `dist/main`. |
+| `npm run prisma:generate` | Generate the Prisma client from the schema. |
+| `npm run prisma:push` | Push the Prisma schema to the configured database. |
+| `npm run prisma:migrate` | Create and apply a Prisma development migration. |
+| `npm run prisma:studio` | Open Prisma Studio for the configured database. |
+| `npm run lint` | Run ESLint with automatic fixes on matching TypeScript files. |
+| `npm run format` | Format source TypeScript files with Prettier. |
+
+## Client Scripts
+
+Run these commands from `client/`:
+
+| Script | Description |
+| --- | --- |
+| `npm start` | Start the Vite development server. |
+| `npm run build` | Build production assets with Vite. |
+| `npm test` | Run Vitest; interactive terminals use watch mode. |
+| `npm run test:coverage` | Run tests once and generate a coverage report. |
+| `npm run type-check` | Run TypeScript checks without emitting files. |
 
 ## User Preferences
 

@@ -109,11 +109,10 @@ export default function SourceOfValueCard({
               <Chip
                 size="small"
                 label={`${count} holding${count === 1 ? "" : "s"}`}
+                color={row.tone === "neutral" ? "default" : row.tone}
                 sx={{
                   height: 22,
                   fontSize: 11,
-                  bgcolor: sourceBg,
-                  color: sourceColor,
                   fontWeight: 700,
                 }}
               />

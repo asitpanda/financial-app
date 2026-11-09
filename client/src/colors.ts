@@ -20,6 +20,38 @@ export const colors = {
   sidebarHoverBg: "#334155",
 } as const;
 
+export const CHIP_COLORS = {
+  light: {
+    default: { backgroundColor: "#eef2f7", color: "#344054" },
+    primary: { backgroundColor: "#dbeafe", color: "#1e40af" },
+    secondary: { backgroundColor: "#fae8ff", color: "#86198f" },
+    success: { backgroundColor: "#d1fae5", color: "#065f46" },
+    error: { backgroundColor: "#fee2e2", color: "#991b1b" },
+    warning: { backgroundColor: "#fef3c7", color: "#92400e" },
+    info: { backgroundColor: "#e0f2fe", color: "#075985" },
+    transfer: { backgroundColor: "#e2e8f0", color: "#334155" },
+    investment: { backgroundColor: "#cffafe", color: "#155e75" },
+  },
+  dark: {
+    default: { backgroundColor: "#293548", color: "#e2e8f0" },
+    primary: { backgroundColor: "#1e3a5f", color: "#bfdbfe" },
+    secondary: { backgroundColor: "#4a2054", color: "#f5d0fe" },
+    success: { backgroundColor: "#064e3b", color: "#a7f3d0" },
+    error: { backgroundColor: "#641e25", color: "#fecaca" },
+    warning: { backgroundColor: "#563910", color: "#fde68a" },
+    info: { backgroundColor: "#0c4a6e", color: "#bae6fd" },
+    transfer: { backgroundColor: "#334155", color: "#e2e8f0" },
+    investment: { backgroundColor: "#164e63", color: "#a5f3fc" },
+  },
+} as const;
+
+export type ChipTone = keyof typeof CHIP_COLORS.light;
+
+export const getChipColors = (
+  mode: "light" | "dark",
+  tone: ChipTone = "default",
+) => CHIP_COLORS[mode][tone];
+
 export const themeColors = {
   light: {
     primary: colors.primary,

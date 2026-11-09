@@ -32,6 +32,27 @@ describe('ValuationSnapshotMockRepository', () => {
   });
 
   describe('create', () => {
+    it('starts IDs at one when the mock snapshot store is empty', async () => {
+      vi.doMock('../../mockdata', () => ({ mockValuationSnapshotsData: [] }));
+      vi.resetModules();
+
+      try {
+        const { ValuationSnapshotMockRepository: EmptyStoreRepository } = await import('./valuation-snapshot.mock.repository');
+        const emptyStoreRepository = new EmptyStoreRepository(investmentRepository as never);
+        const snapshot = await emptyStoreRepository.create({
+          userId: '42',
+          investmentId: '9201',
+          snapshotDate: '2026-02-01T00:00:00.000Z',
+          marketValue: 120,
+        } as never);
+
+        expect(snapshot.id).toBe(1);
+      } finally {
+        vi.doUnmock('../../mockdata');
+        vi.resetModules();
+      }
+    });
+
     it('normalizes stored values and syncs the investment from the latest snapshot', async () => {
       const snapshotDate = '2026-02-01T00:00:00.000Z';
 
@@ -76,6 +97,41 @@ describe('ValuationSnapshotMockRepository', () => {
 
       expect(investmentRepository.update).not.toHaveBeenCalled();
     });
+
+    it('does not synchronize when the investment no longer exists', async () => {
+      investmentRepository.findById.mockResolvedValue(null);
+
+      await repository.create({
+        userId: '42',
+        investmentId: '9201',
+        snapshotDate: '2026-02-01T00:00:00.000Z',
+        marketValue: 120,
+      } as never);
+
+      expect(investmentRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('uses the higher snapshot ID to break equal-date latest-valuation ties', async () => {
+      await repository.create({
+        userId: '42',
+        investmentId: '9207',
+        snapshotDate: '2026-04-01T00:00:00.000Z',
+        marketValue: 100,
+      } as never);
+      investmentRepository.update.mockClear();
+
+      await repository.create({
+        userId: '42',
+        investmentId: '9207',
+        snapshotDate: '2026-04-01T00:00:00.000Z',
+        marketValue: 200,
+      } as never);
+
+      expect(investmentRepository.update).toHaveBeenCalledWith(9207, expect.objectContaining({
+        currentValue: 200,
+        currentValueSource: 'valuation_snapshot',
+      }), 42);
+    });
   });
 
   describe('findAllByInvestment', () => {
@@ -118,10 +174,16 @@ describe('ValuationSnapshotMockRepository', () => {
         investmentId: '9205',
         snapshotDate: '2026-03-01T00:00:00.000Z',
         units: '2.5',
+        userId: '43',
+        price: '12.5',
+        source: 'MANUAL',
       } as never)).resolves.toMatchObject({
         investmentId: 9205,
+        userId: 43,
         snapshotDate: new Date('2026-03-01T00:00:00.000Z'),
         units: 2.5,
+        price: 12.5,
+        source: 'MANUAL',
       });
 
       expect(investmentRepository.update).toHaveBeenCalledTimes(2);
@@ -135,6 +197,33 @@ describe('ValuationSnapshotMockRepository', () => {
         currentValueSource: 'valuation_snapshot',
         lastValuationAt: new Date('2026-03-01T00:00:00.000Z').toISOString(),
       }, 42);
+    });
+
+    it('preserves omitted optional fields and synchronizes once when the investment is unchanged', async () => {
+      const original = await repository.create({
+        userId: '42',
+        investmentId: '9208',
+        snapshotDate: '2026-01-01T00:00:00.000Z',
+        marketValue: 100,
+        units: 2,
+        price: 50,
+        source: 'MANUAL',
+      } as never);
+      investmentRepository.update.mockClear();
+
+      await expect(repository.update(String(original.id), { marketValue: 150 })).resolves.toMatchObject({
+        userId: 42,
+        investmentId: 9208,
+        snapshotDate: original.snapshotDate,
+        marketValue: 150,
+        units: 2,
+        price: 50,
+        source: 'MANUAL',
+      });
+      expect(investmentRepository.update).toHaveBeenCalledTimes(1);
+      expect(investmentRepository.update).toHaveBeenCalledWith(9208, expect.objectContaining({
+        currentValue: 150,
+      }), 42);
     });
 
     it('returns null without synchronizing when the snapshot does not exist', async () => {

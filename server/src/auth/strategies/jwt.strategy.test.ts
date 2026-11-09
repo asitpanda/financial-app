@@ -4,6 +4,16 @@ import { AuthService } from '../auth.service';
 import { JwtStrategy } from './jwt.strategy';
 
 describe('JwtStrategy', () => {
+  it.each([undefined, '   '])('refuses to initialize without a non-empty signing secret', (secret) => {
+    const configService = { get: vi.fn(() => secret) };
+    const authService = { validateUser: vi.fn() };
+
+    expect(() => new JwtStrategy(
+      configService as unknown as ConfigService,
+      authService as unknown as AuthService,
+    )).toThrow('JWT_SECRET is required. Refusing to start without a signing secret.');
+  });
+
   describe('validate', () => {
     it('resolves the token subject to the current public user profile', async () => {
       const profile = { id: 12, email: 'person@example.com', name: 'Ada' };

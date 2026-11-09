@@ -12,6 +12,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 const jwtSecret = 'auth-api-test-signing-secret';
 const initialUsers = registeredUsers.map((user) => ({ ...user }));
+const defaultPreferences = {
+  currencyDisplay: 'symbol',
+  themeMode: 'light',
+  dateFormat: 'DD_MM_YYYY',
+} as const;
 
 describe('Auth API', () => {
   let app: INestApplication;
@@ -85,7 +90,7 @@ describe('Auth API', () => {
       expect(response.body).toEqual({
         user: { id: 3, email: 'new@example.com', name: 'New User' },
         token: expect.any(String),
-        preferences: { currencyDisplay: 'symbol' },
+        preferences: defaultPreferences,
       });
     });
 
@@ -128,7 +133,7 @@ describe('Auth API', () => {
       expect(response.body).toEqual({
         user: { id: 1, email: 'demo@example.com', name: 'Demo User' },
         token: expect.any(String),
-        preferences: { currencyDisplay: 'symbol' },
+        preferences: defaultPreferences,
       });
     });
 
@@ -162,7 +167,7 @@ describe('Auth API', () => {
         id: 1,
         email: 'demo@example.com',
         name: 'Demo User',
-        preferences: { currencyDisplay: 'symbol' },
+        preferences: defaultPreferences,
       });
     });
   });

@@ -11,6 +11,7 @@ const transactionsService = {
   create: vi.fn(),
   recordContribution: vi.fn(),
   recordWithdrawal: vi.fn(),
+  findPage: vi.fn(),
   findAll: vi.fn(),
   findByType: vi.fn(),
   findByDateRange: vi.fn(),
@@ -59,6 +60,10 @@ describe('Transactions API', () => {
       investmentEvent: { id: 31 },
       message: 'Withdrawal recorded successfully',
     });
+    transactionsService.findPage.mockResolvedValue({
+      data: [{ id: 19, type: 'EXPENSE' }],
+      pagination: { page: 2, limit: 10, total: 1, totalPages: 1 },
+    });
     transactionsService.findAll.mockResolvedValue([{ id: 19, type: 'EXPENSE' }]);
     transactionsService.findByType.mockResolvedValue([{ id: 19, type: 'EXPENSE' }]);
     transactionsService.findByDateRange.mockResolvedValue([{ id: 19, type: 'EXPENSE' }]);
@@ -95,6 +100,31 @@ describe('Transactions API', () => {
       expect(response.status).toBe(400);
       expect(transactionsService.findAll).not.toHaveBeenCalled();
       expect(transactionsService.findByType).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /api/transactions/list', () => {
+    it('returns a page and forwards transformed filters for the authenticated user', async () => {
+      const response = await request(app.getHttpServer()).get(
+        '/api/transactions/list?page=2&limit=10&accountId=9&type=EXPENSE&sortBy=amount&sortDirection=desc',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        data: [{ id: 19, type: 'EXPENSE' }],
+        pagination: { page: 2, limit: 10, total: 1, totalPages: 1 },
+      });
+      expect(transactionsService.findPage).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({
+          page: 2,
+          limit: 10,
+          accountId: 9,
+          type: 'EXPENSE',
+          sortBy: 'amount',
+          sortDirection: 'desc',
+        }),
+      );
     });
   });
 

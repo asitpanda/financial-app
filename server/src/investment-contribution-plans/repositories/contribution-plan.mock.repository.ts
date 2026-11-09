@@ -129,7 +129,7 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
   }
 
   async findOne(id: string): Promise<InvestmentContributionPlanRecord | null> {
-    return mockInvestmentContributionPlans.find((plan) => plan.id === Number(id));
+    return mockInvestmentContributionPlans.find((plan) => plan.id === Number(id)) ?? null;
   }
 
   async update(
@@ -415,6 +415,8 @@ export class ContributionPlanMockRepository implements IContributionPlanDataSour
         lastGeneratedDueDate = generatedDueDate;
         nextDueDate = this.advanceByCadence(nextDueDate, plan.cadenceUnit, plan.cadenceInterval, plan.anchorDate);
       }
+
+      if (plan.endDate && nextDueDate && nextDueDate > plan.endDate) nextDueDate = null;
 
       plan.nextDueDate = nextDueDate;
       plan.lastGeneratedDueDate = lastGeneratedDueDate;

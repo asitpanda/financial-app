@@ -61,6 +61,17 @@ describe('FinancialAccountPrismaRepository', () => {
         },
       });
     });
+
+    it('leaves an omitted opening balance undefined for database defaults', async () => {
+      prisma.financialAccount.create.mockResolvedValue(accountRow({ openingBalance: 0 }));
+
+      await expect(repository.create({ name: 'checking' } as never, '42')).resolves.toMatchObject({
+        openingBalance: 0,
+      });
+      expect(prisma.financialAccount.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ openingBalance: undefined, userId: 42 }),
+      });
+    });
   });
 
   describe('findAll', () => {
@@ -74,6 +85,20 @@ describe('FinancialAccountPrismaRepository', () => {
         where: { userId: 42 },
         orderBy: { createdAt: 'desc' },
       });
+    });
+
+    it('maps numeric strings and invalid nullable balances to safe numbers', async () => {
+      prisma.financialAccount.findMany.mockResolvedValue([
+        accountRow({ id: 8, openingBalance: '250.75' }),
+        accountRow({ id: 9, openingBalance: null }),
+        accountRow({ id: 10, openingBalance: 'not-a-number' }),
+      ]);
+
+      await expect(repository.findAll('42')).resolves.toMatchObject([
+        { id: 8, openingBalance: 250.75 },
+        { id: 9, openingBalance: 0 },
+        { id: 10, openingBalance: 0 },
+      ]);
     });
   });
 
@@ -168,6 +193,16 @@ describe('FinancialAccountPrismaRepository', () => {
         },
         _sum: { amount: true },
       });
+    });
+
+    it('treats null aggregate sums as zero for accounts with recorded flows', async () => {
+      prisma.transaction.groupBy
+        .mockResolvedValueOnce([{ destinationAccountId: 7, _sum: { amount: null } }])
+        .mockResolvedValueOnce([{ sourceAccountId: 7, _sum: { amount: null } }]);
+
+      await expect(repository.sumTransactionFlows([7])).resolves.toEqual(
+        new Map([[7, { incoming: 0, outgoing: 0 }]]),
+      );
     });
   });
 });

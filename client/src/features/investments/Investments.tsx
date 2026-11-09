@@ -83,6 +83,16 @@ export default function Investments() {
   const saveTaxonomyMutation = useSaveInvestmentAssetTaxonomy();
   const removeTaxonomyMutation = useRemoveInvestmentAssetTaxonomy();
   useEffect(() => {
+    const url = new URL(window.location.href);
+    const investmentId = Number(url.searchParams.get("investmentId"));
+    if (!Number.isSafeInteger(investmentId) || investmentId <= 0) return;
+    setSelectedInvestmentId(investmentId);
+    setDrawerMode("view");
+    setDrawerOpen(true);
+    url.searchParams.delete("investmentId");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
+  useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedSearch(search), 500);
     return () => window.clearTimeout(timeoutId);
   }, [search]);

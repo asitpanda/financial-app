@@ -11,6 +11,9 @@ function createRepository() {
     delete: vi.fn(),
     findByDateRange: vi.fn(),
     findByType: vi.fn(),
+    findPage: vi.fn(),
+    findAllForAccount: vi.fn(),
+    getPeriodTypeTotals: vi.fn(),
   };
 
   return {
@@ -94,6 +97,37 @@ describe('TransactionRepository', () => {
       await repository.findByType(42, 'EXPENSE');
 
       expect(dataSource.findByType).toHaveBeenCalledWith(42, 'EXPENSE');
+    });
+  });
+
+  describe('findPage', () => {
+    it('forwards the owner and complete list query and returns the paged result', async () => {
+      const query = { page: 2, limit: 10, type: 'EXPENSE', sortBy: 'amount' };
+      const result = { items: [{ id: 3 }], total: 14 };
+      dataSource.findPage.mockResolvedValue(result);
+
+      await expect(repository.findPage(42, query as never)).resolves.toBe(result);
+      expect(dataSource.findPage).toHaveBeenCalledExactlyOnceWith(42, query);
+    });
+  });
+
+  describe('findAllForAccount', () => {
+    it('forwards the owner and account IDs', async () => {
+      const result = [{ id: 3 }];
+      dataSource.findAllForAccount.mockResolvedValue(result);
+
+      await expect(repository.findAllForAccount(42, 8)).resolves.toBe(result);
+      expect(dataSource.findAllForAccount).toHaveBeenCalledExactlyOnceWith(42, 8);
+    });
+  });
+
+  describe('getPeriodTypeTotals', () => {
+    it('forwards optional period boundaries and returns the totals', async () => {
+      const result = [{ type: 'INCOME', amount: 125, count: 2 }];
+      dataSource.getPeriodTypeTotals.mockResolvedValue(result);
+
+      await expect(repository.getPeriodTypeTotals(42, '2026-10-01', '2026-10-31')).resolves.toBe(result);
+      expect(dataSource.getPeriodTypeTotals).toHaveBeenCalledExactlyOnceWith(42, '2026-10-01', '2026-10-31');
     });
   });
 });

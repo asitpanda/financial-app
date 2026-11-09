@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import StatusChip from './StatusChip';
 import { renderWithProviders, screen } from '../../test/test-utils';
-import { createAppTheme } from '../../theme/createAppTheme';
+import { CHIP_COLORS } from '../../colors';
 
 describe('StatusChip', () => {
   it('renders the status label', () => {
@@ -12,7 +12,7 @@ describe('StatusChip', () => {
   });
 
   it.each(['light', 'dark'] as const)('uses %s theme colors for movement statuses', (themeMode) => {
-    const theme = createAppTheme(themeMode);
+    const chipColors = CHIP_COLORS[themeMode];
     renderWithProviders(
       <>
         <StatusChip label="Transfer" tone="transfer" />
@@ -22,12 +22,14 @@ describe('StatusChip', () => {
     );
 
     expect(screen.getByText('Transfer').parentElement).toHaveStyle({
-      color: theme.palette.movement.transfer,
-      borderColor: theme.palette.movement.transfer,
+      backgroundColor: chipColors.transfer.backgroundColor,
+      color: chipColors.transfer.color,
+      borderColor: chipColors.transfer.color,
     });
     expect(screen.getByText('Investment').parentElement).toHaveStyle({
-      color: theme.palette.movement.investment,
-      borderColor: theme.palette.movement.investment,
+      backgroundColor: chipColors.investment.backgroundColor,
+      color: chipColors.investment.color,
+      borderColor: chipColors.investment.color,
     });
   });
 });

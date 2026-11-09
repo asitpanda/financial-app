@@ -53,10 +53,36 @@ export class InvestmentEventsService {
     const existingEvent = await this.findOne(id, userId);
     if (!existingEvent) return null;
 
-    if (existingEvent.linkedTransactionId != null || updateInvestmentEventDto.linkedTransactionId != null || existingEvent.linkedBenefitId != null || updateInvestmentEventDto.linkedBenefitId != null) {
+    if (
+      existingEvent.linkedTransactionId != null ||
+      updateInvestmentEventDto.linkedTransactionId != null ||
+      existingEvent.linkedBenefitId != null ||
+      updateInvestmentEventDto.linkedBenefitId != null
+    ) {
       throw new BadRequestException(
-        'Investment events linked to transactions cannot be edited independently.',
+        'Benefit activity and transaction-linked events cannot be changed here.',
       );
+    }
+
+    this.assertEditableActivity(existingEvent.eventType);
+    const editableFields = new Set(['investmentId', 'amount', 'netAmount', 'eventDate', 'notes']);
+    if (Object.keys(updateInvestmentEventDto).some((field) => !editableFields.has(field))) {
+      throw new BadRequestException('Only the activity amount, date, and notes can be edited.');
+    }
+    if (updateInvestmentEventDto.investmentId !== undefined && Number(updateInvestmentEventDto.investmentId) !== existingEvent.investmentId) {
+      throw new BadRequestException('Activity cannot be moved to another investment.');
+    }
+    if (updateInvestmentEventDto.amount !== undefined && (!Number.isFinite(updateInvestmentEventDto.amount) || updateInvestmentEventDto.amount <= 0)) {
+      throw new BadRequestException('Activity amount must be positive.');
+    }
+
+    if (
+      existingEvent.recurringPlanId != null &&
+      (existingEvent.eventType === InvestmentEventType.CONTRIBUTION || existingEvent.eventType === InvestmentEventType.PREMIUM) &&
+      ((updateInvestmentEventDto.amount !== undefined && Number(updateInvestmentEventDto.amount) !== Number(existingEvent.amount)) ||
+        (updateInvestmentEventDto.netAmount !== undefined && Number(updateInvestmentEventDto.netAmount) !== Number(existingEvent.netAmount ?? existingEvent.amount)))
+    ) {
+      throw new BadRequestException('Recurring contribution amounts can only be changed from investment edit.');
     }
 
     if (userId !== undefined) {
@@ -73,24 +99,50 @@ export class InvestmentEventsService {
         updateInvestmentEventDto.linkedTransactionId ?? existingEvent.linkedTransactionId ?? undefined,
     });
 
-    return this.repository.update(id, updateInvestmentEventDto);
+    return this.repository.update(id, {
+      ...updateInvestmentEventDto,
+      ...(updateInvestmentEventDto.netAmount === undefined && updateInvestmentEventDto.amount !== undefined
+        ? { netAmount: updateInvestmentEventDto.amount }
+        : {}),
+    });
   }
 
   async remove(id: string, userId?: number) {
     const existingEvent = await this.findOne(id, userId);
     if (!existingEvent) return;
 
-    if (existingEvent.linkedTransactionId != null || existingEvent.linkedBenefitId != null) {
+    if (existingEvent.linkedBenefitId != null) {
       throw new BadRequestException(
-        'Investment events linked to transactions cannot be deleted independently.',
+        'Benefit activity cannot be deleted independently.',
       );
     }
+    if (existingEvent.linkedTransactionId != null) {
+      throw new BadRequestException(
+        'Transaction-linked activity cannot be deleted independently.',
+      );
+    }
+
+    this.assertEditableActivity(existingEvent.eventType);
 
     if (userId !== undefined) {
       await this.assertOpenInvestment(existingEvent.investmentId, userId);
     }
 
     return this.repository.delete(id);
+  }
+
+  private assertEditableActivity(eventType: InvestmentEventType) {
+    const editableTypes: InvestmentEventType[] = [
+      InvestmentEventType.CONTRIBUTION,
+      InvestmentEventType.PREMIUM,
+      InvestmentEventType.WITHDRAWAL_PRINCIPAL,
+      InvestmentEventType.OPENING_BALANCE,
+      InvestmentEventType.INCOME_CREDIT,
+      InvestmentEventType.OPENING_INCOME_CREDIT,
+    ];
+    if (!editableTypes.includes(eventType)) {
+      throw new BadRequestException('This activity must be managed through its owning workflow.');
+    }
   }
 
   private async assertOwnedInvestment(investmentId: string, userId: number) {

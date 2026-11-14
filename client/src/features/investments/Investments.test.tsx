@@ -45,6 +45,12 @@ const mocks = vi.hoisted(() => ({
   },
   investment: {
     data: null as Record<string, unknown> | null,
+    events: [] as Array<Record<string, unknown>>,
+    snapshots: [] as Array<Record<string, unknown>>,
+    performance: null as {
+      performanceHistory: Array<Record<string, unknown>>;
+      performanceHistorySource: string | null;
+    } | null,
   },
   save: vi.fn(),
   summaryQuery: vi.fn(),
@@ -93,9 +99,9 @@ vi.mock("./hooks/useInvestments", () => ({
     error: mocks.dashboard.error,
   }),
   useInvestment: () => ({ data: mocks.investment.data }),
-  useInvestmentEventsByInvestment: () => ({ data: [] }),
-  useInvestmentPerformance: () => ({ data: null }),
-  useInvestmentSnapshotsByInvestment: () => ({ data: [] }),
+  useInvestmentEventsByInvestment: () => ({ data: mocks.investment.events }),
+  useInvestmentPerformance: () => ({ data: mocks.investment.performance }),
+  useInvestmentSnapshotsByInvestment: () => ({ data: mocks.investment.snapshots }),
   useSaveInvestment: () => ({ mutateAsync: mocks.save }),
   useRemoveInvestment: () => ({ mutateAsync: mocks.remove }),
 }));
@@ -290,6 +296,10 @@ vi.mock("./components/InvestmentViewDrawer", () => ({
     open && investment ? (
       <section aria-label="Investment view drawer">
         <p>{String(investment.name)}</p>
+        <p>Detail event: {String((investment.investmentEvents as Array<{ id?: string | number }> | undefined)?.[0]?.id ?? "none")}</p>
+        <p>Detail snapshot: {String((investment.valuationSnapshots as Array<{ marketValue?: number }> | undefined)?.[0]?.marketValue ?? "none")}</p>
+        <p>Detail performance: {String(investment.performanceHistorySource ?? "none")}</p>
+        <p>Detail performance value: {String((investment.performanceHistory as Array<{ currentValue?: number }> | undefined)?.[0]?.currentValue ?? "none")}</p>
         <button type="button" onClick={onClose}>
           Close investment details
         </button>
@@ -446,6 +456,9 @@ const resetMocks = () => {
   mocks.benefits.loading = false;
   mocks.benefits.error = null;
   mocks.investment.data = null;
+  mocks.investment.events = [];
+  mocks.investment.snapshots = [];
+  mocks.investment.performance = null;
   mocks.save.mockReset();
   mocks.summaryQuery.mockReset();
   mocks.remove.mockReset();
@@ -637,6 +650,32 @@ describe("Investments", () => {
     expect(
       screen.queryByRole("region", { name: "Investment view drawer" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("uses detail-query events, snapshots, and performance when composing the view drawer", async () => {
+    const user = userEvent.setup();
+    mocks.summary.investments = [investment];
+    mocks.investment.data = {
+      ...investmentDetails,
+      investmentEvents: [{ id: "summary-event" }],
+      valuationSnapshots: [{ id: "summary-snapshot", marketValue: 900 }],
+      performanceHistory: [{ currentValue: 900 }],
+      performanceHistorySource: "summary",
+    };
+    mocks.investment.events = [{ id: "detail-event" }];
+    mocks.investment.snapshots = [{ id: "detail-snapshot", marketValue: 1500 }];
+    mocks.investment.performance = {
+      performanceHistory: [{ currentValue: 1500 }],
+      performanceHistorySource: "investment_event",
+    };
+
+    renderWithProviders(<Investments />);
+    await user.click(screen.getByRole("button", { name: "View Growth Fund" }));
+
+    expect(screen.getByText("Detail event: detail-event")).toBeInTheDocument();
+    expect(screen.getByText("Detail snapshot: 1500")).toBeInTheDocument();
+    expect(screen.getByText("Detail performance: investment_event")).toBeInTheDocument();
+    expect(screen.getByText("Detail performance value: 1500")).toBeInTheDocument();
   });
 
   it("opens the edit form from the investment view drawer", async () => {

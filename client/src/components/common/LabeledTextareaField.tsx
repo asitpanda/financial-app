@@ -52,6 +52,10 @@ export default function LabeledTextareaField({
         helperText={errorMessage || helperText}
         slotProps={{
           ...textFieldProps.slotProps,
+          htmlInput: {
+            'aria-label': labelText,
+            ...textFieldProps.slotProps?.htmlInput,
+          },
           formHelperText: {
             ...textFieldProps.slotProps?.formHelperText,
             ...helperSlotProps,

@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import type { ReactElement } from 'react';
+import { describe, expect, it, vi } from 'vitest';
 import {
   getScreenConfig,
   SCREEN_CONFIGS,
   SIDEBAR_SCREEN_CONFIGS,
+  type ScreenRenderContext,
 } from './screenRegistry';
 
 describe('screen registry', () => {
@@ -21,13 +23,32 @@ describe('screen registry', () => {
     });
   });
 
-  it('returns the requested configuration', () => {
-    expect(getScreenConfig('transactions')).toMatchObject({
-      key: 'transactions',
-      path: '/transactions',
-      label: 'Transactions',
-      showInSidebar: true,
-    });
+  it.each([
+    ['dashboard', '/dashboard', 'Dashboard'],
+    ['transactions', '/transactions', 'Transactions'],
+    ['goals', '/goals', 'Goals'],
+    ['categories', '/categories', 'Categories'],
+    ['investments', '/investments', 'Investments'],
+    ['locker', '/locker', 'Locker'],
+    ['settings', '/settings', 'Settings'],
+  ] as const)('returns the %s screen configuration', (screen, path, label) => {
+    expect(getScreenConfig(screen)).toMatchObject({ key: screen, path, label });
+  });
+
+  it('forwards transaction navigation from the dashboard screen', () => {
+    const onOpenTransactionsFromDashboard = vi.fn();
+    const context: ScreenRenderContext = {
+      transactionsPrefetch: [],
+      transactionsPrefillFilter: null,
+      onOpenTransactionsFromDashboard,
+    };
+    const dashboard = SCREEN_CONFIGS.dashboard.render(context) as ReactElement<{
+      onOpenTransactionsFromDashboard: typeof onOpenTransactionsFromDashboard;
+    }>;
+
+    expect(dashboard.props.onOpenTransactionsFromDashboard).toBe(
+      onOpenTransactionsFromDashboard,
+    );
   });
 
   it('includes every configured screen in the sidebar', () => {

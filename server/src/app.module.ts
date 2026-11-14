@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { resolve } from 'node:path';
 import { TransactionsModule } from './transactions/transactions.module';
 import { GoalsModule } from './goals/goals.module';
 import { CategoriesModule } from './categories/categories.module';
@@ -20,7 +21,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: resolve(__dirname, '../.env'),
     }),
     DatabaseModule,
     AuthModule,

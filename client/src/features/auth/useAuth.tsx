@@ -114,6 +114,7 @@ export const useGetMe = () => {
     if (query.isSuccess && query.data && useAuth.getState().token === token &&
         usePreferencesStore.getState().sessionId === sessionId) {
       const { preferences, ...user } = query.data;
+        if (!preferences) return;
       usePreferencesStore.getState().setPreferences(sessionId, preferences);
       setUser(user);
     }

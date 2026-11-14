@@ -95,4 +95,89 @@ describe("InvestmentAssetTaxonomyFormDrawer", () => {
       parentId: 1,
     })));
   });
+
+  it("creates a child node under the selected parent", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue({
+      id: "3",
+      label: "Domestic Equity",
+      level: 3,
+      parentId: 2,
+    });
+
+    renderWithProviders(
+      <InvestmentAssetTaxonomyFormDrawer
+        open
+        onClose={vi.fn()}
+        onDelete={vi.fn()}
+        onSubmit={onSubmit}
+        taxonomyNodes={nodes}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add child to Equity" }));
+    await user.type(screen.getByLabelText("Label"), "Domestic Equity");
+    await user.click(screen.getByRole("button", { name: "Save Node" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
+      label: "Domestic Equity",
+      nodeType: "subtype",
+      level: 3,
+      parentId: 2,
+      defaultAssetType: undefined,
+      defaultAssetCategory: undefined,
+      sortOrder: 0,
+      isActive: true,
+    }));
+  });
+
+  it("shows a validation error and does not submit a duplicate sibling label", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+
+    renderWithProviders(
+      <InvestmentAssetTaxonomyFormDrawer
+        open
+        onClose={vi.fn()}
+        onDelete={vi.fn()}
+        onSubmit={onSubmit}
+        taxonomyNodes={nodes}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add Root" }));
+    await user.type(screen.getByLabelText("Label"), " Investments ");
+    await user.click(screen.getByRole("button", { name: "Save Node" }));
+
+    expect(screen.getByText("Label already exists under the selected parent")).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("allows canceling deletion before confirming the selected branch removal", async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+
+    renderWithProviders(
+      <InvestmentAssetTaxonomyFormDrawer
+        open
+        onClose={vi.fn()}
+        onDelete={onDelete}
+        onSubmit={vi.fn()}
+        taxonomyNodes={nodes}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Delete Investments" }));
+    expect(screen.getByText("Remove Investments from the asset taxonomy? Child nodes under this branch will also be removed.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onDelete).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Delete asset taxonomy" })).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Delete Investments" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(onDelete).toHaveBeenCalledWith(expect.objectContaining(nodes[0]));
+  });
 });

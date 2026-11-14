@@ -24,7 +24,6 @@ export default function IdleTimeoutDialog({ open, secondsLeft, onStayActive, onL
   return (
     <Dialog
       open={open}
-      disableEscapeKeyDown
       fullWidth
       maxWidth="xs"
       role="alertdialog"

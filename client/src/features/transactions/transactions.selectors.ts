@@ -35,6 +35,9 @@ interface TransactionTableRow {
   notes: string;
   investment: string;
   investmentEventType: string;
+  debitAmount: number | null;
+  creditAmount: number | null;
+  balanceAfter: number | null;
 }
 
 export const getSortedTransactions = (transactions: TransactionRecord[]) => {
@@ -132,7 +135,7 @@ export const getTransactionRows = (
   getTransactionId: (tx: TransactionRecord) => string,
   formatDate: (value: Date | string) => string = formatPreferenceDate,
 ): TransactionTableRow[] => {
-  return tableTransactions.map((tx: TransactionRecord) => {
+  return tableTransactions.map((tx) => {
     const txDate = new Date(tx.date || tx.createdAt || Date.now());
     const txId = getTransactionId(tx);
 

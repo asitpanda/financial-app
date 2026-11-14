@@ -85,6 +85,10 @@ export default function LabeledSelectField({
       </Typography>
       <Select
         {...selectProps}
+        SelectDisplayProps={{
+          'aria-label': labelText,
+          ...selectProps.SelectDisplayProps,
+        }}
         size={size}
         MenuProps={mergedMenuProps}
         sx={{

@@ -13,7 +13,7 @@ export interface AuthResponse {
 }
 
 export interface CurrentUser extends User {
-  preferences: UserPreferences;
+  preferences: UserPreferences | null;
 }
 
 export interface LoginDto {

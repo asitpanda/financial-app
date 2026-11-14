@@ -8,6 +8,8 @@ import type {
   InvestmentBenefitType,
   InvestmentFrequency,
 } from '../features/investments/types/investment.types';
+import type { InvestmentAssetTaxonomyNode } from '../features/investments/types/investmentAssetTaxonomy.types';
+import type { FinancialAccountRecord } from '../features/accounts/types/account.types';
 
 export const STATUS_OPTIONS = [
   { value: 'all', label: 'All Status' },
@@ -136,7 +138,7 @@ const formatCodeLabel = (value) =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
     .join(' ');
 
-const getActiveNodes = (taxonomyNodes = []) => taxonomyNodes.filter((node) => node?.isActive !== false);
+const getActiveNodes = (taxonomyNodes: InvestmentAssetTaxonomyNode[] = []) => taxonomyNodes.filter((node) => node?.isActive !== false);
 
 const buildTaxonomyLineage = (node, taxonomyById) => {
   if (!node) return [];
@@ -151,13 +153,13 @@ const buildTaxonomyLineage = (node, taxonomyById) => {
   return lineage;
 };
 
-export const getTaxonomyById = (taxonomyNodes = []) =>
+export const getTaxonomyById = (taxonomyNodes: InvestmentAssetTaxonomyNode[] = []) =>
   getActiveNodes(taxonomyNodes).reduce((acc, node) => {
     acc[node.id] = node;
     return acc;
   }, {});
 
-export const getInvestmentCategoryOptions = (taxonomyNodes = []) => {
+export const getInvestmentCategoryOptions = (taxonomyNodes: InvestmentAssetTaxonomyNode[] = []) => {
   const categories = getActiveNodes(taxonomyNodes)
     .filter((node) => Number(node.level) === 1)
     .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0) || left.label.localeCompare(right.label))
@@ -166,7 +168,7 @@ export const getInvestmentCategoryOptions = (taxonomyNodes = []) => {
   return [{ value: 'all', label: 'All Categories' }, ...categories];
 };
 
-export const getInvestmentTypeGroups = (taxonomyNodes = []) => {
+export const getInvestmentTypeGroups = (taxonomyNodes: InvestmentAssetTaxonomyNode[] = []) => {
   const categories = getActiveNodes(taxonomyNodes)
     .filter((node) => Number(node.level) === 1)
     .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0) || left.label.localeCompare(right.label));
@@ -186,7 +188,7 @@ export const getInvestmentTypeGroups = (taxonomyNodes = []) => {
   }));
 };
 
-export const getInvestmentTypeOptions = (taxonomyNodes = []) => {
+export const getInvestmentTypeOptions = (taxonomyNodes: InvestmentAssetTaxonomyNode[] = []) => {
   const activeNodes = getActiveNodes(taxonomyNodes);
   const taxonomyById = getTaxonomyById(taxonomyNodes);
 
@@ -208,7 +210,7 @@ export const getInvestmentTypeOptions = (taxonomyNodes = []) => {
     });
 };
 
-export const getInvestmentTypeTreeItems = (taxonomyNodes = []) => {
+export const getInvestmentTypeTreeItems = (taxonomyNodes: InvestmentAssetTaxonomyNode[] = []) => {
   const activeNodes = getActiveNodes(taxonomyNodes)
     .slice()
     .sort((left, right) => {
@@ -231,7 +233,7 @@ export const getInvestmentTypeTreeItems = (taxonomyNodes = []) => {
   return buildChildren(null);
 };
 
-export const getInvestmentTypeDisplayLabel = (typeOrId, taxonomyNodes = []) => {
+export const getInvestmentTypeDisplayLabel = (typeOrId, taxonomyNodes: InvestmentAssetTaxonomyNode[] = []) => {
   const taxonomyById = getTaxonomyById(taxonomyNodes);
   const directMatch = taxonomyById[typeOrId];
 
@@ -249,7 +251,7 @@ export const getInvestmentTypeDisplayLabel = (typeOrId, taxonomyNodes = []) => {
     .join(' / ');
 };
 
-export const getInvestmentTypeMeta = (typeOrId, taxonomyNodes = []) => {
+export const getInvestmentTypeMeta = (typeOrId, taxonomyNodes: InvestmentAssetTaxonomyNode[] = []) => {
   const taxonomyById = getTaxonomyById(taxonomyNodes);
   const directMatch = taxonomyById[typeOrId];
 
@@ -279,7 +281,7 @@ export const getInvestmentTypeMeta = (typeOrId, taxonomyNodes = []) => {
   return { id: null, type: typeOrId || 'Other Investment', category: 'other', categoryLabel: 'Other' };
 };
 
-export const getInvestmentCategoryLabel = (categoryKey, taxonomyNodes = []) => {
+export const getInvestmentCategoryLabel = (categoryKey, taxonomyNodes: InvestmentAssetTaxonomyNode[] = []) => {
   return getInvestmentCategoryOptions(taxonomyNodes).find((option) => option.value === categoryKey)?.label || formatCodeLabel(categoryKey) || 'Other';
 };
 
@@ -299,7 +301,7 @@ export const buildAssetCategoryLabelMap = (assetTypeConfigs: InvestmentAssetType
     return acc;
   }, {});
 
-export const normalizeInvestmentForUi = (investment, taxonomyNodes = []) => {
+export const normalizeInvestmentForUi = (investment, taxonomyNodes: InvestmentAssetTaxonomyNode[] = []) => {
   const taxonomyById = getTaxonomyById(taxonomyNodes);
   const taxonomyNode = investment.assetTaxonomyId ? taxonomyById[investment.assetTaxonomyId] : null;
   const lineage = buildTaxonomyLineage(taxonomyNode, taxonomyById);
@@ -317,7 +319,7 @@ export const normalizeInvestmentForUi = (investment, taxonomyNodes = []) => {
   };
 };
 
-export const buildFormFromInvestment = (investment, taxonomyNodes = []) => {
+export const buildFormFromInvestment = (investment, taxonomyNodes: InvestmentAssetTaxonomyNode[] = []) => {
   const typeMeta = getInvestmentTypeMeta(investment.assetTaxonomyId || investment.type, taxonomyNodes);
 
   return {
@@ -339,7 +341,12 @@ export const buildFormFromInvestment = (investment, taxonomyNodes = []) => {
   };
 };
 
-export const buildInvestmentFromForm = (form, existingId, taxonomyNodes = [], accounts = []) => {
+export const buildInvestmentFromForm = (
+  form,
+  existingId,
+  taxonomyNodes: InvestmentAssetTaxonomyNode[] = [],
+  accounts: Array<Pick<FinancialAccountRecord, 'id' | 'currency'>> = [],
+) => {
   const parsedAccountId = form.accountId !== '' && form.accountId != null ? Number(form.accountId) : null;
   const account = accounts.find((item) => Number(item.id) === parsedAccountId);
 

@@ -5,9 +5,12 @@ import {
   getInvestmentContributionAllocation,
   getInvestmentContributionViewItems,
   getInvestmentDashboardKpis,
+  getInvestmentHoldingPerformanceRows,
   getInvestmentMaturityLadderData,
   getInvestmentMonthlyTimeSeriesData,
+  getInvestmentSelectedById,
   getInvestmentValueSourceSummary,
+  getNormalizedInvestments,
   getUpcomingMaturitiesAndBenefits,
   getInsurancePositionData,
 } from './investments.selectors';
@@ -100,6 +103,68 @@ describe('investment selectors', () => {
       { key: 'EQUITY', label: 'EQUITY', value: 1000, investmentIds: ['one'] },
       { key: 'LIFE', label: 'LIFE', value: 1000, investmentIds: ['two'] },
     ]);
+  });
+
+  it('normalizes investment summary fields for the UI', () => {
+    const [normalized] = getNormalizedInvestments([
+      investment({
+        accountId: undefined,
+        institution: undefined,
+        institutionName: 'Example Bank',
+      }),
+    ], []);
+
+    expect(normalized).toMatchObject({
+      accountId: null,
+      type: 'MUTUAL_FUND',
+      category: 'EQUITY',
+      institution: 'Example Bank',
+    });
+  });
+
+  it('returns the selected investment or null when the ID is absent', () => {
+    const selected = investment({ id: 42 });
+
+    expect(getInvestmentSelectedById([selected], 42)).toBe(selected);
+    expect(getInvestmentSelectedById([selected], 'missing')).toBeNull();
+    expect(getInvestmentSelectedById([selected], null)).toBeNull();
+  });
+
+  it('builds holding performance rows for portfolio investments only', () => {
+    const rows = getInvestmentHoldingPerformanceRows([
+      investment({
+        id: 'holding-1',
+        name: 'Growth Fund',
+        assetType: 'mutual_fund',
+        assetCategory: 'equity',
+        totalInvested: 1000,
+        currentValue: 1250,
+        startDate: daysFromNow(-30),
+        lastValuationAt: daysFromNow(-1),
+        valuationSnapshots: [{
+          id: 1,
+          investmentId: 'holding-1',
+          snapshotDate: daysFromNow(-1),
+          marketValue: 1250,
+        }],
+      }),
+      investment({ id: 'protection-1', accountingTreatment: 'PROTECTION_EXPENSE' }),
+    ], 3);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      key: 'holding-1',
+      label: 'Growth Fund',
+      invested: 1000,
+      currentValue: 1250,
+      returnAmount: 250,
+      returnPercentage: 25,
+      investmentIds: ['holding-1'],
+      assetType: 'MUTUAL_FUND',
+      assetCategory: 'EQUITY',
+    });
+    expect(rows[0].sparkline).toHaveLength(3);
+    expect(rows[0].sparkline[2]).toBe(1250);
   });
 
   it('includes only active recurring plans and applies due-tone boundaries', () => {

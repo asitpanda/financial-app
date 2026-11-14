@@ -1,6 +1,11 @@
 // @ts-nocheck
-/** @typedef {import('../types/investment.types').InvestmentDrawerData} InvestmentDrawerData */
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import type { FinancialAccountRecord } from "../../accounts/types/account.types";
+import type {
+  InvestmentAssetTypeConfig,
+  InvestmentDrawerData,
+} from "../types/investment.types";
+import type { InvestmentAssetTaxonomyNode } from "../types/investmentAssetTaxonomy.types";
 import { useCurrencyFormatter } from "../../../utils/currency";
 import { useDateFormatter } from "../../../utils/date";
 import dayjs from "dayjs";
@@ -86,20 +91,19 @@ const getOpeningEventAmounts = (investment) => {
   );
 };
 
-/**
- * @param {{
- *   open: boolean,
- *   onClose: () => void,
- *   onSubmit: (value: unknown) => unknown,
- *   initialValues?: InvestmentDrawerData | null,
- *   accounts?: unknown[],
- *   assetTypeConfigs?: unknown[],
- *   taxonomyNodes?: unknown[],
- *   title?: string,
- *   submitLabel?: string,
- *   submitError?: string,
- * }} props
- */
+type InvestmentFormDrawerProps = {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (value: unknown) => unknown;
+  initialValues?: InvestmentDrawerData | null;
+  accounts?: Array<Pick<FinancialAccountRecord, "id" | "name" | "currency">>;
+  assetTypeConfigs?: InvestmentAssetTypeConfig[];
+  taxonomyNodes?: InvestmentAssetTaxonomyNode[];
+  title?: string;
+  submitLabel?: string;
+  submitError?: string;
+};
+
 export default function InvestmentFormDrawer({
   open,
   onClose,
@@ -111,7 +115,7 @@ export default function InvestmentFormDrawer({
   title = "Add Investment",
   submitLabel = "Add",
   submitError = "",
-}) {
+}: InvestmentFormDrawerProps) {
   const [form, setForm] = useState(() => createEmptyInvestmentForm());
   const formatCurrency = useCurrencyFormatter();
   const formatDate = useDateFormatter("—");
@@ -569,11 +573,8 @@ export default function InvestmentFormDrawer({
   ];
 
   const isRecurring = contributionType === "recurring";
-  const hasExistingActiveRecurringPlan = Boolean(
-    initialValues?.activeContributionPlan,
-  );
   const isHistoricalImportLocked =
-    isRecurring && hasExistingActiveRecurringPlan;
+    isRecurring && Boolean(initialValues);
   const isOpeningBalanceMode =
     recurringPlan.historicalImportMode === "OPENING_BALANCE";
   const showHistoricalModeSelector =
@@ -595,7 +596,7 @@ export default function InvestmentFormDrawer({
     ? "Enter the historical one-time amount invested on the selected start date."
     : "Enter the one-time amount invested for this asset.";
   const historicalImportLockedMessage =
-    "You can’t change historical import for an active recurring plan from this edit flow. Historical setup is only available when creating a new plan.";
+    "Historical import is locked when editing an existing investment. Historical setup is only available when creating a new investment and recurring plan.";
 
   const impactSummary = useMemo(() => {
     if (!isRecurring) return [];
@@ -985,68 +986,65 @@ export default function InvestmentFormDrawer({
           >
             <Stack spacing={1.5}>
               <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 1 }}>
-                <Typography variant="caption" color="text.secondary">
-                  Are you already invested in this asset?
-                </Typography>
                 {isHistoricalImportLocked ? (
                   <Typography
                     variant="body2"
                     color="text.secondary"
-                    sx={{ mt: 0.75 }}
                   >
                     {historicalImportLockedMessage}
                   </Typography>
                 ) : null}
-                <Box
-                  sx={{
-                    display: "grid",
-                    gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
-                    gap: 1,
-                    mt: 1,
-                  }}
-                >
-                  {[
-                    {
-                      value: "yes",
-                      title: "Yes, I already have past investment",
-                    },
-                    {
-                      value: "no",
-                      title: "No, I am starting now",
-                    },
-                  ].map((option) => {
-                    const selected = pastInvestmentChoice === option.value;
-                    return (
-                      <Paper
-                        key={option.value}
-                        variant="outlined"
-                        onClick={
-                          isHistoricalImportLocked
-                            ? undefined
-                            : () =>
-                                handlePastInvestmentChoiceChange(option.value)
-                        }
-                        sx={{
-                          p: 1.25,
-                          borderRadius: 1,
-                          cursor: isHistoricalImportLocked
-                            ? "not-allowed"
-                            : "pointer",
-                          borderColor: selected ? "primary.main" : "divider",
-                          backgroundColor: (theme) =>
-                            selected
-                              ? alpha(theme.palette.primary.main, 0.06)
-                              : theme.palette.background.paper,
-                          opacity: isHistoricalImportLocked ? 0.72 : 1,
-                        }}
-                      >
-                        <Typography sx={{ fontWeight: 600 }}>
-                          {option.title}
-                        </Typography>
-                      </Paper>
-                    );
-                  })}
-                </Box>
+                {!isHistoricalImportLocked ? (
+                  <>
+                    <Typography variant="caption" color="text.secondary">
+                      Are you already invested in this asset?
+                    </Typography>
+                    <Box
+                      sx={{
+                        display: "grid",
+                        gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+                        gap: 1,
+                        mt: 1,
+                      }}
+                    >
+                      {[
+                        {
+                          value: "yes",
+                          title: "Yes, I already have past investment",
+                        },
+                        {
+                          value: "no",
+                          title: "No, I am starting now",
+                        },
+                      ].map((option) => {
+                        const selected = pastInvestmentChoice === option.value;
+                        return (
+                          <Paper
+                            key={option.value}
+                            variant="outlined"
+                            onClick={() =>
+                              handlePastInvestmentChoiceChange(option.value)
+                            }
+                            sx={{
+                              p: 1.25,
+                              borderRadius: 1,
+                              cursor: "pointer",
+                              borderColor: selected ? "primary.main" : "divider",
+                              backgroundColor: (theme) =>
+                                selected
+                                  ? alpha(theme.palette.primary.main, 0.06)
+                                  : theme.palette.background.paper,
+                            }}
+                          >
+                            <Typography sx={{ fontWeight: 600 }}>
+                              {option.title}
+                            </Typography>
+                          </Paper>
+                        );
+                      })}
+                    </Box>
+                  </>
+                ) : null}
               </Paper>
 
               <Box

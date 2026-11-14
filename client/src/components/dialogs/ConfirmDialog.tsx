@@ -37,35 +37,30 @@ const DIALOG_TONE_META = {
   error: {
     icon: mdiDeleteOutline,
     iconColor: 'error.main',
-    iconBg: ((theme: Theme) => alpha(theme.palette.error.main, 0.1)) as ToneStyleResolver,
     headerBg: ((theme: Theme) => alpha(theme.palette.error.main, 0.08)) as ToneStyleResolver,
     borderColor: ((theme: Theme) => alpha(theme.palette.error.main, 0.16)) as ToneStyleResolver,
   },
   warning: {
     icon: mdiAlertOutline,
     iconColor: 'warning.main',
-    iconBg: ((theme: Theme) => alpha(theme.palette.warning.main, 0.12)) as ToneStyleResolver,
     headerBg: ((theme: Theme) => alpha(theme.palette.warning.main, 0.1)) as ToneStyleResolver,
     borderColor: ((theme: Theme) => alpha(theme.palette.warning.main, 0.18)) as ToneStyleResolver,
   },
   success: {
     icon: mdiCheckCircleOutline,
     iconColor: 'success.main',
-    iconBg: ((theme: Theme) => alpha(theme.palette.success.main, 0.12)) as ToneStyleResolver,
     headerBg: ((theme: Theme) => alpha(theme.palette.success.main, 0.1)) as ToneStyleResolver,
     borderColor: ((theme: Theme) => alpha(theme.palette.success.main, 0.16)) as ToneStyleResolver,
   },
   info: {
     icon: mdiInformationOutline,
     iconColor: 'info.main',
-    iconBg: ((theme: Theme) => alpha(theme.palette.info.main, 0.12)) as ToneStyleResolver,
     headerBg: ((theme: Theme) => alpha(theme.palette.info.main, 0.1)) as ToneStyleResolver,
     borderColor: ((theme: Theme) => alpha(theme.palette.info.main, 0.16)) as ToneStyleResolver,
   },
   primary: {
     icon: mdiAlertCircleOutline,
     iconColor: 'primary.main',
-    iconBg: ((theme: Theme) => alpha(theme.palette.primary.main, 0.12)) as ToneStyleResolver,
     headerBg: ((theme: Theme) => alpha(theme.palette.primary.main, 0.1)) as ToneStyleResolver,
     borderColor: ((theme: Theme) => alpha(theme.palette.primary.main, 0.16)) as ToneStyleResolver,
   },
@@ -128,18 +123,7 @@ export default function ConfirmDialog({
               minWidth: 0,
             }}
           >
-            <Box
-              sx={{ color: toneMeta.iconColor }}
-              // sx={{
-              //   width: 48,
-              //   height: 48,
-              //   flexShrink: 0,
-              //   borderRadius: '50%',
-              //   display: 'grid',
-              //   placeItems: 'center',
-              //   backgroundColor: toneMeta.iconBg,
-              // }}
-            >
+            <Box sx={{ color: toneMeta.iconColor }}>
               <Icon path={toneMeta.icon} size={1.2} />
             </Box>
 

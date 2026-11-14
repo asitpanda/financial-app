@@ -2822,6 +2822,7 @@ export function InvestmentViewDrawer({
                           <AppButton
                             size="small"
                             variant="outlined"
+                            aria-label={`Edit ${benefit.type} benefit`}
                             onClick={() =>
                               onEditActivity(
                                 investment,
@@ -2840,6 +2841,7 @@ export function InvestmentViewDrawer({
                               size="small"
                               variant="outlined"
                               color="error"
+                              aria-label={`Delete ${benefit.type} benefit`}
                               onClick={() => setDeleteBenefitTarget(benefit)}
                               disabled={benefitActionLoading}
                               sx={{ minWidth: 80 }}

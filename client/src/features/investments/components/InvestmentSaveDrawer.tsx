@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Alert, Typography } from "@mui/material";
 import AppButton from "../../../components/common/AppButton";
 import AppDrawer from "../../../components/drawers/AppDrawer";

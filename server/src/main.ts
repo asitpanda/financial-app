@@ -1,4 +1,5 @@
-import { basename } from 'node:path';
+import { basename, resolve } from 'node:path';
+import { loadEnvFile } from 'node:process';
 import { NestFactory } from '@nestjs/core';
 import { BadRequestException, ValidationPipe, ValidationError } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -68,6 +69,7 @@ function sanitizeBody(body: unknown): unknown {
 }
 
 export async function bootstrap() {
+  loadEnvFile(resolve(__dirname, '../.env'));
   const { dbProvider } = validateRuntimeConfig();
   const app = await NestFactory.create(AppModule);
   const isJsonLogFormat = String(process.env.LOG_FORMAT || '').toLowerCase() === 'json';
@@ -224,6 +226,6 @@ export async function bootstrap() {
 }
 
 const entryFile = basename(process.argv[1] ?? '');
-if (entryFile === 'main.js' || entryFile === 'main.ts') {
+if (entryFile === 'main' || entryFile === 'main.js' || entryFile === 'main.ts') {
   void bootstrap();
 }

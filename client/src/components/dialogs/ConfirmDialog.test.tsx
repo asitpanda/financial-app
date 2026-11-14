@@ -45,6 +45,43 @@ describe('ConfirmDialog', () => {
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
   });
 
+  it.each([
+    ['primary', 'MuiButton-colorPrimary'],
+    ['success', 'MuiButton-colorSuccess'],
+    ['warning', 'MuiButton-colorWarning'],
+    ['info', 'MuiButton-colorInfo'],
+  ] as const)('applies the %s tone to the confirmation action', (confirmColor, expectedClass) => {
+    renderWithProviders(
+      <ConfirmDialog
+        open
+        title="Confirm change"
+        description="Continue with this change?"
+        confirmColor={confirmColor}
+        onCancel={() => undefined}
+        onConfirm={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Confirm' })).toHaveClass(expectedClass);
+  });
+
+  it('cancels when Escape is pressed while the dialog is active', () => {
+    const onCancel = vi.fn();
+    renderWithProviders(
+      <ConfirmDialog
+        open
+        title="Confirm change"
+        description="Continue with this change?"
+        onCancel={onCancel}
+        onConfirm={() => undefined}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
   it('disables actions and close behavior while loading', () => {
     const onCancel = vi.fn();
     const onConfirm = vi.fn();

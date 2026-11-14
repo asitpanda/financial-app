@@ -54,6 +54,45 @@ describe('Login', () => {
     expect(useAuth.getState()).toMatchObject({ user, token: 'token-123', isAuthenticated: true });
   });
 
+  it('submits normalized registration details and stores the returned credentials', async () => {
+    const userEventInstance = userEvent.setup();
+    const register = vi.spyOn(authApi, 'register').mockResolvedValue({ user, token: 'token-123' });
+    renderWithProviders(<Login />);
+
+    await userEventInstance.click(screen.getByRole('tab', { name: 'Register' }));
+    await userEventInstance.type(screen.getByLabelText('Name'), ' Test User ');
+    await userEventInstance.type(screen.getByLabelText('Email'), 'user@example.com');
+    await userEventInstance.type(screen.getByLabelText('User ID (Optional)'), ' testuser ');
+    await userEventInstance.type(screen.getByLabelText('Mobile (Optional)'), ' +1234567890 ');
+    await userEventInstance.type(screen.getByLabelText('Password'), 'password');
+    await userEventInstance.click(screen.getByRole('button', { name: 'Register' }));
+
+    await waitFor(() => expect(register).toHaveBeenCalledWith({
+      name: 'Test User',
+      email: 'user@example.com',
+      userId: 'testuser',
+      mobile: '+1234567890',
+      password: 'password',
+    }));
+    expect(useAuth.getState()).toMatchObject({ user, token: 'token-123', isAuthenticated: true });
+  });
+
+  it('renders API validation messages when registration fails', async () => {
+    const userEventInstance = userEvent.setup();
+    vi.spyOn(authApi, 'register').mockRejectedValue({
+      response: { data: { message: ['Email is already registered'] } },
+    });
+    renderWithProviders(<Login />);
+
+    await userEventInstance.click(screen.getByRole('tab', { name: 'Register' }));
+    await userEventInstance.type(screen.getByLabelText('Email'), 'user@example.com');
+    await userEventInstance.type(screen.getByLabelText('Password'), 'password');
+    await userEventInstance.click(screen.getByRole('button', { name: 'Register' }));
+
+    expect(await screen.findByText('Email is already registered')).toBeInTheDocument();
+    expect(useAuth.getState().isAuthenticated).toBe(false);
+  });
+
   it('renders API validation messages when login fails', async () => {
     const userEventInstance = userEvent.setup();
     vi.spyOn(authApi, 'login').mockRejectedValue({

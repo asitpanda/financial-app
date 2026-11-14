@@ -45,6 +45,51 @@ describe("CategoriesFormDrawer", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("updates the default icon when the category type changes", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    renderWithProviders(
+      <CategoryFormDrawer open onClose={vi.fn()} onSubmit={onSubmit} />,
+    );
+
+    await user.type(screen.getByLabelText("Name"), "Salary");
+    await user.click(screen.getByText("Expense"));
+    await user.click(screen.getByRole("option", { name: "Income" }));
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
+      name: "Salary",
+      type: "income",
+      icon: "cash",
+      color: "#111827",
+    }));
+  });
+
+  it("preserves a selected icon when the category type changes", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    renderWithProviders(
+      <CategoryFormDrawer open onClose={vi.fn()} onSubmit={onSubmit} />,
+    );
+
+    await user.type(screen.getByLabelText("Name"), "Home costs");
+    const iconInput = screen.getByPlaceholderText("Select icon");
+    fireEvent.mouseDown(iconInput);
+    await user.click(screen.getByRole("option", { name: /Home/ }));
+    await user.click(screen.getByText("Expense"));
+    await user.click(screen.getByRole("option", { name: "Income" }));
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
+      name: "Home costs",
+      type: "income",
+      icon: "home",
+      color: "#111827",
+    }));
+  });
+
   it("blocks invalid and duplicate names with field errors", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();

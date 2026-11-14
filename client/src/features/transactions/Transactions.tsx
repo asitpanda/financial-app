@@ -82,23 +82,7 @@ type PrefillFilter = {
   month?: number;
 };
 
-interface TransactionTableRow {
-  id: string;
-  transactionId: string;
-  tx: TransactionRecord;
-  date: Date;
-  dateLabel: string;
-  category: string;
-  source: string;
-  type: string;
-  amount: number;
-  notes: string;
-  investment: string;
-  investmentEventType: string;
-  debitAmount: number | null;
-  creditAmount: number | null;
-  balanceAfter: number | null;
-}
+type TransactionTableRow = ReturnType<typeof getTransactionRows>[number];
 
 const resolveFiscalMonthYear = (fiscalYearStart: number, monthIndex: number) => {
   const year = monthIndex >= 3 ? fiscalYearStart : fiscalYearStart + 1;
@@ -339,7 +323,7 @@ export default function Transactions({
       formatDate,
     ),
     [transactions, accountNameById, formatDate],
-  ) as TransactionTableRow[];
+  );
   const tableHeight = useViewportTableHeight(transactionTableRef, {
     bottomOffset: 50,
     minHeight: 360,
